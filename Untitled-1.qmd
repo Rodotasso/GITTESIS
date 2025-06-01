@@ -1,0 +1,107 @@
+---
+title: "Configuración Inicial del Proyecto"
+author: "Rodolfo Tasso"
+format: html
+---
+
+## 1. Instalación de Paquetes Básicos
+```{r setup}
+#| message: false
+#| warning: false
+
+# Instalación de paquetes base necesarios
+install.packages(c("devtools", "usethis", "renv", "gitcreds"))
+
+# Cargar librerías necesarias
+library(usethis)
+library(renv)
+library(gitcreds)
+```
+
+## 2. Configuración del Paquete
+```{r create_package}
+#| eval: false
+
+usethis::create_package(
+  path = "D:/MAGISTER/aa TESIS/rtsppoo",
+  fields = list(
+    Package = "GITTESIS",
+    Title = "Compendio Tesis RTS",
+    Description = "Compendio tesis de Rodolfo sobre PPOO",
+    Author = "Rodo <rtasso@uchile.cl>"
+  )
+)
+```
+
+## 3. Configuración de Git y GitHub
+```{r git_setup}
+#| eval: false
+
+# Revisar estado de git
+usethis::git_sitrep()
+
+# Crear token de GitHub
+usethis::create_github_token()
+
+# Configurar credenciales
+gitcreds::gitcreds_set()
+
+# Configurar rama principal
+usethis::git_default_branch(name = "tesis")
+```
+
+## 4. Configuración del Entorno
+```{r env_setup}
+#| eval: false
+
+# Inicializar renv
+renv::init()
+
+# Crear README y referencias
+usethis::use_readme_md()
+file.create("inst/references.bib")
+```
+
+## 5. Instalación de Paquetes de Análisis
+```{r packages}
+#| eval: false
+
+# Instalar paquetes necesarios
+renv::install(c(
+  # Manipulación y visualización de datos
+  "tidyverse",     # Conjunto esencial de paquetes
+  "ggplot2",       # Visualizaciones
+  "dplyr",         # Manipulación de datos
+  "tidyr",         # Limpieza de datos
+  "readr",         # Importación de datos
+  
+  # Análisis epidemiológicos
+  "epitools",      # Herramientas epidemiológicas
+  "epiR",          # Cálculos epidemiológicos
+  
+  # Estadística descriptiva
+  "gtsummary",     # Tablas descriptivas
+  "tableone",      # Tablas de características
+  "summarytools",  # Resúmenes estadísticos
+  
+  # Visualización y reportes
+  "ggpubr",        # Gráficos publicables
+  "corrplot",      # Correlaciones
+  "flextable",     # Tablas
+  "knitr",         # Reportes
+  "rmarkdown"      # Markdown
+))
+
+# Guardar estado de paquetes
+renv::snapshot()
+```
+
+## Notas de Terminal Git
+Para inicializar el repositorio y hacer el primer commit:
+
+```bash
+cd "D:/MAGISTER/aa TESIS/rtsppoo"
+git init
+git add .
+git commit -m "Configuración inicial del proyecto"
+```

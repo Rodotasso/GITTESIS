@@ -1,1 +1,10 @@
 .Rproj.user
+.dta
+.Rhistory
+.RData
+.Ruserdata
+.Rproj
+.Rproj.user/
+/FIGURES
+/Makefile
+/Makevars
