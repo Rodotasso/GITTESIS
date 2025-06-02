@@ -1,0 +1,203 @@
+---
+title: "Comienzo de estadística de resultados"
+format: html
+---
+
+```{r}
+setwd("D:/MAGISTER/aa TESIS/BBDD NUEVA")
+library(tidyverse)
+library(dplyr)
+library(data.table)
+
+```
+
+```{r}
+#cargamos el archivo rdata con menor peso
+rm(list = ls())
+gc()
+
+load("base_reducida.RData")
+
+
+```
+
+```{r}
+#confirma
+str(datos_reducidos, list.len = 30)
+```
+
+
+```{r}
+#en vscode no se puede usar visor de datos, por lo que cargaremos de una forma distinta, es lo mismo q str
+glimpse(datos_reducidos)
+```
+
+```{r}
+#crear la variable año usando las fechas de egreso
+datos_reducidos[, AÑO := year(FECHA_EGRESO_FMT_DEIS)]
+
+```
+
+
+```{r}
+# Resumen RSH
+rsh_anual <- datos_reducidos[, .(
+  Total = .N,
+  RSH_1 = sum(RSH == 1, na.rm = TRUE),
+  RSH_0 = sum(RSH == 0, na.rm = TRUE),
+  RSH_NA = sum(is.na(RSH)),
+  RSH_PCT_1 = round(100 * sum(RSH == 1, na.rm = TRUE) / .N, 1),
+  RSH_PCT_0 = round(100 * sum(RSH == 0, na.rm = TRUE) / .N, 1),
+  RSH_PCT_NA = round(100 * sum(is.na(RSH)) / .N, 1)
+), by = AÑO][order(AÑO)]
+
+# Resumen CONADI
+conadi_anual <- datos_reducidos[, .(
+  Total = .N,
+  CONADI_1 = sum(CONADI == 1, na.rm = TRUE),
+  CONADI_0 = sum(CONADI == 0, na.rm = TRUE),
+  CONADI_NA = sum(is.na(CONADI)),
+  CONADI_PCT_1 = round(100 * sum(CONADI == 1, na.rm = TRUE) / .N, 1),
+  CONADI_PCT_0 = round(100 * sum(CONADI == 0, na.rm = TRUE) / .N, 1),
+  CONADI_PCT_NA = round(100 * sum(is.na(CONADI)) / .N, 1)
+), by = AÑO][order(AÑO)]
+
+# Resumen PUEBLO_ORIGINARIO_BIN
+pueblo_anual <- datos_reducidos[, .(
+  Total = .N,
+  PUEBLO_1 = sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE),
+  PUEBLO_0 = sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE),
+  PUEBLO_NA = sum(is.na(PUEBLO_ORIGINARIO_BIN)),
+  PUEBLO_PCT_1 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE) / .N, 1),
+  PUEBLO_PCT_0 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE) / .N, 1),
+  PUEBLO_PCT_NA = round(100 * sum(is.na(PUEBLO_ORIGINARIO_BIN)) / .N, 1)
+), by = AÑO][order(AÑO)]
+
+```
+
+```{r}
+# En vscode lo mostrara solo en la consola
+print(rsh_anual)
+print(conadi_anual)
+print(pueblo_anual)
+
+```
+
+```{r}
+consolidado_rut_anno <- datos_reducidos[, .(
+    RSH = as.numeric(ifelse(all(is.na(RSH)), NA, max(RSH, na.rm = TRUE))),
+    CONADI = as.numeric(ifelse(all(is.na(CONADI)), NA, max(CONADI, na.rm = TRUE))),
+    MINSAL = as.numeric(ifelse(all(is.na(PUEBLO_ORIGINARIO_BIN)), NA, max(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE))),
+    Total_registros = .N
+), by = .(RUN)]
+```
+
+```{r}
+print(consolidado_rut_anno)
+```
+
+```{r}
+# Resumen RSH por RUN y AÑO
+rsh_run_anual <- datos_reducidos[, .(
+  Total = .N,
+  RSH_1 = sum(RSH == 1, na.rm = TRUE),
+  RSH_0 = sum(RSH == 0, na.rm = TRUE),
+  RSH_NA = sum(is.na(RSH)),
+  RSH_PCT_1 = round(100 * sum(RSH == 1, na.rm = TRUE) / .N, 1),
+  RSH_PCT_0 = round(100 * sum(RSH == 0, na.rm = TRUE) / .N, 1),
+  RSH_PCT_NA = round(100 * sum(is.na(RSH)) / .N, 1)
+), by = .(RUN, AÑO)][order(RUN, AÑO)]
+
+# Resumen CONADI por RUN y AÑO
+conadi_run_anual <- datos_reducidos[, .(
+  Total = .N,
+  CONADI_1 = sum(CONADI == 1, na.rm = TRUE),
+  CONADI_0 = sum(CONADI == 0, na.rm = TRUE),
+  CONADI_NA = sum(is.na(CONADI)),
+  CONADI_PCT_1 = round(100 * sum(CONADI == 1, na.rm = TRUE) / .N, 1),
+  CONADI_PCT_0 = round(100 * sum(CONADI == 0, na.rm = TRUE) / .N, 1),
+  CONADI_PCT_NA = round(100 * sum(is.na(CONADI)) / .N, 1)
+), by = .(RUN, AÑO)][order(RUN, AÑO)]
+
+# Resumen PUEBLO_ORIGINARIO_BIN por RUN y AÑO
+pueblo_run_anual <- datos_reducidos[, .(
+  Total = .N,
+  PUEBLO_1 = sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE),
+  PUEBLO_0 = sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE),
+  PUEBLO_NA = sum(is.na(PUEBLO_ORIGINARIO_BIN)),
+  PUEBLO_PCT_1 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE) / .N, 1),
+  PUEBLO_PCT_0 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE) / .N, 1),
+  PUEBLO_PCT_NA = round(100 * sum(is.na(PUEBLO_ORIGINARIO_BIN)) / .N, 1)
+), by = .(RUN, AÑO)][order(RUN, AÑO)]
+```
+
+```{r}
+rsh_resumen <- rsh_run_anual[, .(
+  Promedio_RSH_PCT_1 = mean(RSH_PCT_1, na.rm = TRUE),
+  Promedio_RSH_PCT_0 = mean(RSH_PCT_0, na.rm = TRUE),
+  Promedio_RSH_PCT_NA = mean(RSH_PCT_NA, na.rm = TRUE)
+), by = AÑO]
+```
+
+```{r}
+head(rsh_run_anual)
+head(conadi_run_anual)
+head(pueblo_run_anual)
+
+```
+
+```{r}
+library(ggplot2)
+ggplot(rsh_resumen, aes(x = AÑO, y = Promedio_RSH_PCT_1)) +
+  geom_col() +
+  labs(title = "Promedio % RSH=1 por año", y = "% RSH=1")
+```
+
+```{r}
+ggplot(rsh_run_anual, aes(x = factor(AÑO), y = RSH_PCT_1)) +
+  geom_boxplot() +
+  labs(title = "Distribución % RSH=1 por RUN y año", y = "% RSH=1")
+```
+
+
+```{r}
+rsh_resumen <- rsh_resumen[order(AÑO)]
+print(rsh_resumen)
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+````
+
+

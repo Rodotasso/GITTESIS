@@ -11,7 +11,8 @@ format: html
 
 # Instalación de paquetes base necesarios
 install.packages(c("devtools", "usethis", "renv", "gitcreds"))
-
+```	
+```{r load_libraries}
 # Cargar librerías necesarias
 library(usethis)
 library(renv)
@@ -39,7 +40,8 @@ usethis::create_package(
 
 # Revisar estado de git
 usethis::git_sitrep()
-
+```
+```{r git_config}
 # Crear token de GitHub
 usethis::create_github_token()
 
