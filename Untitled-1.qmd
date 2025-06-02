@@ -123,47 +123,35 @@ renv::snapshot()
 # Primero verificar el estado actual
 usethis::git_sitrep()
 
-# Crear y vincular con GitHub
+# Crear y vincular con GitHub (método R)
 usethis::use_github(
   private = TRUE,
   protocol = "https"
 )
 ```
 
-## 7. Notas de Terminal Git
-Para inicializar el repositorio y hacer el primer commit:
-
-```bash
-cd "D:/MAGISTER/aa TESIS/rtsppoo"
-git init
-git add .
-git commit -m "Configuración inicial del proyecto"
-```
-
-Alternativamente, desde la terminal:
-
-```bash
-cd "D:/MAGISTER/aa TESIS/rtsppoo"
-git remote add origin https://github.com/TU_USUARIO/GITTESIS.git
-git branch -M tesis
-git push -u origin tesis
-```
-## 7. Notas de Terminal Git
+## 7. Comandos Git (Terminal)
 ```{bash}
 #| eval: false
-#| comment: "# "
+#| echo: true
 
-# Estos comandos deben ejecutarse en la terminal de VS Code, no en el chunk
+# NO ejecutar esto en el chunk - usar la terminal de VS Code
 cd "D:/MAGISTER/aa TESIS/rtsppoo"
+
+# Si prefieres configurar Git manualmente:
 git init
 git add .
 git commit -m "Configuración inicial del proyecto"
-
-# Configuración de la rama principal
 git branch -M main
 git branch -m main tesis
+```
 
-# Vinculación con GitHub (reemplazar USERNAME con tu usuario)
-git remote add origin https://github.com/USERNAME/GITTESIS.git
+## 8. Vinculación con GitHub (Terminal)
+```{bash}
+#| eval: false
+#| echo: true
+
+# Ejecutar en la terminal después de crear el repositorio en GitHub
+git remote add origin https://github.com/TU_USUARIO/GITTESIS.git
 git push -u origin tesis
 ```
