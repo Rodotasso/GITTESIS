@@ -9,8 +9,25 @@ format: html
 #| message: false
 #| warning: false
 
-# Instalación de paquetes base necesarios
-install.packages(c("devtools", "usethis", "renv", "gitcreds"))
+# Inicializar renv (si no está inicializado)
+if (!file.exists("renv.lock")) {
+  renv::init()
+}
+
+# Instalación y carga de paquetes base
+if (!require("devtools")) install.packages("devtools")
+if (!require("usethis")) install.packages("usethis")
+if (!require("renv")) install.packages("renv")
+if (!require("gitcreds")) install.packages("gitcreds")
+
+# Cargar librerías
+library(devtools)
+library(usethis)
+library(renv)
+library(gitcreds)
+
+# Restaurar el estado del proyecto
+renv::restore()
 ```	
 ```{r load_libraries}
 # Cargar librerías necesarias
@@ -98,7 +115,21 @@ renv::install(c(
 renv::snapshot()
 ```
 
-## Notas de Terminal Git
+## 6. Configuración de GitHub
+```{r github_remote}
+#| eval: false
+
+# Primero verificar el estado actual
+usethis::git_sitrep()
+
+# Crear y vincular con GitHub
+usethis::use_github(
+  private = TRUE,
+  protocol = "https"
+)
+```
+
+## 7. Notas de Terminal Git
 Para inicializar el repositorio y hacer el primer commit:
 
 ```bash
@@ -106,4 +137,13 @@ cd "D:/MAGISTER/aa TESIS/rtsppoo"
 git init
 git add .
 git commit -m "Configuración inicial del proyecto"
+```
+
+Alternativamente, desde la terminal:
+
+```bash
+cd "D:/MAGISTER/aa TESIS/rtsppoo"
+git remote add origin https://github.com/TU_USUARIO/GITTESIS.git
+git branch -M tesis
+git push -u origin tesis
 ```
