@@ -57,6 +57,7 @@ usethis::create_package(
 
 # Revisar estado de git
 usethis::git_sitrep()
+renv::status()
 ```
 ```{r git_config}
 # Crear token de GitHub
@@ -145,5 +146,24 @@ Alternativamente, desde la terminal:
 cd "D:/MAGISTER/aa TESIS/rtsppoo"
 git remote add origin https://github.com/TU_USUARIO/GITTESIS.git
 git branch -M tesis
+git push -u origin tesis
+```
+## 7. Notas de Terminal Git
+```{bash}
+#| eval: false
+#| comment: "# "
+
+# Estos comandos deben ejecutarse en la terminal de VS Code, no en el chunk
+cd "D:/MAGISTER/aa TESIS/rtsppoo"
+git init
+git add .
+git commit -m "Configuración inicial del proyecto"
+
+# Configuración de la rama principal
+git branch -M main
+git branch -m main tesis
+
+# Vinculación con GitHub (reemplazar USERNAME con tu usuario)
+git remote add origin https://github.com/USERNAME/GITTESIS.git
 git push -u origin tesis
 ```

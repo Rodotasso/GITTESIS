@@ -8,3 +8,11 @@
 /FIGURES
 /Makefile
 /Makevars
+*.rds
+*.RData
+*.csv
+*.xlsx
+*.xls
+*.pdf
+/data/
+.DS_Store
