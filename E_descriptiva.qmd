@@ -1,203 +1,237 @@
 ---
-title: "Comienzo de estadística de resultados"
+title: "Análisis Estadístico de Resultados"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis descriptivo de la base de datos reducida"
 format: html
 ---
 
-```{r}
-setwd("D:/MAGISTER/aa TESIS/BBDD NUEVA")
+## 1. Configuración Inicial y Carga de Datos
+
+```{r setup, message=FALSE, warning=FALSE}
+# Cargar librerías necesarias
 library(tidyverse)
 library(dplyr)
 library(data.table)
+library(ggplot2)
 
+# Tablas y reportes
+library(gtsummary)
+library(flextable)
+library(scales)
+
+# Análisis epidemiológico
+library(epitools)
+library(epiR)
+library(tableone)
+library(summarytools)
+
+# Visualización avanzada
+library(ggpubr)
+library(corrplot)
+
+print("Librerías cargadas correctamente.")
 ```
 
-```{r}
-#cargamos el archivo rdata con menor peso
+```{r set_working_directory, echo=TRUE}
+# Establecer el directorio de trabajo
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+
+# Limpiar ambiente y liberar memoria
 rm(list = ls())
 gc()
 
+# Cargar datos (se asume que "base_reducida.RData" está en este directorio)
 load("base_reducida.RData")
-
-
+print("Datos cargados correctamente.")
 ```
 
-```{r}
-#confirma
-str(datos_reducidos, list.len = 30)
-```
+## 2. Exploración Inicial de Datos
 
-
-```{r}
-#en vscode no se puede usar visor de datos, por lo que cargaremos de una forma distinta, es lo mismo q str
+```{r datos_iniciales, message=FALSE}
+# Ver estructura de los datos
 glimpse(datos_reducidos)
-```
 
-```{r}
-#crear la variable año usando las fechas de egreso
+# Resumen básico
+summary(datos_reducidos)
+```	
+
+## 3. Preparación de Variables
+
+```{r crear_variable_anio, message=TRUE}
+# Convertir a data.table (si no lo es)
+setDT(datos_reducidos)
+
+# Crear variable AÑO a partir de la fecha. 
+# Asegúrate que "FECHA_EGRESO_FMT_DEIS" esté en formato Date
 datos_reducidos[, AÑO := year(FECHA_EGRESO_FMT_DEIS)]
-
-```
-
-
-```{r}
-# Resumen RSH
-rsh_anual <- datos_reducidos[, .(
-  Total = .N,
-  RSH_1 = sum(RSH == 1, na.rm = TRUE),
-  RSH_0 = sum(RSH == 0, na.rm = TRUE),
-  RSH_NA = sum(is.na(RSH)),
-  RSH_PCT_1 = round(100 * sum(RSH == 1, na.rm = TRUE) / .N, 1),
-  RSH_PCT_0 = round(100 * sum(RSH == 0, na.rm = TRUE) / .N, 1),
-  RSH_PCT_NA = round(100 * sum(is.na(RSH)) / .N, 1)
-), by = AÑO][order(AÑO)]
-
-# Resumen CONADI
-conadi_anual <- datos_reducidos[, .(
-  Total = .N,
-  CONADI_1 = sum(CONADI == 1, na.rm = TRUE),
-  CONADI_0 = sum(CONADI == 0, na.rm = TRUE),
-  CONADI_NA = sum(is.na(CONADI)),
-  CONADI_PCT_1 = round(100 * sum(CONADI == 1, na.rm = TRUE) / .N, 1),
-  CONADI_PCT_0 = round(100 * sum(CONADI == 0, na.rm = TRUE) / .N, 1),
-  CONADI_PCT_NA = round(100 * sum(is.na(CONADI)) / .N, 1)
-), by = AÑO][order(AÑO)]
-
-# Resumen PUEBLO_ORIGINARIO_BIN
-pueblo_anual <- datos_reducidos[, .(
-  Total = .N,
-  PUEBLO_1 = sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE),
-  PUEBLO_0 = sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE),
-  PUEBLO_NA = sum(is.na(PUEBLO_ORIGINARIO_BIN)),
-  PUEBLO_PCT_1 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE) / .N, 1),
-  PUEBLO_PCT_0 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE) / .N, 1),
-  PUEBLO_PCT_NA = round(100 * sum(is.na(PUEBLO_ORIGINARIO_BIN)) / .N, 1)
-), by = AÑO][order(AÑO)]
-
+print("Variable AÑO creada correctamente.")
 ```
 
 ```{r}
-# En vscode lo mostrara solo en la consola
-print(rsh_anual)
-print(conadi_anual)
-print(pueblo_anual)
+# Después de crear la variable AÑO
+datos_resumen_modificado <- datos_reducidos  # o usa el mismo objeto
 
+# Guardar el objeto modificado en un archivo RData
+save(datos_resumen_modificado, file = "datos_resumen_modificado.RData")
 ```
 
-```{r}
-consolidado_rut_anno <- datos_reducidos[, .(
-    RSH = as.numeric(ifelse(all(is.na(RSH)), NA, max(RSH, na.rm = TRUE))),
-    CONADI = as.numeric(ifelse(all(is.na(CONADI)), NA, max(CONADI, na.rm = TRUE))),
-    MINSAL = as.numeric(ifelse(all(is.na(PUEBLO_ORIGINARIO_BIN)), NA, max(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE))),
-    Total_registros = .N
-), by = .(RUN)]
+## 4. Análisis por Variables Principales
+
+```{r analisis_variables_principales}
+# Verificar datos faltantes en AÑO
+n_missing <- sum(is.na(datos_reducidos$AÑO))
+print(paste("Número de valores faltantes en AÑO:", n_missing)) #Ya sabemos que son 15
+
+# Ver distribución de años (incluye NA si existen)
+table_anios <- table(datos_reducidos$AÑO, useNA = "ifany") #Muestra la distribución de años
+print(table_anios)
 ```
 
-```{r}
-print(consolidado_rut_anno)
-```
+## 5. Tabla de Completitud
 
-```{r}
-# Resumen RSH por RUN y AÑO
-rsh_run_anual <- datos_reducidos[, .(
-  Total = .N,
-  RSH_1 = sum(RSH == 1, na.rm = TRUE),
-  RSH_0 = sum(RSH == 0, na.rm = TRUE),
-  RSH_NA = sum(is.na(RSH)),
-  RSH_PCT_1 = round(100 * sum(RSH == 1, na.rm = TRUE) / .N, 1),
-  RSH_PCT_0 = round(100 * sum(RSH == 0, na.rm = TRUE) / .N, 1),
-  RSH_PCT_NA = round(100 * sum(is.na(RSH)) / .N, 1)
-), by = .(RUN, AÑO)][order(RUN, AÑO)]
+```{r tabla_completitud}
+# Crear una variable AÑO agrupadora que incluya "No reportado"
+datos_completitud <- datos_reducidos %>%
+  mutate(AÑO_GRUPO = ifelse(is.na(AÑO), "No reportado", as.character(AÑO)))
 
-# Resumen CONADI por RUN y AÑO
-conadi_run_anual <- datos_reducidos[, .(
-  Total = .N,
-  CONADI_1 = sum(CONADI == 1, na.rm = TRUE),
-  CONADI_0 = sum(CONADI == 0, na.rm = TRUE),
-  CONADI_NA = sum(is.na(CONADI)),
-  CONADI_PCT_1 = round(100 * sum(CONADI == 1, na.rm = TRUE) / .N, 1),
-  CONADI_PCT_0 = round(100 * sum(CONADI == 0, na.rm = TRUE) / .N, 1),
-  CONADI_PCT_NA = round(100 * sum(is.na(CONADI)) / .N, 1)
-), by = .(RUN, AÑO)][order(RUN, AÑO)]
+tabla_completitud <- datos_completitud %>%
+  select(RSH, CONADI, PUEBLO_ORIGINARIO_BIN, AÑO_GRUPO) %>%
+  tbl_summary(
+    by = AÑO_GRUPO,
+    missing = "always",  
+    type = list(
+      RSH = "categorical",
+      CONADI = "categorical",
+      PUEBLO_ORIGINARIO_BIN = "categorical",
+      AÑO_GRUPO = "categorical"
+    ),
+    statistic = list(
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    missing_text = "Datos faltantes",
+    percent = "col",
+    missing = "always"
+  ) %>%
+  add_overall() %>%
+  modify_header(label = "**COMPLETITUD**") %>%
+  modify_spanning_header(everything() ~ "**Año**") %>%
+  bold_labels()
 
-# Resumen PUEBLO_ORIGINARIO_BIN por RUN y AÑO
-pueblo_run_anual <- datos_reducidos[, .(
-  Total = .N,
-  PUEBLO_1 = sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE),
-  PUEBLO_0 = sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE),
-  PUEBLO_NA = sum(is.na(PUEBLO_ORIGINARIO_BIN)),
-  PUEBLO_PCT_1 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE) / .N, 1),
-  PUEBLO_PCT_0 = round(100 * sum(PUEBLO_ORIGINARIO_BIN == 0, na.rm = TRUE) / .N, 1),
-  PUEBLO_PCT_NA = round(100 * sum(is.na(PUEBLO_ORIGINARIO_BIN)) / .N, 1)
-), by = .(RUN, AÑO)][order(RUN, AÑO)]
-```
-
-```{r}
-rsh_resumen <- rsh_run_anual[, .(
-  Promedio_RSH_PCT_1 = mean(RSH_PCT_1, na.rm = TRUE),
-  Promedio_RSH_PCT_0 = mean(RSH_PCT_0, na.rm = TRUE),
-  Promedio_RSH_PCT_NA = mean(RSH_PCT_NA, na.rm = TRUE)
-), by = AÑO]
-```
-
-```{r}
-head(rsh_run_anual)
-head(conadi_run_anual)
-head(pueblo_run_anual)
-
-```
-
-```{r}
-library(ggplot2)
-ggplot(rsh_resumen, aes(x = AÑO, y = Promedio_RSH_PCT_1)) +
-  geom_col() +
-  labs(title = "Promedio % RSH=1 por año", y = "% RSH=1")
-```
-
-```{r}
-ggplot(rsh_run_anual, aes(x = factor(AÑO), y = RSH_PCT_1)) +
-  geom_boxplot() +
-  labs(title = "Distribución % RSH=1 por RUN y año", y = "% RSH=1")
+# Convertir a flextable para visualización profesional
+ft_completitud <- as_flex_table(tabla_completitud)
+ft_completitud
 ```
 
 
-```{r}
-rsh_resumen <- rsh_resumen[order(AÑO)]
-print(rsh_resumen)
+
+```{r analisis_rsh_año}
+print("Iniciando análisis de RSH y AÑO")
+
+datos_limpios <- datos_reducidos %>%
+  mutate(
+    AÑO = ifelse(is.na(AÑO), "No reportado", as.character(AÑO)),
+    RSH_label = case_when(
+      is.na(RSH) ~ "No reportado",
+      RSH == 1 ~ "Pertenece",
+      RSH == 0 ~ "No pertenece",
+      TRUE ~ as.character(RSH)
+    ),
+    GLOSA_SEXO = ifelse(is.na(GLOSA_SEXO) | GLOSA_SEXO == "" | trimws(GLOSA_SEXO) == "", "No reportado", GLOSA_SEXO)
+  )
+
+# Tabla de frecuencias y porcentajes
+tabla_rsh <- datos_limpios %>%
+  group_by(AÑO, GLOSA_SEXO, RSH_label) %>%
+  summarise(Frecuencia = n(), .groups = "drop") %>%
+  group_by(AÑO) %>%
+  mutate(Porcentaje = paste0(round(100 * Frecuencia / sum(Frecuencia), 1), "%")) %>%
+  ungroup() %>%
+  arrange(AÑO, GLOSA_SEXO, RSH_label) %>%
+  rename(
+    Año = AÑO,
+    Sexo = GLOSA_SEXO,
+    RSH = RSH_label
+  )
+
+# Mostrar tabla ordenada con flextable
+ft_tabla_rsh <- flextable(tabla_rsh)
+ft_tabla_rsh <- autofit(ft_tabla_rsh)
+ft_tabla_rsh <- set_caption(ft_tabla_rsh, caption = "Resumen de RSH, Sexo y Año (incluye 'No reportado')")
+ft_tabla_rsh
 ```
 
-```{r}
+```{r analisis_conadi_año}
+print("Iniciando análisis de CONADI y AÑO")
 
+datos_limpios <- datos_reducidos %>%
+  mutate(
+    AÑO = ifelse(is.na(AÑO), "No reportado", as.character(AÑO)),
+    CONADI_label = case_when(
+      is.na(CONADI) ~ "No reportado",
+      CONADI == 1 ~ "Pertenece",
+      CONADI == 0 ~ "No pertenece",
+      TRUE ~ as.character(CONADI)
+    ),
+    GLOSA_SEXO = ifelse(is.na(GLOSA_SEXO) | GLOSA_SEXO == "" | trimws(GLOSA_SEXO) == "", "No reportado", GLOSA_SEXO)
+  )
+
+# Tabla de frecuencias y porcentajes
+tabla_conadi <- datos_limpios %>%
+  group_by(AÑO, GLOSA_SEXO, CONADI_label) %>%
+  summarise(Frecuencia = n(), .groups = "drop") %>%
+  group_by(AÑO) %>%
+  mutate(Porcentaje = paste0(round(100 * Frecuencia / sum(Frecuencia), 1), "%")) %>%
+  ungroup() %>%
+  arrange(AÑO, GLOSA_SEXO, CONADI_label) %>%
+  rename(
+    Año = AÑO,
+    Sexo = GLOSA_SEXO,
+    CONADI = CONADI_label
+  )
+
+# Mostrar tabla ordenada con flextable
+ft_tabla_conadi <- flextable(tabla_conadi)
+ft_tabla_conadi <- autofit(ft_tabla_conadi)
+ft_tabla_conadi <- set_caption(ft_tabla_conadi, caption = "Resumen de CONADI, Sexo y Año (incluye 'No reportado')")
+ft_tabla_conadi
 ```
 
-```{r}
+```{r analisis_pueblo_origen_año}
+print("Iniciando análisis de PUEBLO_ORIGINARIO_BIN y AÑO")
 
+datos_limpios <- datos_reducidos %>%
+  mutate(
+    AÑO = ifelse(is.na(AÑO), "No reportado", as.character(AÑO)),
+    PUEBLO_label = case_when(
+      is.na(PUEBLO_ORIGINARIO_BIN) ~ "No reportado",
+      PUEBLO_ORIGINARIO_BIN == 1 ~ "Pertenece",
+      PUEBLO_ORIGINARIO_BIN == 0 ~ "No pertenece",
+      TRUE ~ as.character(PUEBLO_ORIGINARIO_BIN)
+    ),
+    GLOSA_SEXO = ifelse(is.na(GLOSA_SEXO) | GLOSA_SEXO == "" | trimws(GLOSA_SEXO) == "", "No reportado", GLOSA_SEXO)
+  )
+
+# Tabla de frecuencias y porcentajes
+tabla_pueblo <- datos_limpios %>%
+  group_by(AÑO, GLOSA_SEXO, PUEBLO_label) %>%
+  summarise(Frecuencia = n(), .groups = "drop") %>%
+  group_by(AÑO) %>%
+  mutate(Porcentaje = paste0(round(100 * Frecuencia / sum(Frecuencia), 1), "%")) %>%
+  ungroup() %>%
+  arrange(AÑO, GLOSA_SEXO, PUEBLO_label) %>%
+  rename(
+    Año = AÑO,
+    Sexo = GLOSA_SEXO,
+    PUEBLO_ORIGINARIO = PUEBLO_label
+  )
+
+# Mostrar tabla ordenada con flextable
+ft_tabla_pueblo <- flextable(tabla_pueblo)
+ft_tabla_pueblo <- autofit(ft_tabla_pueblo)
+ft_tabla_pueblo <- set_caption(ft_tabla_pueblo, caption = "Resumen de PUEBLO ORIGINARIO, Sexo y Año (incluye 'No reportado')")
+ft_tabla_pueblo
 ```
 
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-````
 
 
