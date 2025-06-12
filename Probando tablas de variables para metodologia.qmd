@@ -1,0 +1,108 @@
+---
+title: "Tabla de Operacionalización de Variables"
+format: docx
+editor: visual
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: true
+engine: knitr
+---
+
+::: {.callout-note title="Dependencias necesarias"}
+Para reproducir este documento, instala las siguientes librerías si aún no lo has hecho:
+
+``` r
+install.packages(c("gt", "dplyr", "readr", "tidyverse", "webshot2"))
+webshot2::install_phantomjs()
+```
+:::
+
+```{r setup, include=FALSE}
+library(gt)
+library(dplyr)
+library(readr)
+```
+
+## Tabla de operacionalización de variables
+
+```{r tabla-operacionalizacion}
+tabla_op <- tibble::tibble(
+  Variable = c(
+    "Pertenencia a pueblo originario",
+    "Edad",
+    "Sexo",
+    "Región de establecimiento",
+    "Diagnóstico de egreso (CIE-10)",
+    "Grupo de enfermedad",
+    "Evento hospitalario único"
+  ),
+  Tipo = c(
+    "Categorica nominal dicotómica (Sí/No)",
+    "Cuantitativa discreta / agrupada",
+    "Categorica nominal",
+    "Categorica nominal",
+    "Categorica nominal",
+    "Categorica ordinal",
+    "Categorica nominal"
+  ),
+  `Definición operacional` = c(
+    "Se define como 1 si el individuo se autoidentifica como indígena o posee certificado CONADI; 0 en caso contrario. Los valores faltantes fueron codificados como 0 para el análisis.",
+    "Edad en años cumplidos al momento del egreso. Agrupada en tramos etarios para análisis comparativo.",
+    "Sexo registrado en el evento hospitalario (Hombre/Mujer/Otro).",
+    "Se asigna según código del establecimiento de egreso hospitalario.",
+    "Código de diagnóstico principal según Clasificación Internacional de Enfermedades (OMS, 2016).",
+    "Derivada del diagnóstico, agrupada por capítulo o grupo nosológico (infecciosas, crónicas, etc.).",
+    "RUN anonimizado por año para evitar duplicación en análisis de representatividad. Se mantienen duplicados para análisis epidemiológico."
+  ),
+  `Fuente de datos` = rep("MINSAL", 7)
+) %>% 
+  mutate(`Fuente de datos` = c("RSH, CONADI, MINSAL", "MINSAL", "MINSAL", "MINSAL", "MINSAL", "MINSAL", "MINSAL"),
+         `Uso en el estudio` = c(
+           "Variable principal. Evaluación de completitud, representatividad y concordancia.",
+           "Caracterización sociodemográfica y análisis epidemiológico.",
+           "Caracterización poblacional.",
+           "Análisis territorial y representatividad.",
+           "Construcción de perfiles epidemiológicos.",
+           "Clasificación de morbilidad hospitalaria.",
+           "Control de duplicidad / estimación de carga de enfermedad."
+         ))
+
+tabla_gt <- gt(tabla_op) %>%
+  tab_header(
+    title = "Tabla 2: Operacionalización de Variables"
+  ) %>%
+  cols_label(
+    Variable = "Variable",
+    Tipo = "Tipo de variable",
+    `Definición operacional` = "Definición operacional",
+    `Fuente de datos` = "Fuente de datos",
+    `Uso en el estudio` = "Uso en el estudio"
+  ) %>%
+  cols_align(align = "center", columns = everything()) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(columns = Variable)
+  ) %>%
+  tab_style(
+    style = cell_fill(color = "#003366"),
+    locations = cells_column_labels()
+  ) %>%
+  tab_style(
+    style = cell_text(color = "white", weight = "bold"),
+    locations = cells_column_labels()
+  )
+tabla_gt
+```
+
+## Exportar
+
+```{r exportar-tabla, eval=FALSE}
+gtsave(tabla_gt, "D:/MAGISTER/aa TESIS/TesisRTS/FIGURES/tabla_operacionalizacion.png")
+```
+
+```{r exportar-tabla2, eval=FALSE}
+gtsave(tabla_gt, "D:/MAGISTER/aa TESIS/TesisRTS/FIGURES/tabla_operacionalizacion.pdf")
+
+```
