@@ -10,19 +10,15 @@ format: html
 
 ```{r setup, message=FALSE, warning=FALSE}
 # Cargar librerías necesarias
-library(tidyverse)
-library(dplyr)
-library(data.table)
-library(ggplot2)
-library(gtsummary)
-library(flextable)
-library(scales)
-library(epitools)
-library(epiR)
-library(tableone)
-library(summarytools)
-library(ggpubr)
-library(corrplot)
+library(tidyverse)    # Incluye ggplot2, dplyr y otras herramientas
+library(data.table)   # Para manejo eficiente de datos grandes
+library(gtsummary)    # Para tablas de resumen
+library(flextable)    # Para formateo de tablas
+library(scales)       # Para escalas en gráficos
+library(tableone)     # Para tablas descriptivas
+library(summarytools) # Para estadísticas descriptivas
+library(ggpubr)      # Para composición de gráficos
+library(corrplot)     # Para matrices de correlación
 print("Librerías cargadas correctamente.")
 ```
 
@@ -62,10 +58,6 @@ datos_preparados <- datos_resumen_modificado %>%
     GLOSA_SEXO = ifelse(is.na(GLOSA_SEXO) | trimws(GLOSA_SEXO)== "", "No reportado", GLOSA_SEXO)
   )
 
-# Establecer niveles ordenados para Grupo Etario
-niveles_edad <- c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
-datos_preparados$GRUPO_ETARIO <- factor(datos_preparados$GRUPO_ETARIO, levels = niveles_edad)
-
 # Crear variables específicas para cada análisis
 datos_preparados <- datos_preparados %>%
   mutate(
@@ -81,7 +73,7 @@ datos_preparados <- datos_preparados %>%
       CONADI == 0 ~ "No pertenece",
       TRUE ~ as.character(CONADI)
     ),
-    PUEBLO_label = case_when(
+    EGRESO_label = case_when(
       is.na(PUEBLO_ORIGINARIO_BIN) ~ "No reportado",
       PUEBLO_ORIGINARIO_BIN == 1 ~ "Pertenece",
       PUEBLO_ORIGINARIO_BIN == 0 ~ "No pertenece",
@@ -90,202 +82,7 @@ datos_preparados <- datos_preparados %>%
   )
 
 # Ahora usamos 'datos_preparados' en lugar de repetir transformaciones
+save(datos_preparados, file = "BBDD_datos_preparados.RData")
+print("Datos preparados y guardados como 'datos_preparados'.")
 ```
 
-## 4. Análisis por Variables Principales
-
-```{r analisis_variables_principales}
-n_missing <- sum(is.na(datos_preparados$AÑO))
-print(paste("Número de valores faltantes en AÑO:", n_missing))
-table_anios <- table(datos_preparados$AÑO, useNA = "ifany")
-print(table_anios)
-```
-
-## 5. Tabla de Completitud
-
-```{r tabla_completitud}
-datos_completitud <- datos_preparados %>%
-  mutate(AÑO_GRUPO = AÑO)  # Como ya es un character, se usa igual
-
-tabla_completitud <- datos_completitud %>%
-  select(RSH, CONADI, PUEBLO_ORIGINARIO_BIN, AÑO_GRUPO) %>%
-  tbl_summary(
-    by = AÑO_GRUPO,
-    missing = "always",
-    type = list(
-      RSH = "categorical",
-      CONADI = "categorical",
-      PUEBLO_ORIGINARIO_BIN = "categorical",
-      AÑO_GRUPO = "categorical"
-    ),
-    statistic = list(
-      all_categorical() ~ "{n} ({p}%)"
-    ),
-    missing_text = "Datos faltantes",
-    percent = "col"
-  ) %>%
-  add_overall() %>%
-  modify_header(label = "**COMPLETITUD**") %>%
-  modify_spanning_header(everything() ~ "**Año**") %>%
-  bold_labels()
-
-ft_completitud <- as_flex_table(tabla_completitud)
-ft_completitud
-```
-
-## 6. Función para Crear Tablas Resumen de Análisis
-
-Definimos una función que genera tablas resumen para cada variable (RSH, CONADI, PUEBLO). Esto reduce duplicación:
-
-```{r funcion_tabla_resumen, echo=TRUE}
-crear_tabla_resumen <- function(data, var_label, etiqueta_variable) {
-  data %>%
-    group_by(AÑO, GLOSA_SEXO, !!sym(var_label)) %>%
-    summarise(Frecuencia = n(), .groups = "drop") %>%
-    group_by(AÑO) %>%
-    mutate(Porcentaje = paste0(round(100 * Frecuencia / sum(Frecuencia), 1), "%")) %>%
-    ungroup() %>%
-    arrange(AÑO, GLOSA_SEXO, !!sym(var_label)) %>%
-    rename(Año = AÑO, Sexo = GLOSA_SEXO, !!etiqueta_variable := !!sym(var_label))
-}
-```
-
-## 7. Análisis RSH por Año y Sexo
-
-```{r analisis_rsh_año}
-print("Iniciando análisis de RSH y AÑO")
-tabla_rsh <- crear_tabla_resumen(datos_preparados, "RSH_label", "RSH")
-ft_tabla_rsh <- flextable(tabla_rsh) %>% 
-                autofit() %>%
-                set_caption(caption = "Resumen de RSH, Sexo y Año (incluye 'No reportado')")
-ft_tabla_rsh
-```
-
-## 8. Análisis CONADI por Año y Sexo
-
-```{r analisis_conadi_año}
-print("Iniciando análisis de CONADI y AÑO")
-tabla_conadi <- crear_tabla_resumen(datos_preparados, "CONADI_label", "CONADI")
-ft_tabla_conadi <- flextable(tabla_conadi) %>% 
-                    autofit() %>%
-                    set_caption(caption = "Resumen de CONADI, Sexo y Año (incluye 'No reportado')")
-ft_tabla_conadi
-```
-
-## 9. Análisis Pueblo Originario por Año y Sexo
-
-```{r analisis_pueblo_origen_año}
-print("Iniciando análisis de PUEBLO_ORIGINARIO y AÑO")
-tabla_pueblo <- crear_tabla_resumen(datos_preparados, "PUEBLO_label", "PUEBLO_ORIGINARIO")
-ft_tabla_pueblo <- flextable(tabla_pueblo) %>% 
-                    autofit() %>%
-                    set_caption(caption = "Resumen de PUEBLO ORIGINARIO, Sexo y Año (incluye 'No reportado')")
-ft_tabla_pueblo
-```
-
-## 10. Pirámide Poblacional
-
-Como este gráfico involucra separar a la población en dos grupos (por ejemplo, usando capa para "INTERSEX/No reportado"), preparamos dos conjuntos:
-
-```{r piramide_poblacional}
-# Agregar frecuencia (definida como 1 para cada observación)
-datos_preparados <- datos_preparados %>% mutate(Frecuencia = 1)
-
-# Datos base para "HOMBRE" y "MUJER"
-datos_base <- datos_preparados %>%
-  filter(GLOSA_SEXO %in% c("MUJER", "HOMBRE")) %>%
-  group_by(AÑO, RSH_label, GRUPO_ETARIO, GLOSA_SEXO) %>%
-  summarise(Frecuencia = sum(Frecuencia), .groups = "drop") %>%
-  mutate(Frecuencia = ifelse(GLOSA_SEXO == "MUJER", -Frecuencia, Frecuencia))
-
-# Datos para "INTERSEX/No reportado"
-datos_intersex <- datos_preparados %>%
-  filter(GLOSA_SEXO %in% c("INTERSEX (INDETERMINADO)", "No reportado")) %>%
-  group_by(AÑO, RSH_label, GRUPO_ETARIO) %>%
-  summarise(Frecuencia = sum(Frecuencia), .groups = "drop")
-
-# Graficar pirámide
-ggplot() +
-  geom_bar(
-    data = datos_base,
-    aes(x = GRUPO_ETARIO, y = Frecuencia, fill = GLOSA_SEXO),
-    stat = "identity", width = 0.8
-  ) +
-  geom_bar(
-    data = datos_intersex,
-    aes(x = GRUPO_ETARIO, y = Frecuencia),
-    stat = "identity", fill = "gray60", alpha = 0.4, width = 0.8
-  ) +
-  coord_flip() +
-  facet_grid(RSH_label ~ AÑO) +
-  scale_y_continuous(labels = abs) +
-  scale_fill_manual(values = c("MUJER" = "#00BFC4", "HOMBRE" = "#F8766D")) +
-  labs(
-    title = "Pirámide poblacional por año (con capa INTERSEX/No reportado)",
-    x = "Grupo etario", y = "Frecuencia", fill = "Sexo"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position = "bottom",
-    strip.text = element_text(face = "bold")
-  )
-```
-
-## 11. Tablas Etarias
-
-Cada tabla etaria se genera usando _datos_preparados_ y agrupando por AÑO, GRUPO_ETARIO, GLOSA_SEXO y la variable de interés. Por ejemplo, para **RSH**:
-
-```{r tabla_etario_sexo}
-tabla_etario <- datos_preparados %>%
-  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO, RSH_label) %>%
-  summarise(Frecuencia = n(), .groups = "drop") %>%
-  arrange(AÑO, GRUPO_ETARIO, GLOSA_SEXO, RSH_label)
-
-ft_tabla_etario <- flextable(tabla_etario) %>% 
-                   autofit() %>% 
-                   set_caption(caption = "Frecuencia por grupo etario, sexo, año y RSH (incluye 'No reportado')")
-ft_tabla_etario
-```
-
-Y de forma similar para **CONADI** y **PUEBLO ORIGINARIO**:
-
-```{r tabla_etario_conadi}
-tabla_etario_conadi <- datos_preparados %>%
-  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO, CONADI_label) %>%
-  summarise(Frecuencia = n(), .groups = "drop") %>%
-  arrange(AÑO, GRUPO_ETARIO, GLOSA_SEXO, CONADI_label)
-
-ft_tabla_etario_conadi <- flextable(tabla_etario_conadi) %>% 
-                           autofit() %>% 
-                           set_caption(caption = "Frecuencia por grupo etario, sexo, año y CONADI")
-ft_tabla_etario_conadi
-```
-
-```{r tabla_etario_pueblo}
-tabla_etario_pueblo <- datos_preparados %>%
-  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO, PUEBLO_label) %>%
-  summarise(Frecuencia = n(), .groups = "drop") %>%
-  arrange(AÑO, GRUPO_ETARIO, GLOSA_SEXO, PUEBLO_label)
-
-ft_tabla_etario_pueblo <- flextable(tabla_etario_pueblo) %>% 
-                           autofit() %>% 
-                           set_caption(caption = "Frecuencia por grupo etario, sexo, año y PUEBLO ORIGINARIO")
-ft_tabla_etario_pueblo
-```
-
-–––––  
-**Resumen de mejoras implementadas:**
-
-1. **Preparación centralizada:**  
-   Se creó el objeto `datos_preparados` que contiene todas las transformaciones comunes a lo largo del documento.
-
-2. **Funciones reutilizables:**  
-   Se definió la función `crear_tabla_resumen()` para generar tablas de frecuencias y porcentajes de forma modular.
-
-3. **Consistencia en nombres:**  
-   Se unificaron los nombres de las variables clave (por ejemplo, `RSH_label`, `CONADI_label` y `PUEBLO_label`) y se utiliza `datos_preparados` en todos los análisis.
-
-4. **Estructura y comentarios claros:**  
-   Se agruparon las secciones con títulos y chunk labels, facilitando la comprensión y mantenimiento del código.
-
-Con estas modificaciones, tu documento es más modular, más fácil de mantener y reduce la posible duplicación de código. ¿Te gustaría ajustar o profundizar en alguna parte en particular?
