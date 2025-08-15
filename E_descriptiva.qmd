@@ -244,12 +244,81 @@ ft_tabla_etario_conadi
 tabla_etario_pueblo <- datos_preparados %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO, PUEBLO_label) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  arrange(AÑO, GRUPO_ETARIO, GLOSA_SEXO, PUEBLO_label)
+  arrange(AÑO, GRUPO_ETARIO, GLOSA_SEXO, EGRESO_label)
 
 ft_tabla_etario_pueblo <- flextable(tabla_etario_pueblo) %>% 
                            autofit() %>% 
                            set_caption(caption = "Frecuencia por grupo etario, sexo, año y PUEBLO ORIGINARIO")
 ft_tabla_etario_pueblo
+```
+
+
+
+
+
+## Función Reutilizable para Gráficos de Tendencia
+
+Para evitar duplicar código, creamos una función que genera el gráfico de tendencia de "Pertenencia" para cualquier variable de interés (RSH, CONADI, Pueblo Originario).
+
+```{r funcion_grafico_tendencia, echo=TRUE}
+crear_grafico_tendencia <- function(data, var_label, titulo_variable) {
+  
+  # Preparar los datos dentro de la función
+  datos_tendencia <- data %>%
+    filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
+    count(AÑO, GRUPO_ETARIO, GLOSA_SEXO, !!sym(var_label), name = "n") %>%
+    group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
+    mutate(Porcentaje = n / sum(n)) %>%
+    ungroup() %>%
+    # Nos enfocamos solo en la categoría "Pertenece"
+    filter(!!sym(var_label) == "Pertenece")
+
+  # Crear el gráfico de líneas
+  ggplot(datos_tendencia, aes(x = GRUPO_ETARIO, y = Porcentaje, group = GLOSA_SEXO, color = GLOSA_SEXO)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 3) +
+    facet_wrap(~ AÑO, ncol = 3) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    scale_color_manual(values = c("HOMBRE" = "#F8766D", "MUJER" = "#00BFC4")) +
+    labs(
+      title = paste("Tendencia de Pertenencia a", titulo_variable),
+      subtitle = "Evolución del porcentaje de personas que 'Pertenece' en cada grupo",
+      x = "Grupo Etario",
+      y = "Porcentaje con Pertenencia",
+      color = "Sexo"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold", size = 14)
+    )
+}
+```
+
+
+
+## Tendencia de Pertenencia a RSH
+
+```{r tendencia_rsh, message=FALSE, warning=FALSE}
+# Llamamos a la función reutilizable también para RSH para mantener la consistencia
+crear_grafico_tendencia(datos_preparados, "RSH_label", "RSH")
+```
+
+## Tendencia de Pertenencia a CONADI
+
+```{r tendencia_conadi, message=FALSE, warning=FALSE}
+# Llamamos a la función para la variable CONADI
+crear_grafico_tendencia(datos_preparados, "CONADI_label", "CONADI")
+```
+
+## Tendencia de Pertenencia a Pueblo Originario
+
+```{r tendencia_pueblo_originario, message=FALSE, warning=FALSE}
+# Llamamos a la función para la variable Pueblo Originario
+# Nota: En tu código usas "PUEBLO_label" para esta variable
+crear_grafico_tendencia(datos_preparados, "EGRESO_label", "Pueblo Originario")
 ```
 
 –––––  
