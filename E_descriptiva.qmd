@@ -92,7 +92,7 @@ tabla_completitud <- datos_preparados %>%
     type = list(
       RSH_label = "categorical",
       CONADI_label = "categorical",
-      PUEBLO_label = "categorical"
+      EGRESO_label = "categorical"
     ),
     statistic = list(
       all_categorical() ~ "{n} ({p}%)"
@@ -100,7 +100,7 @@ tabla_completitud <- datos_preparados %>%
     label = list(
       RSH_label ~ "RSH",
       CONADI_label ~ "CONADI",
-      PUEBLO_label ~ "PUEBLO ORIGINARIO"
+      EGRESO_label ~ "PUEBLO ORIGINARIO"
     )
   ) %>%
   add_overall() %>%
@@ -155,7 +155,7 @@ ft_tabla_conadi
 
 ```{r analisis_pueblo_origen_año}
 print("Iniciando análisis de PUEBLO_ORIGINARIO y AÑO")
-tabla_pueblo <- crear_tabla_resumen(datos_preparados, "PUEBLO_label", "PUEBLO_ORIGINARIO")
+tabla_pueblo <- crear_tabla_resumen(datos_preparados, "EGRESO_label", "PUEBLO_ORIGINARIO")
 ft_tabla_pueblo <- flextable(tabla_pueblo) %>% 
                     autofit() %>%
                     set_caption(caption = "Resumen de PUEBLO ORIGINARIO, Sexo y Año (incluye 'No reportado')")
@@ -242,7 +242,7 @@ ft_tabla_etario_conadi
 
 ```{r tabla_etario_pueblo}
 tabla_etario_pueblo <- datos_preparados %>%
-  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO, PUEBLO_label) %>%
+  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO, EGRESO_label) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
   arrange(AÑO, GRUPO_ETARIO, GLOSA_SEXO, EGRESO_label)
 
@@ -266,7 +266,7 @@ crear_grafico_tendencia <- function(data, var_label, titulo_variable) {
   # Preparar los datos dentro de la función
   datos_tendencia <- data %>%
     filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
-    count(AÑO, GRUPO_ETARIO, GLOSA_SEXO, !!sym(var_label), name = "n") %>%
+    count(AÑO, GRUPO_ETARIO, GLOSA_ SEXO, !!sym(var_label), name = "n") %>%
     group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
     mutate(Porcentaje = n / sum(n)) %>%
     ungroup() %>%
@@ -281,7 +281,7 @@ crear_grafico_tendencia <- function(data, var_label, titulo_variable) {
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
     scale_color_manual(values = c("HOMBRE" = "#F8766D", "MUJER" = "#00BFC4")) +
     labs(
-      title = paste("Tendencia de Pertenencia a", titulo_variable),
+      title = paste("Tendencia de Pertenencia a Pueblos Originarios", titulo_variable),
       subtitle = "Evolución del porcentaje de personas que 'Pertenece' en cada grupo",
       x = "Grupo Etario",
       y = "Porcentaje con Pertenencia",
@@ -317,7 +317,7 @@ crear_grafico_tendencia(datos_preparados, "CONADI_label", "CONADI")
 
 ```{r tendencia_pueblo_originario, message=FALSE, warning=FALSE}
 # Llamamos a la función para la variable Pueblo Originario
-# Nota: En tu código usas "PUEBLO_label" para esta variable
+
 crear_grafico_tendencia(datos_preparados, "EGRESO_label", "Pueblo Originario")
 ```
 
@@ -331,7 +331,7 @@ crear_grafico_tendencia(datos_preparados, "EGRESO_label", "Pueblo Originario")
    Se definió la función `crear_tabla_resumen()` para generar tablas de frecuencias y porcentajes de forma modular.
 
 3. **Consistencia en nombres:**  
-   Se unificaron los nombres de las variables clave (por ejemplo, `RSH_label`, `CONADI_label` y `PUEBLO_label`) y se utiliza `datos_preparados` en todos los análisis.
+   Se unificaron los nombres de las variables clave (por ejemplo, `RSH_label`, `CONADI_label` y `EGRESO_label`) y se utiliza `datos_preparados` en todos los análisis.
 
 4. **Estructura y comentarios claros:**  
    Se agruparon las secciones con títulos y chunk labels, facilitando la comprensión y mantenimiento del código.

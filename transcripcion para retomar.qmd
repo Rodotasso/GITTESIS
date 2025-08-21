@@ -149,7 +149,6 @@ ft_completitud_por_año <- as_flex_table(tabla_completitud_por_año)
 ft_completitud_por_año
 ```
 
-
 ```{r tabla_completitud}
 tabla_completitud_por_año <- datos_preparados %>%
   select(RSH_label, CONADI_label, EGRESO_label, AÑO) %>%
@@ -218,7 +217,6 @@ ft_tabla_pueblo <- flextable(tabla_pueblo) %>%
 ft_tabla_pueblo
 ```
 
-
 ```{r piramide_poblacional}
 # Agregar frecuencia (definida como 1 para cada observación)
 datos_preparados <- datos_preparados %>% mutate(Frecuencia = 1)
@@ -263,5 +261,61 @@ ggplot() +
   )
 ```
 
+##Probando otra vez hacer la funcion de tendencias
 
+```{r funcion_ grafico_tendencias, echo=TRUE}
+crear_grafico_tendencias <- function(data, var_label, titulo_variable) {
+  
+  #Preparar los datos para la creacion del grafico
+  datos_tendencia <- data %>%
+    filter(GLOSA_SEXO %in% c("Hombre", "Mujer")) %>%
+    count(AÑO, GRUPO_ETARIO, GLOSA_SEXO, !!sym(var_label), name = "n") %>%
+    group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO)
+    mutate(Porcentaje = n / sum(n)) %>%
+    ungroup()
+    #Aqui solo para pertenencia
+    filter(!!sym(var_label)  == "Pertenece")
+    
+  #Aqui se crea el grafico
+  ggplot(datos_tendencia, aes(x = GRUPO_ETARIO, y = Porcentaje, group = GLOSA_SEXO, color = GLOSA_SEXO)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
+    geom_point(size = 3) +
+    facet_wrap(~ AÑO, ncol = 3) +
+    scale_y_continuous(labels = sclaes::percent_format(accuracy = 1)) +
+    scale_color_manual(values = c("Hombre" = "#F8766D", "Mujer" = "#00BFC4")) +
+    labs(
+      title = paste("Tendencia de pertenencia a Pueblos Originarios", titulo_variable)
+      subtitle = "Propensión del pocentaje de personas que 'Pertenece' en cada grupo por año",
+      x = "Grupo Etario"
+      y = "Porcentaje de Pertenencia"
+      color = "Sexo"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text = element_text(angle = 45, hjust = 1),
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold", size = 14)
+    )
+}
+```
+
+##Aca se utilizan las llamadas segun registro
+
+```{r tendencia_rsh, message=FALSE, warning=FALSE}
+#Aca llama la funcion de graficos de tendencias
+crear_grafico_tendencias(datos_preparados, "RSH_label", "RSH")
+```
+
+```{r tendencia_conadi, message=FALSE, warning=FALSE}
+crear_grafico_tendencias(datos_preparados, "CONADI_label", "CONADI")
+```
+
+```{r tendencia_eh, message=FALSE, warning=FALSE}
+crear_grafico_tendencias(datos_preparados, "EGRESO_label", "Egresos Hospitalarios")
+```
+
+```{r tendencia_enriquecida, message=FALSE, warning=FALSE}
+crear_grafico_tendencias(datos_preparados, "Pertenencia2", "Variable Enriquecida")
+```
 
