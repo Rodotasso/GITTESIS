@@ -206,7 +206,7 @@ library(ggalt)
 
 # Preparar los datos: filtramos solo el primer y último año
 años_comparar <- range(datos_tendencia$AÑO)
-datos_slope <- datos_tendencia %>%
+datos_slope <- datos_preparados %>%
   filter(AÑO %in% años_comparar)
 
 # Crear el gráfico de pendiente
