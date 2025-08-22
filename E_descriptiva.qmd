@@ -154,7 +154,8 @@ crear_tabla_resumen_horizontal <- function(data, var_label, etiqueta_variable) {
     mutate(
       # Crear la celda con el formato "Frecuencia (Porcentaje%)"
       ValorCelda = paste0(
-        format(Frecuencia, big.mark = "."), 
+        # CORREGIDO: Especificamos ambos separadores para evitar warnings
+        format(Frecuencia, big.mark = ".", decimal.mark = ","), 
         " (", 
         scales::percent(Frecuencia / sum(Frecuencia), accuracy = 0.1), 
         ")"
@@ -195,8 +196,8 @@ print("Iniciando análisis de CONADI y AÑO (formato horizontal)")
 tabla_conadi_h <- crear_tabla_resumen_horizontal(datos_preparados, "CONADI_label", "CONADI")
 ft_tabla_conadi_h <- flextable(tabla_conadi_h) %>% 
                     autofit() %>%
-                    set_caption(caption = "Resumen de CONADI por Año (Sexo en columnas)") %>%
-                    colformat_num(big.mark = ".", decimal.mark = ",")
+                    set_caption(caption = "Resumen de CONADI por Año (Sexo en columnas)")
+                    # CORREGIDO: Se elimina la línea colformat_num() porque ya no es necesaria
 ft_tabla_conadi_h
 ```
 
@@ -315,20 +316,21 @@ Cada tabla etaria se genera usando _datos_preparados_ y agrupando por AÑO, GRUP
 
 ```{r tabla_etario_sexo}
 tabla_etario_h <- datos_preparados %>%
-  filter(RSH_label == "Pertenece") %>% # Mantenemos el filtro por "Pertenece"
+  filter(RSH_label == "Pertenece") %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el sexo en columnas
+  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
   pivot_wider(
-    names_from = GLOSA_SEXO,
+    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
     values_from = Frecuencia,
-    values_fill = 0
+    values_fill = 0,
+    names_sep = "_" # Separa los nombres de columna con un guion bajo (ej. "0-4_HOMBRE")
   ) %>%
-  arrange(AÑO, GRUPO_ETARIO)
+  arrange(AÑO)
 
 ft_tabla_etario_h <- flextable(tabla_etario_h) %>% 
                    autofit() %>% 
-                   set_caption(caption = "Frecuencia de Pertenencia en RSH por grupo etario y año (Sexo en columnas)")
+                   set_caption(caption = "Frecuencia de Pertenencia en RSH por año (Grupo Etario y Sexo en columnas)")
 ft_tabla_etario_h
 ```
 
@@ -336,59 +338,62 @@ Y de forma similar para **CONADI** y **PUEBLO ORIGINARIO**:
 
 ```{r tabla_etario_conadi}
 tabla_etario_conadi_h <- datos_preparados %>%
-  filter(CONADI_label == "Pertenece") %>% # Filtramos para incluir solo "Pertenece"
+  filter(CONADI_label == "Pertenece") %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el sexo en columnas
+  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
   pivot_wider(
-    names_from = GLOSA_SEXO,
+    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
     values_from = Frecuencia,
-    values_fill = 0
+    values_fill = 0,
+    names_sep = "_"
   ) %>%
-  arrange(AÑO, GRUPO_ETARIO)
+  arrange(AÑO)
 
 ft_tabla_etario_conadi_h <- flextable(tabla_etario_conadi_h) %>% 
                            autofit() %>% 
-                           set_caption(caption = "Frecuencia de Pertenencia en CONADI por grupo etario y año (Sexo en columnas)")
+                           set_caption(caption = "Frecuencia de Pertenencia en CONADI por año (Grupo Etario y Sexo en columnas)")
 ft_tabla_etario_conadi_h
 ```
 
 ```{r tabla_etario_eh}
 tabla_etario_egresos_h <- datos_preparados %>%
-  filter(EGRESO_label == "Pertenece") %>% # Filtramos para incluir solo "Pertenece"
+  filter(EGRESO_label == "Pertenece") %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el sexo en columnas
+  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
   pivot_wider(
-    names_from = GLOSA_SEXO,
+    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
     values_from = Frecuencia,
-    values_fill = 0
+    values_fill = 0,
+    names_sep = "_"
   ) %>%
-  arrange(AÑO, GRUPO_ETARIO)
+  arrange(AÑO)
 
 ft_tabla_etario_egresos_h <- flextable(tabla_etario_egresos_h) %>% 
                            autofit() %>% 
-                           set_caption(caption = "Frecuencia de Pertenencia en Egresos Hospitalarios por grupo etario y año (Sexo en columnas)")
+                           set_caption(caption = "Frecuencia de Pertenencia en Egresos Hospitalarios por año (Grupo Etario y Sexo en columnas)")
 ft_tabla_etario_egresos_h
 ```
 
 
-```{r tabla_etario_eh}
+```{r tabla_enriquecidos_h}
 tabla_etario_enriquecidos_h <- datos_preparados %>%
-  filter(PERTENENCIA2 == 1) %>% # Filtramos para incluir solo "Pertenece"
+  filter(PERTENENCIA2 == 1) %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el sexo en columnas
+  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
   pivot_wider(
-    names_from = GLOSA_SEXO,
+    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
     values_from = Frecuencia,
-    values_fill = 0
+    values_fill = 0,
+    names_sep = "_"
   ) %>%
-  arrange(AÑO, GRUPO_ETARIO)
+  arrange(AÑO)
 
 ft_tabla_etario_enriquecidos_h <- flextable(tabla_etario_enriquecidos_h) %>% 
                            autofit() %>% 
-                           set_caption(caption = "Frecuencia de Pertenencia en Variable Enriquecida por grupo etario y año (Sexo en columnas)")
+                           set_caption(caption = "Frecuencia de Pertenencia en Variable Enriquecida por año (Grupo Etario y Sexo en columnas)")
 ft_tabla_etario_enriquecidos_h
 ```
 
