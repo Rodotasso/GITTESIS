@@ -1,0 +1,465 @@
+---
+title: "Prueba de graficos"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis descriptivo de la base de datos reducida"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+---
+
+## 1. Configuración Inicial y Carga de Datos
+
+```{r setup, message=FALSE, warning=FALSE}
+# Cargar librerías necesarias
+library(tidyverse)    # Incluye ggplot2, dplyr y otras herramientas
+library(data.table)   # Para manejo eficiente de datos grandes
+library(gtsummary)    # Para tablas de resumen
+library(flextable)    # Para formateo de tablas
+library(scales)       # Para escalas en gráficos
+library(tableone)     # Para tablas descriptivas
+library(summarytools) # Para estadísticas descriptivas
+library(ggpubr)      # Para composición de gráficos
+library(corrplot)     # Para matrices de correlación
+print("Librerías cargadas correctamente.")
+```
+
+```{r set_working_directory, echo=TRUE}
+# Establecer el directorio de trabajo
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+
+# Limpiar ambiente y liberar memoria
+rm(list = ls())
+gc()
+
+# Cargar datos
+load("BBDD_datos_preparados.RData")
+print("Datos cargados correctamente.")
+```
+
+```{r datos_iniciales, message=FALSE}
+
+# Resumen básico
+summary(datos_preparados)
+```
+
+
+## 20. Gráfico de Barras para Frecuencia de Categorías
+
+Para tener una visión general de la distribución de las categorías en nuestras variables principales, creamos un gráfico de barras. Cada panel representa una variable, mostrando la frecuencia absoluta de cada categoría.
+
+```{r barras_categorias, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+
+datos_categorias <- datos_preparados %>%  
+  select(RSH_label, CONADI_label, EGRESO_label) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variable",
+    values_to = "Categoria"
+  ) %>%
+  count(Variable, Categoria, name = "Frecuencia") %>%
+  group_by(Variable) %>%
+  mutate(
+    Porcentaje = Frecuencia / sum(Frecuencia) * 100,
+    Porcentaje_Formateado = paste0(format(round(Porcentaje, 1), nsmall = 1), "%"),
+    Variable = str_remove(Variable, "_label")
+  ) %>%
+  ungroup()
+
+ggplot(datos_categorias, aes(x = factor(Categoria, levels = c("Pertenece", "No pertenece", "No reportado")), 
+                             y = Porcentaje, fill = Categoria)) +  
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = Porcentaje_Formateado), 
+            vjust = -0.5, 
+            size = 4.5) + 
+  facet_wrap(~ Variable, scales = "free_y", ncol = 3) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale = 1, accuracy = 1),
+    limits = c(0, NA),  
+    expand = expansion(mult = c(0, 0.15)) 
+  ) +
+  scale_fill_manual(values = c("Pertenece" = "#2ca02c", 
+                               "No pertenece" = "#d62728", 
+                               "No reportado" = "#1f77b4")) +
+  labs(
+    title = "Distribución de Categorías por Variable de Pertenencia",
+    subtitle = "Porcentaje para cada categoría",  
+    x = NULL,
+    y = "Porcentaje (%)"  
+  ) +
+  theme_minimal(base_size = 14) + 
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 0.5, margin = margin(t = 10), size = 12),
+    strip.text = element_text(face = "bold", size = 16), 
+    plot.margin = margin(b = 20, l = 15, r = 15, t = 15), 
+    panel.spacing = unit(2, "cm") 
+  )
+```
+
+```{r guardar_grafico, message=FALSE, warning=FALSE}
+current_dir <- getwd()
+cat("El directorio de trabajo actual es:", current_dir, "\n")
+
+ruta_png <- file.path(current_dir, "distribucion_categorias.png")
+ggsave(ruta_png, width = 12, height = 8, dpi = 300)
+cat("Gráfico guardado como PNG en:", ruta_png, "\n")
+
+ruta_pdf <- file.path(current_dir, "distribucion_categorias.pdf")
+ggsave(ruta_pdf, width = 12, height = 8)
+cat("Gráfico guardado como PDF en:", ruta_pdf, "\n")
+
+if (file.exists(ruta_png) && file.exists(ruta_pdf)) {
+  cat("✓ Los archivos se han guardado correctamente.\n")
+} else {
+  cat("⚠ Hubo un problema al guardar los archivos.\n")
+}
+```
+
+
+## Grafico por Identificador Único (RUN) no duplicado
+
+```{r barras_categorias_unicos, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+
+datos_unicos <- datos_preparados %>%  
+  group_by(RUN) %>%
+  slice(1) %>%  
+  ungroup()
+
+print(paste("Registros totales:", nrow(datos_preparados)))
+print(paste("Personas únicas:", nrow(datos_unicos)))
+
+datos_categorias_unicos <- datos_unicos %>%  
+  select(RSH_label, CONADI_label, EGRESO_label) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variable",
+    values_to = "Categoria"
+  ) %>%
+  count(Variable, Categoria, name = "Frecuencia") %>%
+  group_by(Variable) %>%
+  mutate(
+    Porcentaje = Frecuencia / sum(Frecuencia) * 100,
+    Porcentaje_Formateado = paste0(format(round(Porcentaje, 1), nsmall = 1), "%"),
+    Variable = str_remove(Variable, "_label")
+  ) %>%
+  ungroup()
+
+ggplot(datos_categorias_unicos, aes(x = factor(Categoria, levels = c("Pertenece", "No pertenece", "No reportado")), 
+                             y = Porcentaje, fill = Categoria)) +  
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = Porcentaje_Formateado), 
+            vjust = -0.5, 
+            size = 4.5) + 
+  facet_wrap(~ Variable, scales = "free_y", ncol = 3) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale = 1, accuracy = 1),
+    limits = c(0, NA),  
+    expand = expansion(mult = c(0, 0.15)) 
+  ) +
+  scale_fill_manual(values = c("Pertenece" = "#2ca02c", 
+                               "No pertenece" = "#d62728", 
+                               "No reportado" = "#1f77b4")) +
+  labs(
+    title = "Distribución de Categorías por Variable de Pertenencia (Personas Únicas)",
+    subtitle = "Porcentaje para cada categoría, considerando solo un registro por RUN",  
+    x = NULL,
+    y = "Porcentaje (%)"  
+  ) +
+  theme_minimal(base_size = 14) + 
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 0.5, margin = margin(t = 10), size = 12),
+    strip.text = element_text(face = "bold", size = 16), 
+    plot.margin = margin(b = 20, l = 15, r = 15, t = 15), 
+    panel.spacing = unit(2, "cm") 
+  )
+```
+
+```{r guardar_grafico_unicos, message=FALSE, warning=FALSE}
+# Guardar el gráfico de personas únicas
+ruta_png <- file.path(getwd(), "distribucion_categorias_personas_unicas.png")
+ggsave(ruta_png, width = 12, height = 8, dpi = 300)
+
+ruta_pdf <- file.path(getwd(), "distribucion_categorias_personas_unicas.pdf")
+ggsave(ruta_pdf, width = 12, height = 8)
+
+cat("✓ Gráficos de personas únicas guardados como PNG y PDF\n")
+```
+
+
+## Análisis de la calidad de los identificadores RUN
+
+Para entender mejor por qué los gráficos con y sin deduplicación son tan similares, analizamos la estructura de los identificadores RUN en nuestra base de datos.
+
+```{r analisis_run, message=FALSE, warning=FALSE}
+# 1. Verificar cuántos RUNs son NA o están vacíos
+runs_na <- sum(is.na(datos_preparados$RUN))
+runs_vacios <- sum(!is.na(datos_preparados$RUN) & datos_preparados$RUN == "")
+runs_no_validos <- runs_na + runs_vacios
+
+# 2. Analizar la distribución de registros por RUN (cuántos registros tiene cada persona)
+registros_por_run <- datos_preparados %>%
+  filter(!is.na(RUN) & RUN != "") %>%
+  count(RUN) %>%
+  rename(registros_por_persona = n)
+
+# 3. Resumen estadístico
+cat("=== ANÁLISIS DE IDENTIFICADORES RUN ===\n\n")
+cat("Total de registros:", format(nrow(datos_preparados), big.mark = "."), "\n")
+cat("RUNs con NA:", format(runs_na, big.mark = "."), 
+    "(", round(runs_na/nrow(datos_preparados)*100, 2), "%)\n")
+cat("RUNs vacíos:", format(runs_vacios, big.mark = "."), 
+    "(", round(runs_vacios/nrow(datos_preparados)*100, 2), "%)\n")
+cat("RUNs no válidos total:", format(runs_no_validos, big.mark = "."), 
+    "(", round(runs_no_validos/nrow(datos_preparados)*100, 2), "%)\n\n")
+
+# 4. Distribución de registros por persona
+cat("=== DISTRIBUCIÓN DE REGISTROS POR PERSONA ===\n\n")
+summary_registros <- summary(registros_por_run$registros_por_persona)
+print(summary_registros)
+
+# 5. Tabla de frecuencia
+tabla_registros <- registros_por_run %>%
+  count(registros_por_persona) %>%
+  rename(num_personas = n) %>%
+  mutate(
+    porcentaje = num_personas / sum(num_personas) * 100,
+    porcentaje_acumulado = cumsum(porcentaje)
+  )
+
+# Mostrar tabla con las primeras filas (personas con 1-10 registros)
+tabla_registros %>%
+  filter(registros_por_persona <= 10) %>%
+  mutate(
+    porcentaje = paste0(round(porcentaje, 2), "%"),
+    porcentaje_acumulado = paste0(round(porcentaje_acumulado, 2), "%")
+  ) %>%
+  print(n = Inf)
+
+# 6. Visualización gráfica
+ggplot(registros_por_run, aes(x = registros_por_persona)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "white") +
+  scale_x_log10(breaks = c(1, 2, 5, 10, 20, 50, 100)) +
+  labs(
+    title = "Distribución de registros por persona",
+    subtitle = "Escala logarítmica para mejor visualización",
+    x = "Número de registros por persona (RUN)",
+    y = "Frecuencia (número de personas)"
+  ) +
+  theme_minimal()
+```
+
+Este análisis nos muestra si tenemos muchos valores NA en RUN (lo que explicaría por qué los gráficos son similares) y la distribución de registros por persona. Si la mayoría de personas tiene solo 1 registro, es lógico que los gráficos con y sin duplicados sean casi idénticos.
+
+
+## Visualización mejorada de la distribución de registros por persona
+
+Para facilitar la interpretación de los datos, creamos una versión mejorada del gráfico anterior con anotaciones claras y una visualización alternativa que muestra el porcentaje acumulado.
+
+```{r visualizacion_mejorada, message=FALSE, warning=FALSE, fig.width=14, fig.height=10}
+# Preparación de los datos para las visualizaciones
+datos_grafico <- tabla_registros %>%
+  # Nos quedamos solo con los primeros 10 registros por persona para mejor visualización
+  filter(registros_por_persona <= 10)
+
+# 1. Gráfico de barras con números exactos y porcentajes
+grafico1 <- ggplot(datos_grafico, aes(x = factor(registros_por_persona), y = num_personas)) +
+  geom_col(fill = "steelblue") +
+  # Añadir etiquetas con el número exacto de personas y el porcentaje
+  geom_text(aes(label = paste0(format(num_personas, big.mark = "."), "\n(", 
+                              format(round(as.numeric(sub("%", "", porcentaje)), 1), nsmall = 1), "%)")), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", 
+            fontface = "bold",
+            size = 4) +
+  labs(
+    title = "Número de personas según cantidad de registros",
+    subtitle = "Se muestra el número de personas y el porcentaje que representan",
+    x = "Número de registros por persona",
+    y = "Número de personas"
+  ) +
+  scale_y_continuous(labels = scales::label_number(big.mark = ".")) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    axis.title = element_text(face = "bold")
+  )
+
+# 2. Gráfico que muestra el porcentaje acumulado
+grafico2 <- ggplot(datos_grafico, aes(x = factor(registros_por_persona))) +
+  # Barras para el porcentaje individual
+  geom_col(aes(y = as.numeric(sub("%", "", porcentaje))), fill = "steelblue", alpha = 0.7) +
+  # Línea para el porcentaje acumulado
+  geom_line(aes(y = as.numeric(sub("%", "", porcentaje_acumulado)), group = 1), 
+            color = "red", size = 1.5) +
+  geom_point(aes(y = as.numeric(sub("%", "", porcentaje_acumulado))), 
+             color = "red", size = 3) +
+  # Etiquetas para el porcentaje acumulado
+  geom_text(aes(y = as.numeric(sub("%", "", porcentaje_acumulado)), 
+                label = porcentaje_acumulado),
+            vjust = -1, color = "darkred", fontface = "bold") +
+  labs(
+    title = "Porcentaje acumulado de personas según número de registros",
+    subtitle = "La línea roja muestra el porcentaje acumulado",
+    x = "Número de registros por persona",
+    y = "Porcentaje (%)"
+  ) +
+  scale_y_continuous(limits = c(0, 105)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    axis.title = element_text(face = "bold")
+  )
+
+# Combinar los dos gráficos en una sola figura
+ggarrange(grafico1, grafico2, 
+          ncol = 1, nrow = 2,
+          heights = c(1, 1))
+
+# Información adicional como texto para mayor claridad
+cat("\n\nINTERPRETACIÓN CLAVE:\n\n")
+cat("1. ", format(datos_grafico$num_personas[1], big.mark = "."), " personas (", 
+    datos_grafico$porcentaje[1], " del total) tienen solo 1 registro en la base de datos.\n\n", sep="")
+
+cat("2. El ", datos_grafico$porcentaje_acumulado[1], " de todas las personas en la base de datos tiene solo 1 registro.\n\n", sep="")
+
+cat("3. Si sumamos las personas con 1 y 2 registros, representan el ", 
+    datos_grafico$porcentaje_acumulado[2], " del total.\n\n", sep="")
+```
+
+```{r guardar_graficos_mejorados, message=FALSE, warning=FALSE}
+# Guardar el gráfico combinado (gráfico1 y gráfico2)
+grafico_combinado <- ggarrange(grafico1, grafico2, 
+                               ncol = 1, nrow = 2,
+                               heights = c(1, 1))
+
+# Definir las rutas para los archivos
+current_dir <- getwd()
+ruta_png_combinado <- file.path(current_dir, "distribucion_registros_combinado.png")
+ruta_pdf_combinado <- file.path(current_dir, "distribucion_registros_combinado.pdf")
+
+# Guardar el gráfico combinado
+ggsave(ruta_png_combinado, plot = grafico_combinado, width = 14, height = 10, dpi = 300)
+ggsave(ruta_pdf_combinado, plot = grafico_combinado, width = 14, height = 10)
+
+# Guardar también los gráficos individuales si se necesitan por separado
+ggsave(file.path(current_dir, "distribucion_registros_barras.png"), 
+       plot = grafico1, width = 14, height = 5, dpi = 300)
+ggsave(file.path(current_dir, "distribucion_registros_acumulado.png"), 
+       plot = grafico2, width = 14, height = 5, dpi = 300)
+
+cat("✓ Gráficos de visualización mejorada guardados en:\n")
+cat("   - Combinado: ", ruta_png_combinado, "\n")
+cat("   - Barras: ", file.path(current_dir, "distribucion_registros_barras.png"), "\n")
+cat("   - Acumulado: ", file.path(current_dir, "distribucion_registros_acumulado.png"), "\n")
+```
+
+
+
+
+## Análisis del Año 2022 sin Duplicaciones
+
+Este análisis se enfoca en los datos del año 2022 de la base de datos, considerando solo un registro por persona (RUN) para evitar duplicaciones.
+
+```{r anio_2022_sin_duplicados, message=FALSE, warning=FALSE, fig.width=12, fig.height=8}
+# Definir explícitamente el año que queremos analizar
+anio_especifico <- "2022"
+cat("Analizando específicamente el año:", anio_especifico, "\n\n")
+
+# Filtrar datos solo del año 2022
+datos_anio_2022 <- datos_preparados %>%
+  filter(AÑO == anio_especifico)
+
+cat("Registros totales del año 2022:", format(nrow(datos_anio_2022), big.mark = "."), "\n")
+
+# Eliminar duplicados por RUN (mantener solo un registro por persona)
+datos_anio_2022_unicos <- datos_anio_2022 %>%
+  # Si hay personas con múltiples registros en 2022, quedarse con uno solo
+  group_by(RUN) %>%
+  slice(1) %>%
+  ungroup()
+
+cat("Personas únicas del año 2022:", format(nrow(datos_anio_2022_unicos), big.mark = "."), "\n\n")
+
+# Preparar los datos para el gráfico
+datos_categorias_2022 <- datos_anio_2022_unicos %>%
+  select(RSH_label, CONADI_label, EGRESO_label) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "Variable",
+    values_to = "Categoria"
+  ) %>%
+  count(Variable, Categoria, name = "Frecuencia") %>%
+  group_by(Variable) %>%
+  mutate(
+    Porcentaje = Frecuencia / sum(Frecuencia) * 100,
+    Porcentaje_Formateado = paste0(format(round(Porcentaje, 1), nsmall = 1), "%"),
+    Variable = str_remove(Variable, "_label")
+  ) %>%
+  ungroup()
+
+# Crear el gráfico
+grafico_2022 <- ggplot(datos_categorias_2022, 
+       aes(x = factor(Categoria, levels = c("Pertenece", "No pertenece", "No reportado")), 
+           y = Porcentaje, fill = Categoria)) +  
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = Porcentaje_Formateado), 
+            vjust = -0.5, 
+            size = 4.5) + 
+  facet_wrap(~ Variable, scales = "free_y", ncol = 3) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale = 1, accuracy = 1),
+    limits = c(0, NA),  
+    expand = expansion(mult = c(0, 0.15)) 
+  ) +
+  scale_fill_manual(values = c("Pertenece" = "#2ca02c", 
+                               "No pertenece" = "#d62728", 
+                               "No reportado" = "#1f77b4")) +
+  labs(
+    title = "Distribución de Categorías por Variable de Pertenencia - Año 2022",
+    subtitle = "Porcentaje para cada categoría, considerando solo personas únicas del año 2022",
+    x = NULL,
+    y = "Porcentaje (%)"  
+  ) +
+  theme_minimal(base_size = 14) + 
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1, vjust = 0.5, margin = margin(t = 10), size = 12),
+    strip.text = element_text(face = "bold", size = 16), 
+    plot.margin = margin(b = 20, l = 15, r = 15, t = 15), 
+    panel.spacing = unit(2, "cm") 
+  )
+
+# Mostrar el gráfico
+print(grafico_2022)
+
+# Información comparativa
+cat("\nComparación entre todos los años y el año 2022:\n\n")
+
+# Comparar porcentajes entre todos los años y el año 2022
+porcentajes_todos_anios <- obtener_porcentaje_pertenencia(datos_categorias_unicos)
+porcentajes_2022 <- obtener_porcentaje_pertenencia(datos_categorias_2022)
+
+# Unir los datos para comparación
+comparacion <- porcentajes_todos_anios %>%
+  rename(Porcentaje_Todos = Porcentaje) %>%
+  left_join(porcentajes_2022 %>% rename(Porcentaje_2022 = Porcentaje), 
+            by = "Variable") %>%
+  mutate(Diferencia = Porcentaje_2022 - Porcentaje_Todos)
+
+# Mostrar la tabla de comparación
+print(comparacion)
+```
+
+```{r guardar_grafico_2022, message=FALSE, warning=FALSE}
+# Guardar el gráfico del año 2022
+ruta_png <- file.path(getwd(), "distribucion_categorias_2022.png")
+ggsave(ruta_png, plot = grafico_2022, width = 12, height = 8, dpi = 300)
+
+ruta_pdf <- file.path(getwd(), "distribucion_categorias_2022.pdf")
+ggsave(ruta_pdf, plot = grafico_2022, width = 12, height = 8)
+
+cat("✓ Gráfico del año 2022 guardado como:\n")
+cat("   - PNG:", ruta_png, "\n")
+cat("   - PDF:", ruta_pdf, "\n")
+```
+

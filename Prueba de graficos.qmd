@@ -44,6 +44,8 @@ summary(datos_preparados)
 ```
 
 
+
+
 ```{r piramide_poblacional}
 # Agregar frecuencia (definida como 1 para cada observación)
 datos_preparados <- datos_preparados %>% mutate(Frecuencia = 1)
@@ -204,10 +206,16 @@ Este gráfico se especializa en mostrar el cambio entre dos puntos, en este caso
 # install.packages("ggalt")
 library(ggalt)
 
-# Preparar los datos: filtramos solo el primer y último año
-años_comparar <- range(datos_tendencia$AÑO)
+# CORREGIDO: Preparar los datos necesarios dentro del chunk
 datos_slope <- datos_preparados %>%
-  filter(AÑO %in% años_comparar)
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER"), RSH_label == "Pertenece") %>%
+  count(AÑO, GRUPO_ETARIO, GLOSA_SEXO, RSH_label) %>%
+  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
+  mutate(Porcentaje = n / sum(n)) %>%
+  ungroup() %>%
+  filter(AÑO %in% range(AÑO))
+
+años_comparar <- range(datos_slope$AÑO)
 
 # Crear el gráfico de pendiente
 ggplot(datos_slope, aes(x = AÑO, y = Porcentaje, group = GRUPO_ETARIO, color = GLOSA_SEXO)) +
@@ -242,11 +250,17 @@ ggplot(datos_slope, aes(x = AÑO, y = Porcentaje, group = GRUPO_ETARIO, color = 
 Como alternativa al gráfico de líneas, un gráfico de área rellena el espacio bajo la línea, enfatizando la magnitud de la tendencia a través de los grupos de edad.
 
 ```{r area_chart_rsh, message=FALSE, warning=FALSE}
-# Usamos los mismos datos que para el gráfico de líneas/lollipop
-# (datos_tendencia ya está calculado y filtrado para "Pertenece")
+# CORREGIDO: Preparar los datos necesarios dentro del chunk
+datos_area <- datos_preparados %>%
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
+  count(AÑO, GRUPO_ETARIO, GLOSA_SEXO, RSH_label) %>%
+  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
+  mutate(Porcentaje = n / sum(n)) %>%
+  ungroup() %>%
+  filter(RSH_label == "Pertenece")
 
 # Crear el gráfico de área
-ggplot(datos_tendencia, aes(x = GRUPO_ETARIO, y = Porcentaje, group = GLOSA_SEXO, fill = GLOSA_SEXO)) +
+ggplot(datos_area, aes(x = GRUPO_ETARIO, y = Porcentaje, group = GLOSA_SEXO, fill = GLOSA_SEXO)) +
   # La geometría clave es geom_area. Usamos alpha para la transparencia.
   geom_area(alpha = 0.6, position = 'identity') +
   # Opcional: añadir una línea en el borde para mayor definición
@@ -285,14 +299,14 @@ library(ggridges)
 # Preparar los datos: nos enfocamos en las personas que "Pertenece"
 # y nos aseguramos de que EDAD sea numérica y AÑO sea un factor.
 datos_ridgeline <- datos_preparados %>%
-  filter(RSH_label == "Pertenece" & !is.na(EDAD)) %>%
+  filter(RSH_label == "Pertenece" & !is.na(EDAD_ANOS)) %>%
   mutate(
-    EDAD = as.numeric(EDAD),
+    EDAD_ANOS = as.numeric(EDAD_ANOS),
     AÑO = as.factor(AÑO)
   )
 
 # Crear el gráfico de ridgeline
-ggplot(datos_ridgeline, aes(x = EDAD, y = fct_rev(AÑO), fill = AÑO)) +
+ggplot(datos_ridgeline, aes(x = EDAD_ANOS, y = fct_rev(AÑO), fill = AÑO)) +
   # La geometría clave de ggridges
   geom_density_ridges(
     alpha = 0.7,    # Transparencia para ver las capas
@@ -320,120 +334,6 @@ ggplot(datos_ridgeline, aes(x = EDAD, y = fct_rev(AÑO), fill = AÑO)) +
 Un gráfico de violín nos permite comparar la distribución de la edad de las personas según su estado de RSH y su sexo. Las áreas más anchas del "violín" indican una mayor concentración de personas en ese rango de edad.
 
 ```{r violin_plot_edad_rsh, message=FALSE, warning=FALSE}
-# Asegurarnos de que la EDAD sea numérica
-datos_violin <- datos_preparados %>%
-  filter(!is.na(EDAD) & RSH_label != "No reportado") %>%
-  mutate(EDAD = as.numeric(EDAD))
-
-# Crear el gráfico de violín
-ggplot(datos_violin, aes(x = RSH_label, y = EDAD, fill = RSH_label)) +
-  # La geometría del violín
-  geom_violin(trim = FALSE, alpha = 0.8) +
-  # Opcional: Añadir un boxplot dentro del violín para más detalle
-  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
-  # Separar por sexo en paneles
-  facet_wrap(~ GLOSA_SEXO) +
-  # Invertir coordenadas para leer mejor las categorías
-  coord_flip() +
-  # Mejorar la paleta de colores y las etiquetas
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    title = "Distribución de la Edad según Pertenencia a RSH y Sexo",
-    subtitle = "Cada 'violín' muestra la densidad de edades para ese grupo",
-    x = "Estado RSH",
-    y = "Edad",
-    fill = "Estado RSH"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "none", # La leyenda es redundante con las etiquetas del eje
-    strip.text = element_text(face = "bold", size = 14)
-  )
-```
-
-## 14. Gráfico Lollipop para Destacar Pertenencia a RSH
-
-Para resaltar de forma clara y elegante el porcentaje de personas que "Pertenece" al RSH, un gráfico de lollipop es una excelente opción. Enfoca la atención en el valor clave para cada grupo.
-
-```{r lollipop_rsh, message=FALSE, warning=FALSE}
-# Preparar los datos, es el mismo proceso que para el gráfico de líneas
-datos_lollipop <- datos_preparados %>%
-  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
-  count(AÑO, GRUPO_ETARIO, GLOSA_SEXO, RSH_label) %>%
-  group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
-  mutate(Porcentaje = n / sum(n)) %>%
-  ungroup() %>%
-  # Nos enfocamos solo en la categoría "Pertenece"
-  filter(RSH_label == "Pertenece")
-
-# Crear el gráfico de lollipop
-ggplot(datos_lollipop, aes(x = GRUPO_ETARIO, y = Porcentaje, color = GLOSA_SEXO)) +
-  # El "palo" de la piruleta: un segmento que va desde 0 hasta el valor
-  geom_segment(aes(x = GRUPO_ETARIO, xend = GRUPO_ETARIO, y = 0, yend = Porcentaje), linewidth = 1) +
-  # La "piruleta": el punto al final del segmento
-  geom_point(size = 4, alpha = 0.8) +
-  # Separamos por año para que sea legible
-  facet_wrap(~ AÑO, ncol = 3) +
-  # Formateamos el eje Y como porcentaje
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  # Asignamos colores consistentes
-  scale_color_manual(values = c("HOMBRE" = "#F8766D", "MUJER" = "#00BFC4")) +
-  # Volteamos las coordenadas para que sea más fácil de leer los grupos de edad
-  coord_flip() +
-  labs(
-    title = "Porcentaje de Pertenencia a RSH por Grupo Etario y Sexo",
-    subtitle = "Visualización tipo 'Lollipop' para destacar la tendencia",
-    x = "Grupo Etario",
-    y = "Porcentaje con RSH",
-    color = "Sexo"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.major.y = element_blank(), # Quitamos las líneas de la cuadrícula vertical
-    panel.grid.minor = element_blank(),
-    strip.text = element_text(face = "bold", size = 14)
-  )
-```
-
-## 11. Gráfico de Barras Agrupadas por Categoría
-
-Este gráfico permite una comparación directa de los porcentajes de cada categoría de RSH (Pertenece, No pertenece, No reportado) dentro de cada grupo etario.
-
-```{r barras_agrupadas_rsh, message=FALSE, warning=FALSE}
-# Usamos los mismos datos que para el gráfico de barras apiladas
-# (datos_grafico ya está calculado y contiene los porcentajes)
-
-# Crear el gráfico de barras agrupadas
-ggplot(datos_grafico, aes(x = GRUPO_ETARIO, y = Porcentaje, fill = RSH_label)) +
-  # La clave es position = "dodge" para agrupar las barras
-  geom_col(position = "dodge") +
-  # Separar en paneles por Año y Sexo para que no sea muy denso
-  facet_grid(GLOSA_SEXO ~ AÑO) +
-  # Formatear el eje Y como porcentaje
-  scale_y_continuous(labels = scales::percent_format(accuracy = 5)) +
-  # Usar una paleta de colores clara
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    title = "Comparación de Categorías RSH por Grupo Etario, Sexo y Año",
-    subtitle = "Barras agrupadas para comparación directa de porcentajes",
-    x = "Grupo Etario",
-    y = "Porcentaje",
-    fill = "Estado RSH"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom",
-    strip.text = element_text(face = "bold")
-  )
-```
-
-## Distribución de la Edad por Pertenencia a RSH
-
-Un gráfico de violín nos permite visualizar y comparar la distribución completa de la edad (usando `EDAD_ANOS`) entre los diferentes grupos de RSH.
-
-```{r violin_plot_edad_rsh, message=FALSE, warning=FALSE}
 # Crear el gráfico de violín
 datos_preparados %>%
   filter(RSH_label != "No reportado" & !is.na(EDAD_ANOS)) %>%
@@ -449,7 +349,36 @@ datos_preparados %>%
     y = "Edad"
   ) +
   theme_minimal(base_size = 12) +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "none", # La leyenda es redundante con las etiquetas del eje
+    strip.text = element_text(face = "bold", size = 14)
+  )
+```
+
+## Distribución de la Edad por Pertenencia a RSH
+
+Un gráfico de violín nos permite visualizar y comparar la distribución completa de la edad (usando `EDAD_ANOS`) entre los diferentes grupos de RSH.
+
+```{r violin_plot_edad_rsh_2, message=FALSE, warning=FALSE}
+# Crear el gráfico de violín
+datos_preparados %>%
+  filter(RSH_label != "No reportado" & !is.na(EDAD_ANOS)) %>%
+  ggplot(aes(x = RSH_label, y = EDAD_ANOS, fill = RSH_label)) +
+  geom_violin(trim = FALSE, alpha = 0.8) +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Distribución de la Edad según Pertenencia a RSH",
+    subtitle = "Cada 'violín' muestra la densidad de edades para ese grupo",
+    x = "Estado RSH",
+    y = "Edad"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none", # La leyenda es redundante con las etiquetas del eje
+    strip.text = element_text(face = "bold", size = 14)
+  )
 ```
 
 ## 18. Rosa de Nightingale para la Categoría "Pertenece" de RSH
@@ -488,6 +417,50 @@ ggplot(datos_nightingale_pertenece, aes(x = GRUPO_ETARIO, y = Frecuencia, fill =
     axis.ticks = element_blank(),
     panel.grid = element_blank(),
     legend.position = "bottom", # Mantenemos la leyenda para identificar los colores
+    strip.text = element_text(face = "bold", size = 14)
+  )
+```
+
+## 19. Gráfico de Lollipop para Comparar Grupos Etarios
+
+Un gráfico de lollipop es una alternativa visualmente más ligera que un gráfico de barras. Es excelente para comparar la magnitud de una variable (en este caso, la frecuencia de personas) entre diferentes categorías (los grupos etarios).
+
+```{r lollipop_rsh, message=FALSE, warning=FALSE}
+# Preparar los datos: nos enfocamos en el último año para mayor claridad
+# y contamos la frecuencia de personas que "Pertenece" a RSH.
+ultimo_año <- max(datos_preparados$AÑO)
+
+datos_lollipop <- datos_preparados %>%
+  filter(AÑO == ultimo_año, RSH_label == "Pertenece") %>%
+  count(GRUPO_ETARIO, GLOSA_SEXO, name = "Frecuencia") %>%
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER"))
+
+# Crear el gráfico de Lollipop
+ggplot(datos_lollipop, aes(x = fct_reorder(GRUPO_ETARIO, Frecuencia), y = Frecuencia, color = GLOSA_SEXO)) +
+  # El "palo" del lollipop: un segmento desde 0 hasta el valor de la frecuencia
+  geom_segment(aes(xend = fct_reorder(GRUPO_ETARIO, Frecuencia), yend = 0), linewidth = 1) +
+  # La "cabeza" del lollipop: un punto al final del segmento
+  geom_point(size = 5, alpha = 0.8) +
+  
+  # Voltear coordenadas para que los grupos etarios se lean horizontalmente
+  coord_flip() +
+  
+  # Separar por sexo para una comparación directa
+  facet_wrap(~ GLOSA_SEXO) +
+  
+  # Paleta de colores y etiquetas
+  scale_color_manual(values = c("HOMBRE" = "#F8766D", "MUJER" = "#00BFC4")) +
+  labs(
+    title = paste("Frecuencia de Pertenencia a RSH en", ultimo_año),
+    subtitle = "Comparación por grupo etario y sexo usando un gráfico de Lollipop",
+    x = "Grupo Etario",
+    y = "Número de Personas"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none", # El color es redundante con las facetas
+    panel.grid.major.y = element_blank(), # Limpiar el fondo
+    panel.grid.minor.x = element_blank(),
     strip.text = element_text(face = "bold", size = 14)
   )
 ```

@@ -213,6 +213,8 @@ ft_tabla_egresos_h <- flextable(tabla_egresos_h) %>%
 ft_tabla_egresos_h
 ```
 
+## Análisis de Variable Enriquecida por Año y Sexo
+
 ```{r analisis_enriquecido_horizontal}
 print("Iniciando análisis de Variable Enriquecida y AÑO (formato horizontal)")
 tabla_enriquecida_h <- crear_tabla_resumen_horizontal(datos_preparados, "PERTENENCIA", "VARIABLE_ENRIQUECIDA")
