@@ -318,4 +318,3 @@ crear_grafico_tendencias(datos_preparados, "EGRESO_label", "Egresos Hospitalario
 ```{r tendencia_enriquecida, message=FALSE, warning=FALSE}
 crear_grafico_tendencias(datos_preparados, "Pertenencia2", "Variable Enriquecida")
 ```
-

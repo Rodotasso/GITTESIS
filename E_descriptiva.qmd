@@ -3,7 +3,10 @@ title: "Análisis Estadístico de Resultados"
 author: "Rodolfo Tasso"
 date: "`r Sys.Date()`"
 description: "Análisis descriptivo de la base de datos reducida"
-format: html
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
 ---
 
 ## 1. Configuración Inicial y Carga de Datos
@@ -30,36 +33,12 @@ setwd("D:/MAGISTER/aa TESIS/rtsppoo")
 rm(list = ls())
 gc()
 
-# Cargar datos (se asume que "base_reducida.RData" está en este directorio)
-load("BBDD_datos_preparados.RData")
+# Cargar datos 
+load("BBDD_ordenados.RData")
 print("Datos cargados correctamente.")
 ```
 
-```{r ordenar_categorias, echo=TRUE}
-# --- ORDENAR CATEGORÍAS DE FORMA LÓGICA ---
-
-# 1. Ordenar las variables "_label"
-# Esto asegura que en todas las tablas y gráficos aparezcan en el orden:
-# 1. Pertenece, 2. No pertenece, 3. No reportado.
-orden_label <- c("Pertenece", "No pertenece", "No reportado")
-
-# 2. Ordenar los grupos de edad de forma cronológica
-orden_etario <- c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
-
-datos_preparados <- datos_preparados %>%
-  mutate(
-    # Aplicar el orden a las variables "_label"
-    across(
-      ends_with("_label"), 
-      ~factor(., levels = orden_label)
-    ),
-    # Aplicar el orden a la columna GRUPO_ETARIO
-    GRUPO_ETARIO = factor(GRUPO_ETARIO, levels = orden_etario)
-  )
-
-print("Categorías de variables '_label' y 'GRUPO_ETARIO' ordenadas correctamente.")
-```
-
+Borro chunk de orden de categorias para no cargar dos veces la bbdd. Desde aca la bbdd se ordenaron los rangos etarios para que puedan salir en orden logico en las tablas y graficos. Hasta este punto aun no se ordena la parte de cie 10 ni de capitulos. 24/09/2025
 
 ## 2. Exploración Inicial de Datos
 
@@ -81,20 +60,20 @@ print(table_años)
 ```
 
 ```{r tabla_completitud_global, echo=TRUE}
-# SOLO CALCULA COMPLETITUD GLOBAL DE TODAS LAS VARIABLES
+# CALCULA COMPLETITUD GLOBAL DE TODAS LAS VARIABLES
 tabla_completitud_global <- datos_preparados %>%
   summarise(
     Total = n(),
-    AÑO = sum(!is.na(AÑO)),
-    GRUPO_ETARIO = sum(!is.na(GRUPO_ETARIO)),        # CORREGIDO: Usar el nombre consistente
-    GLOSA_SEXO = sum(!is.na(GLOSA_SEXO)),
-    RSH = sum(!is.na(RSH_label)),                   # CORREGIDO: Usar la variable label
-    CONADI = sum(!is.na(CONADI_label)),             # CORREGIDO: Usar la variable label
-    EGRESO = sum(!is.na(EGRESO_label))              # CORREGIDO: Usar la variable label
+    Año = sum(!is.na(AÑO)),  # Corregido: Verificar valores no NA
+    'Grupo Edad' = sum(!is.na(GRUPO_ETARIO) & GRUPO_ETARIO != "No reportado"),  # Verificar valores no NA y no "No reportado"
+    'Glosa Sexo' = sum(!is.na(GLOSA_SEXO) & GLOSA_SEXO != "" & GLOSA_SEXO != "No reportado"),  # Verificar valores no NA y no vacíos
+    RSH = sum(RSH_label != "No reportado", na.rm = TRUE),  # na.rm=TRUE para manejar posibles NA
+    CONADI = sum(CONADI_label != "No reportado", na.rm = TRUE),
+    EH = sum(EGRESO_label != "No reportado", na.rm = TRUE)
   ) %>%
-  pivot_longer(cols = -Total, names_to = "Variable", values_to = "Completitud") %>%  # Excluir Total del pivot
+  pivot_longer(cols = -Total, names_to = "Variable", values_to = "Completitud") %>%
   mutate(
-    `% Completitud` = scales::percent(Completitud / Total, accuracy = 0.01)  # Corregido nombre de columna
+    `% Completitud` = scales::percent(Completitud / Total, accuracy = 0.01)
   )
 
 # Mostrar la tabla con flextable
@@ -105,10 +84,9 @@ ft_completitud_global <- flextable(tabla_completitud_global) %>%
 ft_completitud_global
 ```
 
-
 ## 5. Tabla de Completitud
 
-```{r tabla_completitud}
+```{r tabla_distribucion_categorias, echo=TRUE}
 # Crear tabla de completitud usando variables label
 tabla_completitud <- datos_preparados %>%
   select(RSH_label, CONADI_label, EGRESO_label, AÑO) %>%
@@ -130,10 +108,41 @@ tabla_completitud <- datos_preparados %>%
     )
   ) %>%
   add_overall() %>%
-  modify_header(label = "**COMPLETITUD**") %>%
+  modify_header(label = "**DISTRIBUCIÓN DE CATEGORÍAS**") %>%
   modify_spanning_header(everything() ~ "**Año**") %>%
   bold_labels()
 
+ft_completitud <- as_flex_table(tabla_completitud)
+ft_completitud
+```
+
+```{r tabla_completitud_corregida}
+tabla_completitud <- datos_preparados %>%
+  # Crear variables temporales sin "No reportado" para consistencia
+  mutate(
+    RSH_completo = RSH_label != "No reportado",
+    CONADI_completo = CONADI_label != "No reportado",
+    EGRESO_completo = EGRESO_label != "No reportado"
+  ) %>%
+  select(RSH_completo, CONADI_completo, EGRESO_completo, AÑO) %>%
+  tbl_summary(
+    by = AÑO,
+    type = list(
+      everything() ~ "categorical"
+    ),
+    statistic = list(
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    label = list(
+      RSH_completo ~ "RSH (datos reportados)",
+      CONADI_completo ~ "CONADI (datos reportados)",
+      EGRESO_completo ~ "EGRESO HOSPITALARIO (datos reportados)"
+    )
+  ) %>%
+  add_overall() %>%
+  modify_header(label = "**COMPLETITUD**") %>%
+  modify_spanning_header(everything() ~ "**Año**") %>%
+  bold_labels()
 ft_completitud <- as_flex_table(tabla_completitud)
 ft_completitud
 ```
@@ -224,7 +233,6 @@ ft_tabla_enriquecida_h <- flextable(tabla_enriquecida_h) %>%
                     colformat_num(big.mark = ".", decimal.mark = ",")
 ft_tabla_enriquecida_h
 ```
-
 
 ## 10. Función Reutilizable para Gráficos de Tendencia
 
@@ -378,7 +386,6 @@ ft_tabla_etario_egresos_h <- flextable(tabla_etario_egresos_h) %>%
 ft_tabla_etario_egresos_h
 ```
 
-
 ```{r tabla_enriquecidos_h}
 tabla_etario_enriquecidos_h <- datos_preparados %>%
   filter(PERTENENCIA2 == 1) %>%
@@ -398,4 +405,3 @@ ft_tabla_etario_enriquecidos_h <- flextable(tabla_etario_enriquecidos_h) %>%
                            set_caption(caption = "Frecuencia de Pertenencia en Variable Enriquecida por año (Grupo Etario y Sexo en columnas)")
 ft_tabla_etario_enriquecidos_h
 ```
-
