@@ -1,0 +1,68 @@
+---
+title: "Concordancias"
+format: html
+engine: knitr
+
+---
+
+
+```{r setup, message=FALSE, warning=FALSE}
+# Cargar librerías necesarias
+library(tidyverse)    # Incluye ggplot2, dplyr y otras herramientas
+library(data.table)   # Para manejo eficiente de datos grandes
+library(gtsummary)    # Para tablas de resumen
+library(flextable)    # Para formateo de tablas
+library(scales)       # Para escalas en gráficos
+library(tableone)     # Para tablas descriptivas
+library(summarytools) # Para estadísticas descriptivas
+library(ggpubr)      # Para composición de gráficos
+library(tidymodels)   # Para analisis de correlaciones
+print("Librerías cargadas correctamente.")
+```
+
+```{r set_working_directory, echo=TRUE}
+# Establecer el directorio de trabajo
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+
+# Limpiar ambiente y liberar memoria
+rm(list = ls())
+gc()
+
+# Cargar datos 
+load("BBDD_ordenados.RData")
+print("Datos cargados correctamente.")
+```
+
+Borro chunk de orden de categorias para no cargar dos veces la bbdd. Desde aca la bbdd se ordenaron los rangos etarios para que puedan salir en orden logico en las tablas y graficos. Hasta este punto aun no se ordena la parte de cie 10 ni de capitulos. 24/09/2025
+
+## 2. Exploración Inicial de Datos
+
+```{r datos_iniciales, message=FALSE}
+# Ver estructura de los datos
+glimpse(datos_preparados)
+
+# Resumen básico
+summary(datos_preparados)
+```
+
+# Análisis de concordancia entre fuentes
+
+````{r analisis_concordancia, message=FALSE}
+# Análisis de concordancia entre fuentes
+tabla_concordancia <- datos_preparados %>%
+  filter(!is.na(RSH_label) & !is.na(CONADI_label) & !is.na(EGRESO_label)) %>%
+  summarise(
+    `RSH-CONADI concordantes` = mean(RSH_label == CONADI_label, na.rm = TRUE) * 100,
+    `RSH-EH concordantes` = mean(RSH_label == EGRESO_label, na.rm = TRUE) * 100,
+    `CONADI-EH concordantes` = mean(CONADI_label == EGRESO_label, na.rm = TRUE) * 100,
+    `Todas concordantes` = mean(RSH_label == CONADI_label & CONADI_label == EGRESO_label, na.rm = TRUE) * 100
+  )
+# Mostrar la tabla
+tabla_concordancia %>%
+  pivot_longer(everything(), names_to = "Comparación", values_to = "Porcentaje") %>%
+  mutate(Porcentaje = scales::percent(Porcentaje / 100, accuracy = 0.01)) %>%
+  flextable() %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  set_caption("Tabla 1: Análisis de concordancia entre fuentes de datos")
+```

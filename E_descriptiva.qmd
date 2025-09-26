@@ -84,10 +84,10 @@ ft_completitud_global <- flextable(tabla_completitud_global) %>%
 ft_completitud_global
 ```
 
-## 5. Tabla de Completitud
+## 5. Tabla de Distribucion de Categorías y Compleitud
 
 ```{r tabla_distribucion_categorias, echo=TRUE}
-# Crear tabla de completitud usando variables label
+# Crear tabla de distribución usando variables label
 tabla_completitud <- datos_preparados %>%
   select(RSH_label, CONADI_label, EGRESO_label, AÑO) %>%
   tbl_summary(
@@ -159,30 +159,46 @@ crear_tabla_resumen_horizontal <- function(data, var_label, etiqueta_variable) {
   datos_calculados <- data %>%
     group_by(AÑO, GLOSA_SEXO, !!sym(var_label)) %>%
     summarise(Frecuencia = n(), .groups = "drop") %>%
-    group_by(AÑO) %>% # Agrupamos solo por AÑO para que el % sea sobre el total anual
+    group_by(AÑO) %>%
     mutate(
       # Crear la celda con el formato "Frecuencia (Porcentaje%)"
       ValorCelda = paste0(
         # CORREGIDO: Especificamos ambos separadores para evitar warnings
         format(Frecuencia, big.mark = ".", decimal.mark = ","), 
         " (", 
-        scales::percent(Frecuencia / sum(Frecuencia), accuracy = 0.1), 
+        scales::percent(Frecuencia / sum(Frecuencia), accuracy = 0.01), 
         ")"
       )
     ) %>%
     ungroup()
 
   # Paso 2: Pivotar usando la nueva columna 'ValorCelda'
-  datos_calculados %>%
-    # Seleccionamos solo las columnas necesarias para el pivot
+  tabla_pivoteada <- datos_calculados %>%
     select(AÑO, GLOSA_SEXO, !!sym(var_label), ValorCelda) %>%
     pivot_wider(
-      # La clave: combinar Sexo y la variable Label para los nombres de columna
       names_from = c(GLOSA_SEXO, !!sym(var_label)),
       values_from = ValorCelda,
       values_fill = "0 (0.0%)"
     ) %>%
-    rename(Año = AÑO) # Renombramos AÑO y la tabla está lista
+    rename(Año = AÑO) # Renombramos AÑO
+  
+  # Paso 3: Renombrar las columnas (nuevo)
+  # Crear un vector de nombres nuevos
+  nombres_actuales <- names(tabla_pivoteada)
+  nombres_nuevos <- nombres_actuales
+  
+  # Reemplazar los nombres según patrones específicos
+  nombres_nuevos <- gsub("HOMBRE_Pertenece", "Hombres Pertenecen", nombres_nuevos)
+  nombres_nuevos <- gsub("HOMBRE_No pertenece", "Hombres No Pertenecen", nombres_nuevos)
+  nombres_nuevos <- gsub("HOMBRE_No reportado", "Hombres Sin Datos", nombres_nuevos)
+  nombres_nuevos <- gsub("MUJER_Pertenece", "Mujeres Pertenecen", nombres_nuevos)
+  nombres_nuevos <- gsub("MUJER_No pertenece", "Mujeres No Pertenecen", nombres_nuevos)
+  nombres_nuevos <- gsub("MUJER_No reportado", "Mujeres Sin Datos", nombres_nuevos)
+  
+  # Aplicar los nombres nuevos
+  names(tabla_pivoteada) <- nombres_nuevos
+  
+  return(tabla_pivoteada)
 }
 ```
 
@@ -226,7 +242,19 @@ ft_tabla_egresos_h
 
 ```{r analisis_enriquecido_horizontal}
 print("Iniciando análisis de Variable Enriquecida y AÑO (formato horizontal)")
-tabla_enriquecida_h <- crear_tabla_resumen_horizontal(datos_preparados, "PERTENENCIA", "VARIABLE_ENRIQUECIDA")
+
+# Creamos una versión temporal de datos_preparados con la variable categórica
+datos_tmp <- datos_preparados %>%
+  mutate(
+    PERTENENCIA_label = case_when(
+      PERTENENCIA == 1 ~ "Pertenece",
+      PERTENENCIA == 0 ~ "No pertenece",
+      TRUE ~ "No reportado"
+    )
+  )
+
+# Ahora usamos la variable categórica con la función
+tabla_enriquecida_h <- crear_tabla_resumen_horizontal(datos_tmp, "PERTENENCIA_label", "VARIABLE_ENRIQUECIDA")
 ft_tabla_enriquecida_h <- flextable(tabla_enriquecida_h) %>% 
                     autofit() %>%
                     set_caption(caption = "Resumen de Variable Enriquecida por Año (Sexo en columnas)") %>%
@@ -268,7 +296,7 @@ crear_grafico_tendencia <- function(data, var_label, titulo_variable) {
     # --- CAMBIO CLAVE: Facetar por GRUPO_ETARIO ---
     facet_wrap(~ GRUPO_ETARIO, ncol = 3) +
     
-    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
     # Aseguramos que el eje X muestre los años como números enteros
     scale_x_continuous(breaks = unique(datos_tendencia$AÑO)) +
     scale_color_manual(values = c("HOMBRE" = "#F8766D", "MUJER" = "#00BFC4")) +
@@ -324,7 +352,7 @@ crear_grafico_tendencia(datos_preparados, "PERTENENCIA2", "Variable Enriquecida"
 
 Cada tabla etaria se genera usando _datos_preparados_ y agrupando por AÑO, GRUPO_ETARIO, GLOSA_SEXO y la variable de interés. Por ejemplo, para **RSH**:
 
-```{r tabla_etario_sexo}
+```{r tabla_etario_sexo_h, echo=TRUE}
 tabla_etario_h <- datos_preparados %>%
   filter(RSH_label == "Pertenece") %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
@@ -346,7 +374,7 @@ ft_tabla_etario_h
 
 Y de forma similar para **CONADI** y **PUEBLO ORIGINARIO**:
 
-```{r tabla_etario_conadi}
+```{r tabla_etario_conadi_h, echo=TRUE}
 tabla_etario_conadi_h <- datos_preparados %>%
   filter(CONADI_label == "Pertenece") %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
@@ -366,7 +394,7 @@ ft_tabla_etario_conadi_h <- flextable(tabla_etario_conadi_h) %>%
 ft_tabla_etario_conadi_h
 ```
 
-```{r tabla_etario_eh}
+```{r tabla_etario_eh, echo=TRUE}
 tabla_etario_egresos_h <- datos_preparados %>%
   filter(EGRESO_label == "Pertenece") %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
@@ -386,7 +414,7 @@ ft_tabla_etario_egresos_h <- flextable(tabla_etario_egresos_h) %>%
 ft_tabla_etario_egresos_h
 ```
 
-```{r tabla_enriquecidos_h}
+```{r tabla_enriquecidos_h, echo=TRUE}
 tabla_etario_enriquecidos_h <- datos_preparados %>%
   filter(PERTENENCIA2 == 1) %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
@@ -404,4 +432,108 @@ ft_tabla_etario_enriquecidos_h <- flextable(tabla_etario_enriquecidos_h) %>%
                            autofit() %>% 
                            set_caption(caption = "Frecuencia de Pertenencia en Variable Enriquecida por año (Grupo Etario y Sexo en columnas)")
 ft_tabla_etario_enriquecidos_h
+```
+
+## Análisis de Completitud y Distribución de Variable Enriquecida (PERTENENCIA)
+
+```{r analisis_completitud_pertenencia, echo=TRUE}
+# 1. Verificar valores únicos y distribución de la variable PERTENENCIA
+print("Valores únicos en variable PERTENENCIA:")
+table(datos_preparados$PERTENENCIA, useNA = "always")
+
+# Calcular NAs y porcentaje para PERTENENCIA
+na_pertenencia <- sum(is.na(datos_preparados$PERTENENCIA))
+pct_na_pertenencia <- scales::percent(na_pertenencia / nrow(datos_preparados), accuracy = 0.01)
+
+print(paste("NA en PERTENENCIA:", na_pertenencia, "(", pct_na_pertenencia, "del total)"))
+
+# 2. Verificar valores únicos y distribución de la variable PERTENENCIA2
+print("Valores únicos en variable PERTENENCIA2:")
+table(datos_preparados$PERTENENCIA2, useNA = "always")
+
+# Calcular NAs y porcentaje para PERTENENCIA2
+na_pertenencia2 <- sum(is.na(datos_preparados$PERTENENCIA2))
+pct_na_pertenencia2 <- scales::percent(na_pertenencia2 / nrow(datos_preparados), accuracy = 0.01)
+
+print(paste("NA en PERTENENCIA2:", na_pertenencia2, "(", pct_na_pertenencia2, "del total)"))
+print("Nota: PERTENENCIA2 fue completada artificialmente, por lo que contiene pocos o ningún NA")
+
+# 3. Crear una tabla comparativa de NAs entre variables principales
+tabla_nas <- data.frame(
+  Variable = c("RSH", "CONADI", "PUEBLO_ORIGINARIO_BIN", "PERTENENCIA", "PERTENENCIA2"),
+  Valores_NA = c(
+    sum(is.na(datos_preparados$RSH)),
+    sum(is.na(datos_preparados$CONADI)),
+    sum(is.na(datos_preparados$PUEBLO_ORIGINARIO_BIN)),
+    na_pertenencia,
+    na_pertenencia2
+  )
+) %>%
+  # Usando nombres de columna sin espacios para evitar problemas
+  mutate(
+    Pct_NA = scales::percent(Valores_NA / nrow(datos_preparados), accuracy = 0.01),
+    Registros_validos = nrow(datos_preparados) - Valores_NA,
+    Pct_Validos = scales::percent(Registros_validos / nrow(datos_preparados), accuracy = 0.01)
+  )
+
+# Crear tabla bonita con flextable y renombrar columnas ahí
+ft_nas <- flextable(tabla_nas) %>%
+  set_header_labels(
+    Valores_NA = "Valores NA",
+    Pct_NA = "% NA",
+    Registros_validos = "Registros válidos",
+    Pct_Validos = "% Válidos"
+  ) %>%
+  autofit() %>%
+  set_caption("Completitud de variables principales: valores NA vs registros válidos")
+
+ft_nas
+
+# 4. Crear una tabla de completitud por año para la variable PERTENENCIA
+tabla_completitud_pertenencia <- datos_preparados %>%
+  # Agrupar por año
+  group_by(AÑO) %>%
+  summarise(
+    Total = n(),
+    `NAs PERTENENCIA` = sum(is.na(PERTENENCIA)),
+    `% NA PERTENENCIA` = scales::percent(sum(is.na(PERTENENCIA)) / n(), accuracy = 0.01),
+    `Valores válidos PERTENENCIA` = sum(!is.na(PERTENENCIA)),
+    `% Válidos PERTENENCIA` = scales::percent(sum(!is.na(PERTENENCIA)) / n(), accuracy = 0.01)
+  ) %>%
+  arrange(AÑO)
+
+# Mostrar la tabla con flextable
+ft_completitud_pertenencia <- flextable(tabla_completitud_pertenencia) %>%
+  autofit() %>%
+  set_caption("Completitud de Variable PERTENENCIA por año (valores NA vs válidos)")
+
+ft_completitud_pertenencia
+```
+
+```{r distribucion_pertenencia_global, echo=TRUE}
+# Crear una versión categórica de PERTENENCIA para visualización
+datos_pertenencia_cat <- datos_preparados %>%
+  mutate(
+    PERTENENCIA_label = case_when(
+      PERTENENCIA == 1 ~ "Pertenece",
+      PERTENENCIA == 0 ~ "No pertenece",
+      TRUE ~ "No reportado"
+    )
+  )
+
+# Distribución global de la variable PERTENENCIA
+tabla_distribucion_pertenencia <- datos_pertenencia_cat %>%
+  count(PERTENENCIA_label) %>%
+  mutate(
+    Porcentaje = n / sum(n) * 100,
+    `% Formateado` = scales::percent(Porcentaje/100, accuracy = 0.01)
+  )
+
+# Mostrar la tabla
+ft_distribucion_pertenencia <- flextable(tabla_distribucion_pertenencia) %>%
+  autofit() %>%
+  set_caption("Distribución global de la Variable Enriquecida (PERTENENCIA)")
+
+ft_distribucion_pertenencia
+
 ```
