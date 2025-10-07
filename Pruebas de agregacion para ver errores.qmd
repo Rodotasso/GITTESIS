@@ -1,0 +1,296 @@
+---
+title: "Reproducible Quarto Document"
+format: html
+engine: knitr
+
+---
+
+
+## Pruebas de codigo para ver posibles errores de agregacion de variables de pertenencia
+
+
+```{r}
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+library(tidyverse)
+library(dplyr)
+library(data.table)
+```
+
+```{r}
+#cargamos el archivo rdata con menor peso
+rm(list = ls())
+gc()
+
+load("BBDD_datos_preparados.RData")
+
+#confirma
+str(datos_preparados)
+
+```
+
+```{r arreglo_de_agregacion, echo= TRUE}
+# Consolidación de variables de pertenencia a pueblo indígena ----
+
+
+# 2. Variable PERTENENCIA (para análisis operativo, ignora NA)
+#    - Usa CONADI ya consolidado
+#    - Interpreta "no información" como "sin pertenencia"
+datos[, PERTENENCIA1 := fcase(
+  # Si alguna fuente indica pertenencia, asigna 1
+  CONADI == 1 | RSH == 1 | (!is.na(PUEBLO_ORIGINARIO) & PUEBLO_ORIGINARIO != 96), 1L,
+  # En todos los demás casos (incluidos todos NA), asigna 0
+  default = 0L
+)]
+# Al parecer la funcion de pmax cuando encuentra los 3 NA, devuelve -Inf
+#Este comportamiento está documentado en la ayuda de R para pmax():
+
+#"If na.rm = TRUE, then NA values are ignored. If this is not possible (no values are non-NA) an NA is returned."
+
+#Sin embargo, hay un detalle adicional: cuando todos los valores son NA y se usa na.rm = TRUE, R devuelve -Inf para max() y pmax() (y devuelve Inf para min() y pmin()).
+
+# Caso con valores normales
+#pmax(1, 2, 3, na.rm = TRUE)         # Devuelve 3
+
+# Caso con algunos NA
+#pmax(1, NA, 3, na.rm = TRUE)        # Devuelve 3 (ignora NA)
+
+# Caso con todos NA
+#pmax(NA, NA, NA, na.rm = TRUE)      # Devuelve -Inf
+
+# 3. Variable PERTENENCIA2 (para uso metodológico, conserva NA si no hay datos)
+#    - Da 1 si alguna fuente indica pertenencia
+#    - Da 0 si ninguna lo hace y el resto es NA
+#    - Da NA si no hay forma de decidir
+datos[, PERTENENCIA2 := fcase(
+  CONADI == 1 | RSH == 1 | PUEBLO_ORIGINARIO != 96, 1,
+  (CONADI %in% c(0, NA)) & 
+  (RSH %in% c(0, NA)) & 
+  (PUEBLO_ORIGINARIO %in% c(96, NA)), 0,
+  default = NA_integer_
+)]
+
+print(table(datos[, .(PERTENENCIA2)]))
+```
+
+```{r}
+datos_preparados[, PERTENENCIA := as.integer(
+  pmax(CONADI, RSH, PUEBLO_ORIGINARIO_BIN != 96, na.rm = TRUE) == 1
+)]
+```
+
+```{r}
+# Verificar los valores que llegan a pmax()
+datos_preparados[is.na(CONADI) & is.na(RSH), .(
+  CONADI,
+  RSH,
+  PUEBLO_ORIGINARIO_BIN,
+  "PUEBLO_ORIGINARIO_BIN != 96" = PUEBLO_ORIGINARIO_BIN != 96,
+  "pmax result" = pmax(CONADI, RSH, PUEBLO_ORIGINARIO_BIN != 96, na.rm = TRUE),
+  PERTENENCIA1
+)][1:10]  # Mostrar primeros 10 registros
+```
+
+```{r}
+# Análisis específico de NA en PERTENENCIA1 por año
+analisis_na_2010 <- datos_preparados %>%
+  # Crear un flag para identificar los NA en PERTENENCIA1
+  mutate(es_na = is.na(PERTENENCIA)) %>%
+  # Agrupar por año
+  group_by(AÑO) %>%
+  # Contar casos NA y totales
+  summarise(
+    total_casos = n(),
+    casos_na = sum(es_na),
+    porcentaje_na = casos_na / total_casos * 100
+  ) %>%
+  # Ordenar por año
+  arrange(AÑO)
+
+# Mostrar el análisis
+print("Distribución de NA en PERTENENCIA por año:")
+print(analisis_na_2010)
+
+# Enfoque específico en el año 2010
+casos_2010 <- datos_preparados %>%
+  filter(AÑO == 2010) %>%
+  summarise(
+    total_registros = n(),
+    na_en_pertenencia1 = sum(is.na(PERTENENCIA)),
+    na_en_conadi = sum(is.na(CONADI)),
+    na_en_rsh = sum(is.na(RSH)),
+    na_en_pueblo_originario = sum(is.na(PUEBLO_ORIGINARIO_BIN)),
+    triple_na = sum(is.na(CONADI) & is.na(RSH) & is.na(PUEBLO_ORIGINARIO_BIN))
+  )
+
+print("Análisis de NA en el año 2010:")
+print(casos_2010)
+
+# Ver ejemplos concretos de registros problemáticos en 2010
+ejemplos_na_2010 <- datos_preparados %>%
+  filter(AÑO == 2010, is.na(PERTENENCIA)) %>%
+  select(CONADI, RSH, PUEBLO_ORIGINARIO_BIN, PERTENENCIA) %>%
+  head(10)  # Mostrar los primeros 10 casos
+
+print("Ejemplos de registros con NA en PERTENENCIA1 en 2010:")
+print(ejemplos_na_2010)
+
+# Analizar patrones específicos de NA en 2010
+patrones_na_2010 <- datos_preparados %>%
+  filter(AÑO == 2010) %>%
+  mutate(
+    patron = case_when(
+      is.na(CONADI) & is.na(RSH) & is.na(PUEBLO_ORIGINARIO_BIN) ~ "Triple NA",
+      is.na(CONADI) & is.na(RSH) & !is.na(PUEBLO_ORIGINARIO_BIN) ~ "NA en CONADI y RSH",
+      is.na(CONADI) & !is.na(RSH) & is.na(PUEBLO_ORIGINARIO_BIN) ~ "NA en CONADI y PUEBLO_ORIGINARIO_BIN",
+      !is.na(CONADI) & is.na(RSH) & is.na(PUEBLO_ORIGINARIO_BIN) ~ "NA en RSH y PUEBLO_ORIGINARIO_BIN",
+      is.na(CONADI) & !is.na(RSH) & !is.na(PUEBLO_ORIGINARIO_BIN) ~ "NA solo en CONADI",
+      !is.na(CONADI) & is.na(RSH) & !is.na(PUEBLO_ORIGINARIO_BIN) ~ "NA solo en RSH",
+      !is.na(CONADI) & !is.na(RSH) & is.na(PUEBLO_ORIGINARIO_BIN) ~ "NA solo en PUEBLO_ORIGINARIO_BIN",
+      TRUE ~ "Sin NA"
+    )
+  ) %>%
+  group_by(patron) %>%
+  summarise(
+    conteo = n(),
+    na_en_pertenencia1 = sum(is.na(PERTENENCIA)),
+    porcentaje_na = na_en_pertenencia1 / conteo * 100
+  ) %>%
+  arrange(desc(conteo))
+
+print("Patrones de NA en las variables fuente (año 2010):")
+print(patrones_na_2010)
+
+# Prueba específica para detectar el problema con pmax
+test_pmax_2010 <- datos_preparados %>%
+  filter(AÑO == 2010, is.na(PERTENENCIA)) %>%
+  rowwise() %>%
+  mutate(
+    test_pmax = pmax(CONADI, RSH, PUEBLO_ORIGINARIO_BIN != 96, na.rm = TRUE),
+    test_pueblo = PUEBLO_ORIGINARIO_BIN != 96
+  ) %>%
+  ungroup() %>%
+  select(CONADI, RSH, PUEBLO_ORIGINARIO_BIN, test_pueblo, test_pmax, PERTENENCIA) %>%
+  head(10)
+
+print("Prueba de cálculo pmax en registros con NA (2010):")
+print(test_pmax_2010)
+```
+
+
+## Análisis de Completitud y Distribución de Variable Enriquecida (PERTENENCIA)
+
+```{r analisis_completitud_pertenencia, echo=TRUE}
+# 1. Verificar valores únicos y distribución de la variable PERTENENCIA
+print("Valores únicos en variable PERTENENCIA:")
+table(datos_preparados$PERTENENCIA, useNA = "always")
+
+# Calcular NAs y porcentaje para PERTENENCIA
+na_pertenencia <- sum(is.na(datos_preparados$PERTENENCIA))
+pct_na_pertenencia <- scales::percent(na_pertenencia / nrow(datos_preparados), accuracy = 0.01)
+
+print(paste("NA en PERTENENCIA:", na_pertenencia, "(", pct_na_pertenencia, "del total)"))
+
+# 2. Verificar valores únicos y distribución de la variable PERTENENCIA2
+print("Valores únicos en variable PERTENENCIA2:")
+table(datos_preparados$PERTENENCIA2, useNA = "always")
+
+# Calcular NAs y porcentaje para PERTENENCIA2
+na_pertenencia2 <- sum(is.na(datos_preparados$PERTENENCIA2))
+pct_na_pertenencia2 <- scales::percent(na_pertenencia2 / nrow(datos_preparados), accuracy = 0.01)
+
+print(paste("NA en PERTENENCIA2:", na_pertenencia2, "(", pct_na_pertenencia2, "del total)"))
+print("Nota: PERTENENCIA2 fue completada artificialmente, por lo que contiene pocos o ningún NA")
+
+# 3. Crear una tabla comparativa de NAs entre variables principales
+tabla_nas <- data.frame(
+  Variable = c("RSH", "CONADI", "PUEBLO_ORIGINARIO_BIN", "PERTENENCIA", "PERTENENCIA2"),
+  Valores_NA = c(
+    sum(is.na(datos_preparados$RSH)),
+    sum(is.na(datos_preparados$CONADI)),
+    sum(is.na(datos_preparados$PUEBLO_ORIGINARIO_BIN)),
+    na_pertenencia,
+    na_pertenencia2
+  )
+) %>%
+  # Usando nombres de columna sin espacios para evitar problemas
+  mutate(
+    Pct_NA = scales::percent(Valores_NA / nrow(datos_preparados), accuracy = 0.01),
+    Registros_validos = nrow(datos_preparados) - Valores_NA,
+    Pct_Validos = scales::percent(Registros_validos / nrow(datos_preparados), accuracy = 0.01)
+  )
+
+# Crear tabla bonita con flextable y renombrar columnas ahí
+ft_nas <- flextable(tabla_nas) %>%
+  set_header_labels(
+    Valores_NA = "Valores NA",
+    Pct_NA = "% NA",
+    Registros_validos = "Registros válidos",
+    Pct_Validos = "% Válidos"
+  ) %>%
+  autofit() %>%
+  set_caption("Completitud de variables principales: valores NA vs registros válidos")
+
+ft_nas
+
+# 4. Crear una tabla de completitud por año para la variable PERTENENCIA
+tabla_completitud_pertenencia <- datos_preparados %>%
+  # Agrupar por año
+  group_by(AÑO) %>%
+  summarise(
+    Total = n(),
+    `NAs PERTENENCIA` = sum(is.na(PERTENENCIA)),
+    `% NA PERTENENCIA` = scales::percent(sum(is.na(PERTENENCIA)) / n(), accuracy = 0.01),
+    `Valores válidos PERTENENCIA` = sum(!is.na(PERTENENCIA)),
+    `% Válidos PERTENENCIA` = scales::percent(sum(!is.na(PERTENENCIA)) / n(), accuracy = 0.01)
+  ) %>%
+  arrange(AÑO)
+
+# Mostrar la tabla con flextable
+ft_completitud_pertenencia <- flextable(tabla_completitud_pertenencia) %>%
+  autofit() %>%
+  set_caption("Completitud de Variable PERTENENCIA por año (valores NA vs válidos)")
+
+ft_completitud_pertenencia
+```
+
+```{r distribucion_pertenencia_global, echo=TRUE}
+# Crear una versión categórica de PERTENENCIA para visualización
+datos_pertenencia_cat <- datos_preparados %>%
+  mutate(
+    PERTENENCIA_label = case_when(
+      PERTENENCIA == 1 ~ "Pertenece",
+      PERTENENCIA == 0 ~ "No pertenece",
+      TRUE ~ "No reportado"
+    )
+  )
+
+# Distribución global de la variable PERTENENCIA
+tabla_distribucion_pertenencia <- datos_pertenencia_cat %>%
+  count(PERTENENCIA_label) %>%
+  mutate(
+    Porcentaje = n / sum(n) * 100,
+    `% Formateado` = scales::percent(Porcentaje/100, accuracy = 0.01)
+  )
+
+# Mostrar la tabla
+ft_distribucion_pertenencia <- flextable(tabla_distribucion_pertenencia) %>%
+  autofit() %>%
+  set_caption("Distribución global de la Variable Enriquecida (PERTENENCIA)")
+
+ft_distribucion_pertenencia
+
+```
+
+##Al parecer el problema de NA en pertenencia se debe a que la funcion pmax devuelve -Inf cuando todos los valores son NA, lo que hace que la comparacion con ciertos valores falle al utilizar la funcion pmax con na.rm=TRUE. Ademas de ejecutarlo con data.table, se hizo una prueba con dplyr para ver si el comportamiento era el mismo y efectivamente lo es. Cuando empieza a utilizar la funcion genera errores en el tipo de dato, pasando de integer a numeric, lo que puede generar problemas en comparaciones posteriores.
+
+
+para la variable pertenencia se uso esta funcion
+
+```{r}
+# 2. Variable PERTENENCIA (para análisis operativo, ignora NA)
+#    - Usa CONADI ya consolidado
+#    - Interpreta "no información" como "sin pertenencia"
+datos[, PERTENENCIA := as.integer(
+  pmax(CONADI, RSH, PUEBLO_ORIGINARIO != 96, na.rm = TRUE) == 1
+)]
+```

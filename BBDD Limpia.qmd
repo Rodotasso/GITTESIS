@@ -94,9 +94,27 @@ print(triple_na)
 # 2. Variable PERTENENCIA (para análisis operativo, ignora NA)
 #    - Usa CONADI ya consolidado
 #    - Interpreta "no información" como "sin pertenencia"
-datos[, PERTENENCIA := as.integer(
-  pmax(CONADI, RSH, PUEBLO_ORIGINARIO != 96, na.rm = TRUE) == 1
+datos[, PERTENENCIA := fcase(
+  # Si alguna fuente indica pertenencia, asigna 1
+  CONADI == 1 | RSH == 1 | (!is.na(PUEBLO_ORIGINARIO) & PUEBLO_ORIGINARIO != 96), 1L,
+  # En todos los demás casos (incluidos todos NA), asigna 0
+  default = 0L
 )]
+# Al parecer la funcion de pmax cuando encuentra los 3 NA, devuelve -Inf
+#Este comportamiento está documentado en la ayuda de R para pmax():
+
+#"If na.rm = TRUE, then NA values are ignored. If this is not possible (no values are non-NA) an NA is returned."
+
+#Sin embargo, hay un detalle adicional: cuando todos los valores son NA y se usa na.rm = TRUE, R devuelve -Inf para max() y pmax() (y devuelve Inf para min() y pmin()).
+
+# Caso con valores normales
+#pmax(1, 2, 3, na.rm = TRUE)         # Devuelve 3
+
+# Caso con algunos NA
+#pmax(1, NA, 3, na.rm = TRUE)        # Devuelve 3 (ignora NA)
+
+# Caso con todos NA
+#pmax(NA, NA, NA, na.rm = TRUE)      # Devuelve -Inf
 
 # 3. Variable PERTENENCIA2 (para uso metodológico, conserva NA si no hay datos)
 #    - Da 1 si alguna fuente indica pertenencia

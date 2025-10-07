@@ -1,0 +1,218 @@
+---
+title: "Homologaión de establecimientos de salud"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis descriptivo de la base de datos reducida"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+---
+
+*Nota: Se utiliza la variable `PERTENENCIA2` para todos los análisis de pertenencia.*
+
+## 1. Configuración Inicial y Carga de Datos
+
+```{r setup, message=FALSE, warning=FALSE}
+# Cargar librerías necesarias
+library(tidyverse)
+library(data.table)
+library(gtsummary)
+library(flextable)
+library(scales)
+library(ggpubr)
+library(readxl) # Agregado para leer archivos Excel
+
+# Establecer el directorio de trabajo
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+
+# Limpiar ambiente y liberar memoria
+rm(list = ls())
+gc()
+
+# Cargar datos 
+load("BBDD_ordenados.RData")
+
+# Verificar qué objetos se cargaron
+print("Objetos disponibles después de cargar BBDD_ordenados.RData:")
+print(ls())
+
+# Crear datos_ordenados a partir de datos_preparados
+datos_ordenados <- datos_preparados
+print("Datos asignados correctamente a 'datos_ordenados'")
+
+# Verificar la estructura de los datos
+print("Estructura de datos_ordenados:")
+str(datos_ordenados)
+```
+
+```{r cargar_homologacion}
+# Cargar archivo de homologación
+homologacion_establecimientos <- read_excel(
+  "717508813-Establecimientos-ChileDEIS-MINSAL-29-04-2022.xlsx",
+  sheet = "Establecimientos Vig",
+  skip = 1
+) %>%
+  # Seleccionar y renombrar columnas usando los nombres exactos
+  select(
+    CODIGO = `Código Vigente`,
+    CODIGO_MADRE = `Código  Madre`,
+    CODIGO_NUEVO_MADRE = `Código Nuevo Madre`,
+    CODIGO_REGION = `Código Región`,
+    NOMBRE_REGION = `Nombre Región`,
+    CODIGO_DEPENDENCIA = `Código Dependencia Jerárquica (SEREMI / Servicio de Salud)`,
+    DEPENDENCIA = `Dependencia Jerárquica (SEREMI / Servicio de Salud)`,
+    PERTENENCIA_SNSS = `Pertenencia al SNSS`,
+    TIPO_ESTABLECIMIENTO = `Tipo Establecimiento`
+  ) %>%
+  # Limpiar los nombres y datos
+  mutate(across(everything(), ~str_trim(.)))
+
+# Verificaciones
+print("Estructura de la tabla de homologación:")
+str(homologacion_establecimientos)
+
+print("\nPrimeras filas de la tabla de homologación:")
+head(homologacion_establecimientos)
+
+# Verificar valores únicos
+print("\nNúmero de códigos únicos:")
+print(n_distinct(homologacion_establecimientos$CODIGO))
+
+# Resumen de tipos de establecimientos
+print("\nTipos de establecimientos:")
+table(homologacion_establecimientos$TIPO_ESTABLECIMIENTO)
+```
+
+
+```{r homologar_establecimientos}
+# Verificar tipos de datos antes de la unión
+print("Tipo de datos de ESTAB_HOMO:")
+print(class(datos_preparados$ESTAB_HOMO))
+print("\nTipo de datos de CODIGO:")
+print(class(homologacion_establecimientos$CODIGO))
+
+# Convertir ESTAB_HOMO a character para que coincida con CODIGO
+datos_preparados <- datos_preparados %>%
+  mutate(ESTAB_HOMO = as.character(ESTAB_HOMO))
+
+# Unir datos con tabla de homologación
+datos_homologados <- datos_preparados %>%
+  left_join(
+    homologacion_establecimientos,
+    by = c("ESTAB_HOMO" = "CODIGO")
+  )
+
+# Verificar la unión
+print("Número de registros antes y después de la homologación:")
+print(paste("Registros originales:", nrow(datos_preparados)))
+print(paste("Registros homologados:", nrow(datos_homologados)))
+
+# Verificar que no hay pérdida de datos
+print("Verificación de establecimientos no homologados:")
+establecimientos_faltantes <- datos_preparados %>%
+  anti_join(homologacion_establecimientos, by = c("ESTAB_HOMO" = "CODIGO")) %>%
+  count(ESTAB_HOMO) %>%
+  arrange(desc(n))
+
+print("Establecimientos no encontrados en la tabla de homologación:")
+print(establecimientos_faltantes)
+
+# Verificar los primeros registros homologados
+print("\nPrimeros registros homologados:")
+head(datos_homologados %>% 
+     select(ESTAB_HOMO, CODIGO_REGION, NOMBRE_REGION, TIPO_ESTABLECIMIENTO))
+```
+
+```{r verificar_homologacion}
+# Resumen de establecimientos homologados
+resumen_homologacion <- datos_homologados %>%
+  group_by(
+    ESTAB_HOMO, 
+    NOMBRE_REGION,
+    TIPO_ESTABLECIMIENTO,
+    PERTENENCIA_SNSS,
+    DEPENDENCIA  # Añadido el nombre/dependencia del establecimiento
+  ) %>%
+  summarise(
+    n_casos = n(),
+    porcentaje = n_casos/nrow(datos_homologados) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_casos))
+
+# Mostrar primeros 10 establecimientos con más detalle
+print("Top 10 establecimientos por número de casos:")
+resumen_homologacion %>%
+  head(10) %>%
+  select(
+    `Código` = ESTAB_HOMO,
+    `Región` = NOMBRE_REGION,
+    `Tipo` = TIPO_ESTABLECIMIENTO,
+    `Dependencia` = DEPENDENCIA,
+    `Casos` = n_casos,
+    `%` = porcentaje
+  ) %>%
+  print(n = 10)
+
+# Análisis por región
+print("\nDistribución por región:")
+datos_homologados %>%
+  count(NOMBRE_REGION, sort = TRUE) %>%
+  mutate(
+    porcentaje = n/sum(n) * 100,
+    porcentaje_formato = sprintf("%.2f%%", porcentaje)
+  ) %>%
+  print(n = 16)  # Para mostrar todas las regiones
+```
+
+```{r guardar_datos}
+# 1. Verificar el estado de los datos antes de guardar
+print("Verificación pre-guardado:")
+print(paste("- Registros totales:", format(nrow(datos_homologados), big.mark=",")))
+print(paste("- Variables:", ncol(datos_homologados)))
+
+# 2. Crear respaldo del archivo anterior si existe
+if(file.exists("BBDD_homologados.RData")) {
+  file.copy("BBDD_homologados.RData", 
+            paste0("BBDD_homologados_backup_", format(Sys.time(), "%Y%m%d_%H%M"), ".RData"))
+  print("Respaldo creado del archivo anterior")
+}
+
+# 3. Guardar datos homologados
+save(datos_homologados, file = "BBDD_homologados.RData")
+print("Datos homologados guardados correctamente")
+
+# 4. Verificar que se guardó correctamente
+if(file.exists("BBDD_homologados.RData")) {
+  file_info <- file.info("BBDD_homologados.RData")
+  print(paste("Archivo creado:", format(file_info$mtime)))
+  print(paste("Tamaño:", format(file_info$size/1024/1024, digits=2), "MB"))
+} else {
+  stop("Error: El archivo no se guardó correctamente")
+}
+```
+
+```{r verificacion_final}
+# Verificar calidad de la homologación
+print("=== VERIFICACIÓN FINAL DE CALIDAD ===")
+
+# 1. Verificar campos NA
+nas_por_columna <- sapply(datos_homologados, function(x) sum(is.na(x)))
+print("\nCampos NA por columna:")
+print(sort(nas_por_columna[nas_por_columna > 0], decreasing = TRUE))
+
+# 2. Verificar coherencia regional
+print("\nCoherencia entre código y nombre de región:")
+datos_homologados %>%
+  count(CODIGO_REGION, NOMBRE_REGION) %>%
+  arrange(CODIGO_REGION) %>%
+  print(n = 20)
+
+# 3. Resumen final
+print("\nResumen de la homologación:")
+print(paste("Total de registros:", format(nrow(datos_homologados), big.mark=",")))
+print(paste("Establecimientos únicos:", format(n_distinct(datos_homologados$ESTAB_HOMO), big.mark=",")))
+print(paste("Regiones representadas:", n_distinct(datos_homologados$NOMBRE_REGION)))
+print(paste("Tipos de establecimiento:", n_distinct(datos_homologados$TIPO_ESTABLECIMIENTO)))
+```
