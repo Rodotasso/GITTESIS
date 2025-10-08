@@ -197,26 +197,17 @@ analisis_prev$grafico
 ## 3. Análisis de Top CIE-10 por Sexo, Pertenencia y Año
 
 ```{r funcion_top_cie10}
-# Función para analizar top 20 de Grupos CIE-10 por sexo, pertenencia y año
+# Función para analizar top 20 de Grupos CIE-10 por pertenencia y año
 analizar_cie10_top <- function(data, limite_top = 20) {
-  message("--- Iniciando análisis de Top CIE-10 por sexo y pertenencia ---")
+  message("--- Iniciando análisis de Top CIE-10 por pertenencia ---")
   
-  # Verificar nombres de columnas
-  message("Columnas disponibles para sexo: ", 
-          paste(names(data)[grepl("sexo|SEXO", names(data))], collapse = ", "))
-  
-  # Filtrar datos excluyendo Intersex
+  # Filtrar datos excluyendo valores no reportados
   data_filtered <- data %>%
-    filter(GLOSA_SEXO != "Intersex" & AÑO != "No reportado")
+    filter(AÑO != "No reportado")
   
-  # Crear categorías para sexo y pertenencia
+  # Crear categorías para pertenencia
   data_categorias <- data_filtered %>%
     mutate(
-      SEXO_CAT = case_when(
-        GLOSA_SEXO == "Hombre" ~ "Hombre",
-        GLOSA_SEXO == "Mujer" ~ "Mujer",
-        TRUE ~ "Otro"
-      ),
       PERTENENCIA_CAT = if_else(PERTENENCIA2 == 1, 
                               "Pertenece a Pueblos Originarios", 
                               "Población General")
@@ -224,44 +215,43 @@ analizar_cie10_top <- function(data, limite_top = 20) {
   
   # Análisis por año
   top_anual <- data_categorias %>%
-    group_by(AÑO, SEXO_CAT, PERTENENCIA_CAT, Grupo_CIE10) %>%
+    group_by(AÑO, PERTENENCIA_CAT, Grupo_CIE10) %>%  # Eliminado GLOSA_SEXO
     summarise(
       n_casos = n(),
       .groups = "drop"
     ) %>%
-    group_by(AÑO, SEXO_CAT, PERTENENCIA_CAT) %>%
+    group_by(AÑO, PERTENENCIA_CAT) %>%  # Eliminado GLOSA_SEXO
     mutate(
       total_grupo = sum(n_casos),
       porcentaje = round(n_casos/total_grupo * 100, 2)
     ) %>%
-    arrange(AÑO, SEXO_CAT, PERTENENCIA_CAT, desc(n_casos)) %>%
-    group_by(AÑO, SEXO_CAT, PERTENENCIA_CAT) %>%
+    arrange(AÑO, PERTENENCIA_CAT, desc(n_casos)) %>%
+    group_by(AÑO, PERTENENCIA_CAT) %>%  # Eliminado GLOSA_SEXO
     slice_head(n = limite_top) %>%
     ungroup()
   
   # Promedio por años
   top_promedio <- data_categorias %>%
-    group_by(SEXO_CAT, PERTENENCIA_CAT, Grupo_CIE10) %>%
+    group_by(PERTENENCIA_CAT, Grupo_CIE10) %>%  # Eliminado GLOSA_SEXO
     summarise(
       n_casos = n(),
       .groups = "drop"
     ) %>%
-    group_by(SEXO_CAT, PERTENENCIA_CAT) %>%
+    group_by(PERTENENCIA_CAT) %>%  # Eliminado GLOSA_SEXO
     mutate(
       total_grupo = sum(n_casos),
       porcentaje = round(n_casos/total_grupo * 100, 2)
     ) %>%
-    arrange(SEXO_CAT, PERTENENCIA_CAT, desc(n_casos)) %>%
-    group_by(SEXO_CAT, PERTENENCIA_CAT) %>%
+    arrange(PERTENENCIA_CAT, desc(n_casos)) %>%
+    group_by(PERTENENCIA_CAT) %>%  # Eliminado GLOSA_SEXO
     slice_head(n = limite_top) %>%
     ungroup()
   
   # Formatar tablas anuales
   tablas_anuales <- top_anual %>%
-    split(interaction(.$AÑO, .$SEXO_CAT, .$PERTENENCIA_CAT)) %>%
+    split(interaction(.$AÑO, .$PERTENENCIA_CAT)) %>%  # Eliminado GLOSA_SEXO
     map(function(df) {
       año <- unique(df$AÑO)
-      sexo <- unique(df$SEXO_CAT)
       pertenencia <- unique(df$PERTENENCIA_CAT)
       
       flextable(
@@ -270,8 +260,8 @@ analizar_cie10_top <- function(data, limite_top = 20) {
           arrange(desc(n_casos))
       ) %>%
         set_caption(paste("Top", limite_top, "Grupos CIE-10 -", 
-                         "Año:", año, "- Sexo:", sexo, 
-                         "- Grupo:", pertenencia)) %>%
+                         "Año:", año,  
+                         "- Grupo:", pertenencia)) %>%  # Eliminado sexo
         set_header_labels(
           Grupo_CIE10 = "Grupo CIE-10",
           n_casos = "N° Casos",
@@ -283,9 +273,8 @@ analizar_cie10_top <- function(data, limite_top = 20) {
   
   # Formatar tablas de promedio
   tablas_promedio <- top_promedio %>%
-    split(interaction(.$SEXO_CAT, .$PERTENENCIA_CAT)) %>%
+    split(.$PERTENENCIA_CAT) %>%  # Eliminado GLOSA_SEXO
     map(function(df) {
-      sexo <- unique(df$SEXO_CAT)
       pertenencia <- unique(df$PERTENENCIA_CAT)
       
       flextable(
@@ -293,8 +282,8 @@ analizar_cie10_top <- function(data, limite_top = 20) {
           select(Grupo_CIE10, n_casos, porcentaje) %>%
           arrange(desc(n_casos))
       ) %>%
-        set_caption(paste("Top", limite_top, "Grupos CIE-10 - Promedio General -", 
-                         "Sexo:", sexo, "- Grupo:", pertenencia)) %>%
+        set_caption(paste("Top", limite_top, "Grupos CIE-10 - Promedio General -",
+                         "Grupo:", pertenencia)) %>%  # Eliminado sexo
         set_header_labels(
           Grupo_CIE10 = "Grupo CIE-10",
           n_casos = "N° Casos",
@@ -529,114 +518,138 @@ save_flex_as_html <- function(ft, filename) {
 }
 ```
 
-```{r guardar_tablas, eval=TRUE}
-# Guardar tablas del análisis por sexo que sí existen
-if(exists("resultados_cie10_sexo")) {
-  # Tablas para hombres
-  if(!is.null(resultados_cie10_sexo$hombre$tabla_anual)) {
-    save_flex_as_html(resultados_cie10_sexo$hombre$tabla_anual, 
-                     "tabla_cie10_hombre_anual.html")
+```{r guardar_tablas_html, eval=TRUE}
+# Crear directorio para resultados si no existe
+dir.create("resultados_tesis", showWarnings = FALSE)
+
+# Función mejorada para guardar tablas como HTML
+guardar_tabla_html <- function(tabla, nombre_archivo) {
+  if(is.null(tabla)) {
+    message("La tabla es NULL, no se puede guardar: ", nombre_archivo)
+    return(invisible(NULL))
   }
   
-  if(!is.null(resultados_cie10_sexo$hombre$promedio_anual)) {
-    save_flex_as_html(resultados_cie10_sexo$hombre$promedio_anual, 
-                     "tabla_cie10_hombre_promedio.html")
-  }
+  ruta_completa <- file.path("resultados_tesis", nombre_archivo)
   
-  # Tablas para mujeres
-  if(!is.null(resultados_cie10_sexo$mujer$tabla_anual)) {
-    save_flex_as_html(resultados_cie10_sexo$mujer$tabla_anual, 
-                     "tabla_cie10_mujer_anual.html")
-  }
-  
-  if(!is.null(resultados_cie10_sexo$mujer$promedio_anual)) {
-    save_flex_as_html(resultados_cie10_sexo$mujer$promedio_anual, 
-                     "tabla_cie10_mujer_promedio.html")
-  }
+  tryCatch({
+    flextable::save_as_html(tabla, path = ruta_completa)
+    message("Tabla guardada como: ", ruta_completa)
+    return(TRUE)
+  }, error = function(e) {
+    message("Error al guardar tabla '", nombre_archivo, "': ", e$message)
+    return(FALSE)
+  })
 }
 
-# Las demás tablas (verificando que existan)
-for(analisis_obj in c("analisis_estab", "analisis_diag", "analisis_cie", "analisis_prev")) {
-  if(exists(analisis_obj)) {
-    obj <- get(analisis_obj)
-    nombre_base <- sub("analisis_", "", analisis_obj)
-    
-    if(!is.null(obj$tabla_anual)) {
-      save_flex_as_html(obj$tabla_anual, 
-                       paste0("tabla_", nombre_base, "_anual.html"))
-    }
-    
-    if(!is.null(obj$promedio_anual)) {
-      save_flex_as_html(obj$promedio_anual, 
-                       paste0("tabla_", nombre_base, "_promedio.html"))
-    }
+# Guardar tablas del análisis general
+tablas_generales <- list(
+  "tabla_establecimientos_anual.html" = if(exists("analisis_estab")) analisis_estab$tabla_anual else NULL,
+  "tabla_establecimientos_promedio.html" = if(exists("analisis_estab")) analisis_estab$promedio_anual else NULL,
+  "tabla_diagnosticos_anual.html" = if(exists("analisis_diag")) analisis_diag$tabla_anual else NULL,
+  "tabla_diagnosticos_promedio.html" = if(exists("analisis_diag")) analisis_diag$promedio_anual else NULL,
+  "tabla_cie10_anual.html" = if(exists("analisis_cie")) analisis_cie$tabla_anual else NULL,
+  "tabla_cie10_promedio.html" = if(exists("analisis_cie")) analisis_cie$promedio_anual else NULL,
+  "tabla_prevision_anual.html" = if(exists("analisis_prev")) analisis_prev$tabla_anual else NULL,
+  "tabla_prevision_promedio.html" = if(exists("analisis_prev")) analisis_prev$promedio_anual else NULL
+)
+
+# Guardar tablas del análisis por sexo
+tablas_por_sexo <- list()
+if(exists("resultados_cie10_sexo")) {
+  tablas_por_sexo <- c(tablas_por_sexo, list(
+    "tabla_cie10_hombre_anual.html" = resultados_cie10_sexo$hombre$tabla_anual,
+    "tabla_cie10_hombre_promedio.html" = resultados_cie10_sexo$hombre$promedio_anual,
+    "tabla_cie10_mujer_anual.html" = resultados_cie10_sexo$mujer$tabla_anual,
+    "tabla_cie10_mujer_promedio.html" = resultados_cie10_sexo$mujer$promedio_anual
+  ))
+}
+
+# Guardar todas las tablas generales y por sexo
+tablas_guardadas <- 0
+for(nombre in names(c(tablas_generales, tablas_por_sexo))) {
+  tabla <- c(tablas_generales, tablas_por_sexo)[[nombre]]
+  if(guardar_tabla_html(tabla, nombre)) {
+    tablas_guardadas <- tablas_guardadas + 1
   }
 }
+message("Se guardaron ", tablas_guardadas, " tablas generales y por sexo")
 ```
 
-```{r exportar_excel, eval=TRUE}
-# Para exportar tablas como Excel, si tienes writexl
-if(requireNamespace("writexl", quietly = TRUE)) {
+```{r guardar_tablas_top_cie10, eval=TRUE}
+# Guardar tablas de promedio de Top CIE-10
+if(!is.null(resultados_top_cie10$tablas_promedio)) {
+  message("Guardando tablas de promedios para Top CIE-10...")
+  contador_promedio <- 0
   
-  # Lista para almacenar tablas
-  todas_tablas <- list()
-  
-  # Función auxiliar para añadir a la lista si existe
-  añadir_si_existe <- function(lista, nombre, objeto) {
-    if(!is.null(objeto)) {
-      df <- flex_to_df(objeto)
-      if(!is.null(df)) {
-        lista[[nombre]] <- df
+  for(i in seq_along(resultados_top_cie10$tablas_promedio)) {
+    nombre_tabla <- names(resultados_top_cie10$tablas_promedio)[i]
+    tabla <- resultados_top_cie10$tablas_promedio[[i]]
+    
+    if(!is.null(tabla)) {
+      # Extraer información del título
+      titulo <- as.character(tabla$caption$value)
+      
+      # Extraer sexo y pertenencia
+      sexo <- ifelse(grepl("Sexo: Hombre", titulo), "Hombre",
+                    ifelse(grepl("Sexo: Mujer", titulo), "Mujer", 
+                          ifelse(grepl("- Sexo: Hombre", titulo), "Hombre",
+                                ifelse(grepl("- Sexo: Mujer", titulo), "Mujer", "Unknown"))))
+      
+      pertenencia <- ifelse(grepl("Grupo: Pertenece a Pueblos Originarios", titulo), "PO",
+                          ifelse(grepl("- Grupo: Pertenece a Pueblos Originarios", titulo), "PO",
+                                ifelse(grepl("Grupo: Población General", titulo), "PG",
+                                      ifelse(grepl("- Grupo: Población General", titulo), "PG", "Unknown"))))
+      
+      # Crear nombre de archivo
+      nombre_archivo <- paste0("top_cie10_promedio_", sexo, "_", pertenencia, ".html")
+      
+      # Guardar como HTML
+      if(guardar_tabla_html(tabla, nombre_archivo)) {
+        contador_promedio <- contador_promedio + 1
       }
     }
-    return(lista)
   }
   
-  # Añadir tablas disponibles
-  for(analisis_obj in c("analisis_estab", "analisis_diag", "analisis_cie", "analisis_prev")) {
-    if(exists(analisis_obj)) {
-      obj <- get(analisis_obj)
-      nombre_base <- sub("analisis_", "", analisis_obj)
+  message("Guardadas ", contador_promedio, " tablas de promedios de Top CIE-10")
+}
+
+# Guardar tablas anuales de Top CIE-10
+if(!is.null(resultados_top_cie10$tablas_anuales)) {
+  message("Guardando tablas anuales para Top CIE-10...")
+  contador_anual <- 0
+  
+  for(i in seq_along(resultados_top_cie10$tablas_anuales)) {
+    nombre_tabla <- names(resultados_top_cie10$tablas_anuales)[i]
+    tabla <- resultados_top_cie10$tablas_anuales[[i]]
+    
+    if(!is.null(tabla)) {
+      # Extraer información del título
+      titulo <- as.character(tabla$caption$value)
       
-      todas_tablas <- añadir_si_existe(todas_tablas, 
-                                      paste0(nombre_base, "_anual"), 
-                                      obj$tabla_anual)
+      # Extraer año, sexo y pertenencia
+      año <- sub(".*Año: ([0-9]{4}).*", "\\1", titulo)
+      if(año == titulo) año <- "Unknown" # Si no se pudo extraer
       
-      todas_tablas <- añadir_si_existe(todas_tablas, 
-                                      paste0(nombre_base, "_promedio"), 
-                                      obj$promedio_anual)
+      sexo <- ifelse(grepl("Sexo: Hombre", titulo), "Hombre",
+                    ifelse(grepl("Sexo: Mujer", titulo), "Mujer", 
+                          ifelse(grepl("- Sexo: Hombre", titulo), "Hombre",
+                                ifelse(grepl("- Sexo: Mujer", titulo), "Mujer", "Unknown"))))
+      
+      pertenencia <- ifelse(grepl("Grupo: Pertenece a Pueblos Originarios", titulo), "PO",
+                          ifelse(grepl("- Grupo: Pertenece a Pueblos Originarios", titulo), "PO",
+                                ifelse(grepl("Grupo: Población General", titulo), "PG",
+                                      ifelse(grepl("- Grupo: Población General", titulo), "PG", "Unknown"))))
+      
+      # Crear nombre de archivo
+      nombre_archivo <- paste0("top_cie10_", año, "_", sexo, "_", pertenencia, ".html")
+      
+      # Guardar como HTML
+      if(guardar_tabla_html(tabla, nombre_archivo)) {
+        contador_anual <- contador_anual + 1
+      }
     }
   }
   
-  # Añadir tablas por sexo
-  if(exists("resultados_cie10_sexo")) {
-    todas_tablas <- añadir_si_existe(todas_tablas, 
-                                    "cie10_hombre_anual", 
-                                    resultados_cie10_sexo$hombre$tabla_anual)
-    
-    todas_tablas <- añadir_si_existe(todas_tablas, 
-                                    "cie10_hombre_promedio", 
-                                    resultados_cie10_sexo$hombre$promedio_anual)
-    
-    todas_tablas <- añadir_si_existe(todas_tablas, 
-                                    "cie10_mujer_anual", 
-                                    resultados_cie10_sexo$mujer$tabla_anual)
-    
-    todas_tablas <- añadir_si_existe(todas_tablas, 
-                                    "cie10_mujer_promedio", 
-                                    resultados_cie10_sexo$mujer$promedio_anual)
-  }
-  
-  # Exportar si hay tablas
-  if(length(todas_tablas) > 0) {
-    writexl::write_xlsx(todas_tablas, path = "resultados_tesis/todas_las_tablas.xlsx")
-    message("Archivo Excel guardado como: resultados_tesis/todas_las_tablas.xlsx")
-  } else {
-    message("No se encontraron tablas para exportar a Excel")
-  }
-} else {
-  message("Paquete 'writexl' no disponible. Instálalo con install.packages('writexl')")
+  message("Guardadas ", contador_anual, " tablas anuales de Top CIE-10")
 }
 ```
-
-

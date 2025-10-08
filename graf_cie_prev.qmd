@@ -1,0 +1,1188 @@
+---
+title: "Análisis Estadístico de Resto de variables"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis descriptivo de la base de datos reducida"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+---
+
+## 1. Configuración Inicial y Carga de Datos
+MANTEN LOS COLORES CON EL MISMO NUMERO DE CARACTERES PARA QUE NO SE DESARME EL RENDER O LA VISUALIZACIÓN, AL MENOS CON LAS FUNCIONES UTILIZADAS.
+
+```{r setup, message=FALSE, warning=FALSE}
+# Configuración global
+knitr::opts_chunk$set(
+  fig.width = 10,
+  fig.height = 6,
+  warning = FALSE,
+  message = FALSE
+)
+
+# Cargar librerías necesarias
+library(tidyverse)
+library(data.table)
+library(gtsummary)
+library(flextable)
+library(scales)
+library(ggpubr)
+
+# Limpiar ambiente y liberar memoria
+rm(list = ls())
+gc()
+
+# Establecer el directorio de trabajo y cargar datos
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+load("BBDD_homologados.RData")
+datos_ordenados <- datos_homologados
+
+# Definir colores para consistencia visual
+colores_analisis <- c(
+  "Pertenece a Pueblos Originarios" = "#0A2351", # Azul oscuro
+  "Población General" = "#6B8E23"  # Verde oliva
+)
+```
+
+## 2. Análisis por Pertenencia y Año
+
+```{r funcion_analisis}
+# Función para análisis por pertenencia y año
+analizar_variable <- function(data, variable_col, titulo, limite_top = 10) {
+  message(paste("--- Iniciando análisis de:", titulo, "---"))
+  
+  # Filtrar datos excluyendo Intersex
+  data_filtered <- data %>%
+    filter(GLOSA_SEXO != "Intersex")
+  
+  # Identificar top valores
+  top_valores <- data_filtered %>%
+    group_by(!!sym(variable_col)) %>%
+    summarise(n = n()) %>%
+    arrange(desc(n)) %>%
+    head(limite_top) %>%
+    pull(!!sym(variable_col))
+  
+  # Análisis por año y pertenencia
+  dist_anual <- data_filtered %>%
+    filter(!!sym(variable_col) %in% top_valores & AÑO != "No reportado") %>%
+    group_by(AÑO, !!sym(variable_col), PERTENENCIA2) %>%
+    summarise(
+      n_casos = n(),
+      .groups = "drop"
+    ) %>%
+    group_by(AÑO, !!sym(variable_col)) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2),
+      PERTENENCIA_CAT = if_else(PERTENENCIA2 == 1, 
+                               "Pertenece a Pueblos Originarios", 
+                               "Población General")
+    ) %>%
+    ungroup()
+  
+  # Tabla anual
+  tabla_anual <- dist_anual %>%
+    select(AÑO, !!sym(variable_col), PERTENENCIA_CAT, porcentaje) %>%
+    pivot_wider(
+      id_cols = c(!!sym(variable_col), AÑO),
+      names_from = PERTENENCIA_CAT,
+      values_from = porcentaje,
+      values_fill = 0
+    ) %>%
+    arrange(AÑO, desc(`Población General`))
+  
+  # Promedio anual
+  promedio_anual <- dist_anual %>%
+    group_by(!!sym(variable_col), PERTENENCIA_CAT) %>%
+    summarise(
+      promedio = mean(porcentaje, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    pivot_wider(
+      id_cols = !!sym(variable_col),
+      names_from = PERTENENCIA_CAT,
+      values_from = promedio
+    ) %>%
+    arrange(desc(`Población General`))
+  
+  # Gráfico de evolución temporal
+  grafico <- dist_anual %>%
+    filter(!!sym(variable_col) %in% head(top_valores, 5)) %>%
+    ggplot(aes(x = as.factor(AÑO), 
+               y = porcentaje, 
+               color = PERTENENCIA_CAT,
+               group = PERTENENCIA_CAT)) +
+    geom_line(linewidth = 1) +
+    facet_wrap(vars(!!sym(variable_col)), scales = "free_y", ncol = 2) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 8)
+    ) +
+    labs(
+      title = paste("Evolución temporal de", titulo),
+      x = "Año",
+      y = "Porcentaje (%)",
+      color = "Grupo Poblacional"
+    ) +
+    scale_color_manual(values = colores_analisis)
+  
+  # Crear y retornar resultados
+  resultados <- list(
+    tabla_anual = flextable(tabla_anual) %>%
+      set_caption(paste("Distribución anual de", titulo)) %>%
+      set_header_labels(
+        AÑO = "Año",
+        `Población General` = "Población General (%)",
+        `Pertenece a Pueblos Originarios` = "Pueblos Originarios (%)"
+      ) %>%
+      colformat_double(
+        j = c("Población General", "Pertenece a Pueblos Originarios"), 
+        digits = 2
+      ) %>%
+      autofit(),
+    
+    promedio_anual = flextable(promedio_anual) %>%
+      set_caption(paste("Promedio anual de", titulo)) %>%
+      set_header_labels(
+        `Población General` = "Población General (%)",
+        `Pertenece a Pueblos Originarios` = "Pueblos Originarios (%)"
+      ) %>%
+      colformat_double(
+        j = c("Población General", "Pertenece a Pueblos Originarios"), 
+        digits = 2
+      ) %>%
+      autofit(),
+    
+    grafico = grafico
+  )
+  
+  return(resultados)
+}
+```
+
+```{r analisis_establecimientos}
+# Análisis de establecimientos
+analisis_estab <- analizar_variable(datos_ordenados, "DEPENDENCIA", "Establecimientos")
+analisis_estab$tabla_anual
+analisis_estab$promedio_anual
+analisis_estab$grafico
+```
+
+```{r analisis_diagnosticos}
+# Análisis de diagnósticos
+analisis_diag <- analizar_variable(datos_ordenados, "DIAG1", "Diagnósticos")
+analisis_diag$tabla_anual
+analisis_diag$promedio_anual
+analisis_diag$grafico
+```
+
+```{r analisis_cie10}
+# Análisis de CIE-10
+analisis_cie <- analizar_variable(datos_ordenados, "Grupo_CIE10", "Grupos CIE-10")
+analisis_cie$tabla_anual
+analisis_cie$promedio_anual
+analisis_cie$grafico
+```
+
+```{r analisis_prevision}
+# Análisis de previsión
+analisis_prev <- analizar_variable(datos_ordenados, "GLOSA_PREVISION", "Previsión")
+analisis_prev$tabla_anual
+analisis_prev$promedio_anual
+analisis_prev$grafico
+```
+
+## 3. Análisis Específico para Pueblos Originarios
+
+```{r prevision_pueblos_originarios}
+# Función para generar gráfico de previsión solo para pueblos originarios
+grafico_prevision_po <- function(data) {
+  # Filtrar datos solo para pertenencia a pueblos originarios
+  datos_po <- data %>%
+    filter(AÑO != "No reportado" & PERTENENCIA2 == 1) %>%
+    group_by(AÑO, GLOSA_PREVISION) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2)
+    ) %>%
+    ungroup()
+  
+  # Identificar top 5 previsiones para incluir en el gráfico
+  top_previsiones <- datos_po %>%
+    group_by(GLOSA_PREVISION) %>%
+    summarise(total = sum(n_casos)) %>%
+    arrange(desc(total)) %>%
+    head(5) %>%
+    pull(GLOSA_PREVISION)
+  
+  # Filtrar solo las top previsiones
+  datos_top_po <- datos_po %>%
+    filter(GLOSA_PREVISION %in% top_previsiones)
+  
+  # Calcular el total de registros analizados
+  total_po <- sum(datos_po$n_casos)
+  
+  # Contar registros no incluidos en top previsiones
+  registros_excluidos <- datos_po %>%
+    filter(!GLOSA_PREVISION %in% top_previsiones) %>%
+    summarise(n = sum(n_casos)) %>%
+    pull(n)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra solo la distribución entre personas pertenecientes a pueblos originarios (n=", total_po, ").\n",
+    "Se muestran las 5 previsiones más frecuentes. Otras previsiones (", registros_excluidos, 
+    " casos, ", round(registros_excluidos/total_po*100, 1), "% del total) están excluidas del gráfico.\n",
+    "Los porcentajes suman 100% de la población perteneciente a pueblos originarios para cada año."
+  )
+  
+  # Generar el gráfico
+  p <- ggplot(datos_top_po, aes(x = AÑO, y = porcentaje, fill = GLOSA_PREVISION)) +
+    geom_bar(stat = "identity", position = "stack") +
+    geom_text(aes(label = sprintf("%.1f%%", porcentaje)), 
+              position = position_stack(vjust = 0.5),
+              size = 3, color = "white") +
+    labs(
+      title = "Distribución de previsión por año - Pueblos Originarios",
+      subtitle = "Porcentajes sobre el total de población perteneciente a pueblos originarios",
+      x = "Año",
+      y = "Porcentaje (%)",
+      fill = "Previsión",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.caption = element_text(hjust = 0, size = 8)
+    )
+  
+  return(p)
+}
+
+# Generar y mostrar el gráfico
+grafico_prev_po <- grafico_prevision_po(datos_ordenados)
+grafico_prev_po
+```
+
+```{r diagnosticos_unificados_po}
+# Función para generar gráfico unificado de diagnósticos para pueblos originarios
+grafico_diagnosticos_po <- function(data) {
+  # Filtrar datos solo para pertenencia a pueblos originarios
+  datos_po <- data %>%
+    filter(AÑO != "No reportado" & PERTENENCIA2 == 1) %>%
+    group_by(AÑO, DIAG1) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2)
+    ) %>%
+    ungroup()
+  
+  # Identificar top 7 diagnósticos para incluir en el gráfico
+  top_diagnosticos <- datos_po %>%
+    group_by(DIAG1) %>%
+    summarise(total = sum(n_casos)) %>%
+    arrange(desc(total)) %>%
+    head(7) %>%
+    pull(DIAG1)
+  
+  # Filtrar solo los top diagnósticos
+  datos_top_po <- datos_po %>%
+    filter(DIAG1 %in% top_diagnosticos)
+  
+  # Calcular el total de registros analizados
+  total_po <- sum(datos_po$n_casos)
+  
+  # Contar registros no incluidos en top diagnósticos
+  registros_excluidos <- datos_po %>%
+    filter(!DIAG1 %in% top_diagnosticos) %>%
+    summarise(n = sum(n_casos)) %>%
+    pull(n)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra solo la evolución de diagnósticos en personas pertenecientes a pueblos originarios (n=", total_po, ").\n",
+    "Se muestran los 7 diagnósticos más frecuentes. Otros diagnósticos (", registros_excluidos, 
+    " casos, ", round(registros_excluidos/total_po*100, 1), "% del total) están excluidos del gráfico."
+  )
+  
+  # Generar el gráfico - SIN PUNTOS y CON LA MISMA PALETA QUE CIE-10
+  p <- ggplot(datos_top_po, aes(x = AÑO, y = porcentaje, color = DIAG1, group = DIAG1)) +
+    geom_line(linewidth = 1.5) +
+    labs(
+      title = "Evolución de principales diagnósticos en Pueblos Originarios",
+      subtitle = "Porcentajes sobre el total de población perteneciente a pueblos originarios",
+      x = "Año",
+      y = "Porcentaje (%)",
+      color = "Diagnóstico",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.text = element_text(size = 8)
+    ) +
+    guides(color = guide_legend(ncol = 2)) +
+    scale_color_manual(values = c(
+  "#E41A1C", "#053e6dff", "#4DAF4A", "#984EA3", 
+  "#FF7F00", "#33c5ffff", "#A65628"
+))  # Usar la misma paleta de colores que el gráfico CIE-10
+  
+  return(p)
+}
+
+# Generar y mostrar el gráfico
+grafico_diag_po <- grafico_diagnosticos_po(datos_ordenados)
+grafico_diag_po
+```
+
+```{r cie10_unificados_po}
+# Función para generar gráfico unificado de grupos CIE-10 para pueblos originarios
+grafico_cie10_po <- function(data) {
+  # Filtrar datos solo para pertenencia a pueblos originarios
+  datos_po <- data %>%
+    filter(AÑO != "No reportado" & PERTENENCIA2 == 1) %>%
+    group_by(AÑO, Grupo_CIE10) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2)
+    ) %>%
+    ungroup()
+  
+  # Identificar top 7 grupos CIE-10 para incluir en el gráfico
+  top_grupos <- datos_po %>%
+    group_by(Grupo_CIE10) %>%
+    summarise(total = sum(n_casos)) %>%
+    arrange(desc(total)) %>%
+    head(7) %>%
+    pull(Grupo_CIE10)
+  
+  # Filtrar solo los top grupos
+  datos_top_po <- datos_po %>%
+    filter(Grupo_CIE10 %in% top_grupos)
+  
+  # Calcular el total de registros analizados
+  total_po <- sum(datos_po$n_casos)
+  
+  # Contar registros no incluidos en top grupos
+  registros_excluidos <- datos_po %>%
+    filter(!Grupo_CIE10 %in% top_grupos) %>%
+    summarise(n = sum(n_casos)) %>%
+    pull(n)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra solo la evolución de grupos CIE-10 en personas pertenecientes a pueblos originarios (n=", total_po, ").\n",
+    "Se muestran los 7 grupos más frecuentes. Otros grupos (", registros_excluidos, 
+    " casos, ", round(registros_excluidos/total_po*100, 1), "% del total) están excluidos del gráfico."
+  )
+  
+  # Generar el gráfico con colores distintos - SIN PUNTOS
+  p <- ggplot(datos_top_po, aes(x = AÑO, y = porcentaje, color = Grupo_CIE10, group = Grupo_CIE10)) +
+    geom_line(linewidth = 1.5) +  # Aumenté ligeramente el grosor para compensar la falta de puntos
+    labs(
+      title = "Evolución de principales grupos CIE-10 en Pueblos Originarios",
+      subtitle = "Porcentajes sobre el total de población perteneciente a pueblos originarios",
+      x = "Año",
+      y = "Porcentaje (%)",
+      color = "Grupo CIE-10",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.text = element_text(size = 8)
+    ) +
+    guides(color = guide_legend(ncol = 2)) +
+    scale_color_manual(values = c(
+  "#E41A1C", "#053e6dff", "#4DAF4A", "#984EA3", 
+  "#FF7F00", "#33c5ffff", "#A65628"
+))  # Usar una paleta de colores distinta
+  
+  return(p)
+}
+
+# Generar y mostrar el gráfico
+grafico_cie_po <- grafico_cie10_po(datos_ordenados)
+grafico_cie_po
+```
+
+```{r prevision_anual_po}
+# Función para generar gráfico de evolución anual de previsión para pueblos originarios
+grafico_evolucion_prevision_po <- function(data) {
+  # Filtrar datos solo para pertenencia a pueblos originarios
+  datos_po <- data %>%
+    filter(AÑO != "No reportado" & PERTENENCIA2 == 1) %>%
+    group_by(AÑO, GLOSA_PREVISION) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2)
+    ) %>%
+    ungroup()
+  
+  # Identificar top 5 previsiones para incluir en el gráfico
+  top_previsiones <- datos_po %>%
+    group_by(GLOSA_PREVISION) %>%
+    summarise(total = sum(n_casos)) %>%
+    arrange(desc(total)) %>%
+    head(5) %>%
+    pull(GLOSA_PREVISION)
+  
+  # Filtrar solo las top previsiones
+  datos_top_po <- datos_po %>%
+    filter(GLOSA_PREVISION %in% top_previsiones)
+  
+  # Calcular el total de registros analizados
+  total_po <- sum(datos_po$n_casos)
+  
+  # Contar registros no incluidos en top previsiones
+  registros_excluidos <- datos_po %>%
+    filter(!GLOSA_PREVISION %in% top_previsiones) %>%
+    summarise(n = sum(n_casos)) %>%
+    pull(n)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra la evolución de las principales previsiones en personas pertenecientes a pueblos originarios (n=", total_po, ").\n",
+    "Se muestran las 5 previsiones más frecuentes. Otras previsiones (", registros_excluidos, 
+    " casos, ", round(registros_excluidos/total_po*100, 1), "% del total) están excluidas del gráfico."
+  )
+  
+  # Generar el gráfico de líneas de evolución
+  p <- ggplot(datos_top_po, aes(x = AÑO, y = porcentaje, color = GLOSA_PREVISION, group = GLOSA_PREVISION)) +
+    geom_line(linewidth = 1.5) +
+    labs(
+      title = "Evolución anual de previsión en Pueblos Originarios",
+      subtitle = "Tendencia de las principales previsiones en población perteneciente a pueblos originarios",
+      x = "Año",
+      y = "Porcentaje (%)",
+      color = "Previsión",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.caption = element_text(hjust = 0, size = 8)
+    )
+  
+  return(p)
+}
+
+# Generar y mostrar el gráfico
+grafico_evol_prev_po <- grafico_evolucion_prevision_po(datos_ordenados)
+grafico_evol_prev_po
+```
+
+```{r prevision_promedio_po}
+# Función para generar gráfico de barras apiladas del promedio anual de previsión
+grafico_promedio_prevision_po <- function(data) {
+  # Filtrar datos solo para pertenencia a pueblos originarios
+  datos_po <- data %>%
+    filter(AÑO != "No reportado" & PERTENENCIA2 == 1) %>%
+    group_by(AÑO, GLOSA_PREVISION) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2)
+    ) %>%
+    ungroup()
+  
+  # Calcular promedios por previsión
+  promedios_po <- datos_po %>%
+    group_by(GLOSA_PREVISION) %>%
+    summarise(
+      porcentaje_promedio = mean(porcentaje),
+      total_casos = sum(n_casos),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(porcentaje_promedio))
+  
+  # Identificar top previsiones para incluir en el gráfico
+  top_previsiones <- promedios_po %>%
+    head(10) %>%
+    pull(GLOSA_PREVISION)
+  
+  # Filtrar solo las top previsiones
+  datos_top_po <- promedios_po %>%
+    filter(GLOSA_PREVISION %in% top_previsiones)
+  
+  # Calcular el total de registros analizados
+  total_po <- sum(datos_po$n_casos)
+  
+  # Contar registros no incluidos en top previsiones
+  registros_excluidos <- promedios_po %>%
+    filter(!GLOSA_PREVISION %in% top_previsiones) %>%
+    summarise(total = sum(total_casos)) %>%
+    pull(total)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra el promedio anual de las principales previsiones en personas pertenecientes a pueblos originarios (n=", total_po, ").\n",
+    "Se muestran las 10 previsiones más frecuentes. Otras previsiones (", registros_excluidos, 
+    " casos, ", round(registros_excluidos/total_po*100, 1), "% del total) están excluidas del gráfico."
+  )
+  
+  # Generar el gráfico de barras del promedio
+  p <- ggplot(datos_top_po, aes(x = reorder(GLOSA_PREVISION, porcentaje_promedio), y = porcentaje_promedio, fill = GLOSA_PREVISION)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = sprintf("%.1f%%", porcentaje_promedio)), 
+              hjust = -0.1, size = 3.5) +
+    coord_flip() +
+    labs(
+      title = "Promedio anual de previsión en Pueblos Originarios",
+      subtitle = "Distribución promedio durante el período de estudio",
+      x = "",
+      y = "Porcentaje promedio (%)",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      panel.grid.major.y = element_blank(),
+      plot.caption = element_text(hjust = 0, size = 8)
+    )
+  
+  return(p)
+}
+
+# Generar y mostrar el gráfico de promedio
+grafico_prom_prev_po <- grafico_promedio_prevision_po(datos_ordenados)
+grafico_prom_prev_po
+```
+
+```{r analisis_previsiones_po_colores}
+# Función modificada para generar gráficos con colores distintos para cada previsión
+analizar_variable_solo_po <- function(data, variable_col, titulo, limite_top = 5, n_columnas = 2) {
+  message(paste("--- Iniciando análisis de:", titulo, "solo para pueblos originarios ---"))
+  
+  # Filtrar datos excluyendo Intersex y filtrando solo pueblos originarios
+  data_filtered <- data %>%
+    filter(GLOSA_SEXO != "Intersex" & PERTENENCIA2 == 1)
+  
+  # Identificar top valores
+  top_valores <- data_filtered %>%
+    group_by(!!sym(variable_col)) %>%
+    summarise(n = n()) %>%
+    arrange(desc(n)) %>%
+    head(limite_top) %>%
+    pull(!!sym(variable_col))
+  
+  # Análisis por año
+  dist_anual <- data_filtered %>%
+    filter(!!sym(variable_col) %in% top_valores & AÑO != "No reportado") %>%
+    group_by(AÑO, !!sym(variable_col)) %>%
+    summarise(
+      n_casos = n(),
+      .groups = "drop"
+    ) %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = round(n_casos/total_año * 100, 2)
+    ) %>%
+    ungroup()
+  
+  # Calcular el total de registros
+  total_po <- nrow(data_filtered %>% filter(AÑO != "No reportado"))
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: Los gráficos muestran la distribución por año dentro de la población perteneciente a pueblos originarios (n=", 
+    total_po, ").\n",
+    "Se muestran los ", limite_top, " ", tolower(titulo), " más frecuentes."
+  )
+  
+  # Crear una paleta de colores personalizada
+  # Podemos usar la paleta Set1 que ya estamos usando en los otros gráficos
+  colores_po <- RColorBrewer::brewer.pal(9, "Set1")[1:limite_top]
+  
+  # Crear un mapeo de colores para cada valor
+  nombres_valores <- unique(dist_anual[[variable_col]])
+  mapeo_colores <- setNames(colores_po[1:length(nombres_valores)], nombres_valores)
+  
+  # Gráfico facetado por valor del atributo con colores específicos para cada panel
+  grafico_facetado <- ggplot(dist_anual, aes(x = AÑO, y = porcentaje, group = 1)) +
+    geom_line(aes(color = !!sym(variable_col)), linewidth = 1.5) +
+    facet_wrap(vars(!!sym(variable_col)), scales = "free_y", ncol = n_columnas) +
+    scale_color_manual(values = mapeo_colores) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+      strip.text = element_text(size = 9),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.position = "none"  # Ocultar leyenda ya que los paneles tienen etiquetas
+    ) +
+    labs(
+      title = paste("Evolución anual de", titulo, "en Pueblos Originarios"),
+      subtitle = "Porcentajes sobre el total de población perteneciente a pueblos originarios",
+      x = "Año",
+      y = "Porcentaje (%)",
+      caption = nota_explicativa
+    )
+  
+  return(grafico_facetado)
+}
+
+# Generar gráfico solo para previsiones de pueblos originarios con colores distintos
+grafico_prev_facetado_po_colores <- analizar_variable_solo_po(
+  datos_ordenados, 
+  "GLOSA_PREVISION", 
+  "Previsión", 
+  limite_top = 5, 
+  n_columnas = 2
+)
+
+# Mostrar el gráfico con colores
+grafico_prev_facetado_po_colores
+
+# También podemos hacer lo mismo para grupos CIE-10
+grafico_cie10_facetado_po_colores <- analizar_variable_solo_po(
+  datos_ordenados, 
+  "Grupo_CIE10", 
+  "Grupos CIE-10", 
+  limite_top = 5, 
+  n_columnas = 2
+)
+
+# Mostrar el gráfico de CIE-10 con colores
+grafico_cie10_facetado_po_colores
+
+# Guardar los gráficos con colores
+ggsave("resultados_tesis/previsiones_facetado_po_colores.png", 
+       grafico_prev_facetado_po_colores, width = 10, height = 8, dpi = 300)
+
+ggsave("resultados_tesis/cie10_facetado_po_colores.png", 
+       grafico_cie10_facetado_po_colores, width = 10, height = 8, dpi = 300)
+```
+
+```{r guardar_graficos_adicionales}
+# Crear directorio para guardar los resultados (si no existe)
+dir.create("resultados_tesis", showWarnings = FALSE)
+
+# Función actualizada para guardar en formato PNG con y sin transparencia
+guardar_multiformato <- function(grafico, nombre_base, ancho = 10, alto = 6) {
+  # Guardar en PNG con fondo blanco (estándar)
+  ggsave(paste0("resultados_tesis/", nombre_base, ".png"), 
+         grafico, width = ancho, height = alto, dpi = 600)
+  
+  # Guardar en PNG con fondo transparente
+  ggsave(paste0("resultados_tesis/", nombre_base, "_transparent.png"), 
+         grafico, width = ancho, height = alto, dpi = 600, bg = "transparent")
+}
+
+# Guardar los gráficos en múltiples formatos
+guardar_multiformato(grafico_prev_po, "prevision_pueblos_originarios", 10, 6)
+guardar_multiformato(grafico_evol_prev_po, "prevision_evolucion_po", 10, 6)
+guardar_multiformato(grafico_prom_prev_po, "prevision_promedio_po", 9, 7)
+guardar_multiformato(grafico_diag_po, "diagnosticos_unificados_po", 10, 7)
+guardar_multiformato(grafico_cie_po, "cie10_unificados_po", 10, 7)
+guardar_multiformato(grafico_prev_facetado_po_colores, "previsiones_facetado_po_colores", 10, 8)
+guardar_multiformato(grafico_cie10_facetado_po_colores, "cie10_facetado_po_colores", 10, 8)
+
+# Guardar gráficos comparativos
+if(exists("resultados_comparativos")) {
+  guardar_multiformato(resultados_comparativos$grafico, "comparativo_cie10_po_vs_general", 12, 9)
+}
+
+# Guardar gráficos de evolución unificados
+if(exists("resultados_unificados")) {
+  guardar_multiformato(resultados_unificados$grafico_evolucion, "cie10_po_evolucion_unificado", 12, 7)
+  guardar_multiformato(resultados_unificados$grafico_promedio, "cie10_po_promedio_unificado", 10, 8)
+}
+
+# Guardar gráficos de evolución temporal
+if(exists("resultado_evolucion")) {
+  guardar_multiformato(resultado_evolucion$grafico, "cie10_po_evolucion_temporal", 14, 8)
+}
+
+# Guardar gráficos desde comparativo
+if(exists("resultados_evolucion_po")) {
+  guardar_multiformato(resultados_evolucion_po$grafico_evolucion, "cie10_po_representacion_temporal", 14, 8)
+  guardar_multiformato(resultados_evolucion_po$grafico_promedio, "cie10_po_representacion_promedio", 10, 8)
+}
+
+# Guardar también los gráficos de análisis general
+if(exists("analisis_estab")) guardar_multiformato(analisis_estab$grafico, "establecimientos_comparativo", 10, 6)
+if(exists("analisis_diag")) guardar_multiformato(analisis_diag$grafico, "diagnosticos_comparativo", 10, 6)
+if(exists("analisis_cie")) guardar_multiformato(analisis_cie$grafico, "cie10_comparativo", 10, 6)
+if(exists("analisis_prev")) guardar_multiformato(analisis_prev$grafico, "prevision_comparativo", 10, 6)
+
+# Mensaje de confirmación
+message("Se han guardado todos los gráficos en formato PNG (normal y transparente) en la carpeta 'resultados_tesis'")
+```
+
+```{r comparativo_cie10_po_vs_general}
+# Función para generar análisis comparativo de grupos CIE-10 entre pueblos originarios y población general
+analisis_comparativo_cie10 <- function(data) {
+  # Filtrar datos excluyendo valores no reportados
+  data_filtrada <- data %>%
+    filter(AÑO != "No reportado") %>%
+    filter(!is.na(Grupo_CIE10))
+  
+  # Identificar los 7 grupos CIE-10 más comunes en pueblos originarios
+  top_grupos_po <- data_filtrada %>%
+    filter(PERTENENCIA2 == 1) %>%
+    group_by(Grupo_CIE10) %>%
+    summarise(n = n()) %>%
+    arrange(desc(n)) %>%
+    head(7) %>%
+    pull(Grupo_CIE10)
+  
+  message(paste("Top 7 grupos CIE-10 en pueblos originarios:", paste(top_grupos_po, collapse = ", ")))
+  
+  # Filtrar solo para los top 7 grupos
+  data_top <- data_filtrada %>%
+    filter(Grupo_CIE10 %in% top_grupos_po)
+  
+  # Análisis por año, grupo CIE-10 y pertenencia
+  analisis_anual <- data_top %>%
+    group_by(AÑO, Grupo_CIE10, PERTENENCIA2) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    # Calcular porcentajes dentro de cada grupo CIE-10 por año
+    group_by(AÑO, Grupo_CIE10) %>%
+    mutate(
+      total_grupo_año = sum(n_casos),
+      porcentaje = n_casos / total_grupo_año * 100
+    ) %>%
+    ungroup() %>%
+    # Agregar etiqueta descriptiva
+    mutate(
+      grupo_poblacional = if_else(PERTENENCIA2 == 1, 
+                                 "Pertenece a Pueblos Originarios", 
+                                 "Población General")
+    )
+  
+  # Total de registros analizados
+  total_registros <- nrow(data_top)
+  registros_po <- sum(data_top$PERTENENCIA2 == 1)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico compara la distribución por pertenencia dentro de cada grupo CIE-10.\n",
+    "Se muestran los 7 grupos CIE-10 más comunes en personas pertenecientes a pueblos originarios.\n",
+    "Para cada grupo y año, los porcentajes suman 100% entre pueblos originarios y población general.\n",
+    "Número total de casos analizados: ", total_registros, " (", registros_po, " de pueblos originarios)."
+  )
+  
+  # Generar gráfico de evolución comparativa
+  grafico <- ggplot(analisis_anual, aes(x = AÑO, y = porcentaje, color = grupo_poblacional, group = grupo_poblacional)) +
+    geom_line(linewidth = 1.2) +
+    facet_wrap(~ Grupo_CIE10, scales = "free_y", ncol = 2) +
+    scale_color_manual(values = colores_analisis) +
+    labs(
+      title = "Comparación de grupos CIE-10 por pertenencia a pueblos originarios",
+      subtitle = "Evolución temporal de la distribución porcentual dentro de cada grupo diagnóstico",
+      x = "Año",
+      y = "Porcentaje (%)",
+      color = "Grupo poblacional",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+      strip.text = element_text(size = 9, face = "bold"),
+      panel.spacing = unit(1, "lines"),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.position = "bottom"
+    )
+  
+  # Resumen de datos
+  resumen <- analisis_anual %>%
+    group_by(Grupo_CIE10, grupo_poblacional) %>%
+    summarise(
+      promedio_porcentaje = mean(porcentaje),
+      total_casos = sum(n_casos),
+      .groups = "drop"
+    ) %>%
+    arrange(Grupo_CIE10, desc(grupo_poblacional))
+  
+  return(list(
+    grafico = grafico,
+    datos = analisis_anual,
+    resumen = resumen
+  ))
+}
+
+# Generar el análisis comparativo
+resultados_comparativos <- analisis_comparativo_cie10(datos_ordenados)
+
+# Mostrar el gráfico
+resultados_comparativos$grafico
+
+# Ver resumen de datos
+knitr::kable(
+  resultados_comparativos$resumen,
+  caption = "Resumen de la distribución porcentual promedio por grupo CIE-10 y pertenencia",
+  col.names = c("Grupo CIE-10", "Grupo poblacional", "Porcentaje promedio (%)", "Total de casos")
+)
+
+# Guardar el gráfico
+ggsave("resultados_tesis/comparativo_cie10_po_vs_general.png", 
+       resultados_comparativos$grafico, width = 12, height = 9, dpi = 300)
+```
+
+```{r comparativo_cie10_po_unificado}
+# Función para generar gráfico unificado de grupos CIE-10 solo para pueblos originarios
+analisis_unificado_cie10_po <- function(data) {
+  # Filtrar datos solo para pueblos originarios
+  data_filtrada <- data %>%
+    filter(AÑO != "No reportado" & PERTENENCIA2 == 1) %>%
+    filter(!is.na(Grupo_CIE10))
+  
+  # Identificar los 7 grupos CIE-10 más comunes en pueblos originarios
+  top_grupos_po <- data_filtrada %>%
+    group_by(Grupo_CIE10) %>%
+    summarise(n = n()) %>%
+    arrange(desc(n)) %>%
+    head(7) %>%
+    pull(Grupo_CIE10)
+  
+  message(paste("Top 7 grupos CIE-10 en pueblos originarios:", paste(top_grupos_po, collapse = ", ")))
+  
+  # Filtrar solo para los top 7 grupos
+  data_top <- data_filtrada %>%
+    filter(Grupo_CIE10 %in% top_grupos_po)
+  
+  # Análisis por año y grupo CIE-10
+  analisis_anual <- data_top %>%
+    group_by(AÑO, Grupo_CIE10) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    # Calcular porcentajes dentro de cada año
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = n_casos / total_año * 100
+    ) %>%
+    ungroup()
+  
+  # Total de registros analizados
+  total_registros_po <- nrow(data_top)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra la evolución de los 7 grupos CIE-10 más frecuentes en personas pertenecientes a pueblos originarios.\n",
+    "Para cada año, los porcentajes representan la proporción de cada grupo sobre el total de atenciones a personas pertenecientes a pueblos originarios.\n",
+    "Número total de casos analizados: ", total_registros_po, " (todos pertenecientes a pueblos originarios)."
+  )
+  
+  # Colores personalizados para cada grupo CIE-10
+  colores_cie10 <- c(
+    "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", 
+    "#FF7F00", "#FF33A3", "#A65628"
+  )
+  
+  # Generar gráfico unificado con todos los grupos CIE-10
+  grafico <- ggplot(analisis_anual, aes(x = AÑO, y = porcentaje, color = Grupo_CIE10, group = Grupo_CIE10)) +
+    geom_line(linewidth = 1.5) +
+    scale_color_manual(values = colores_cie10) +
+    labs(
+      title = "Evolución de principales grupos CIE-10 en Pueblos Originarios",
+      subtitle = "Distribución porcentual anual de los 7 grupos diagnósticos más frecuentes",
+      x = "Año",
+      y = "Porcentaje (%)",
+      color = "Grupo CIE-10",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.text = element_text(size = 8)
+    ) +
+    guides(color = guide_legend(ncol = 2))
+  
+  # Resumen de datos
+  resumen <- analisis_anual %>%
+    group_by(Grupo_CIE10) %>%
+    summarise(
+      promedio_porcentaje = mean(porcentaje),
+      total_casos = sum(n_casos),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(promedio_porcentaje))
+  
+  # Gráfico de promedio por grupo CIE-10
+  grafico_promedio <- ggplot(resumen, aes(x = reorder(Grupo_CIE10, promedio_porcentaje), 
+                                          y = promedio_porcentaje, 
+                                          fill = Grupo_CIE10)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = sprintf("%.1f%%", promedio_porcentaje)), 
+              hjust = -0.1, size = 3.5) +
+    scale_fill_manual(values = colores_cie10) +
+    labs(
+      title = "Promedio anual de grupos CIE-10 en Pueblos Originarios",
+      subtitle = "Distribución promedio durante el período de estudio",
+      x = "",
+      y = "Porcentaje promedio (%)"
+    ) +
+    coord_flip() +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      panel.grid.major.y = element_blank()
+    )
+  
+  return(list(
+    grafico_evolucion = grafico,
+    grafico_promedio = grafico_promedio,
+    datos = analisis_anual,
+    resumen = resumen
+  ))
+}
+
+# Generar el análisis unificado
+resultados_unificados <- analisis_unificado_cie10_po(datos_ordenados)
+
+# Mostrar el gráfico de evolución
+resultados_unificados$grafico_evolucion
+
+# Mostrar el gráfico de promedio
+resultados_unificados$grafico_promedio
+
+# Ver resumen de datos
+knitr::kable(
+  resultados_unificados$resumen,
+  caption = "Resumen de la distribución porcentual promedio por grupo CIE-10 en pueblos originarios",
+  col.names = c("Grupo CIE-10", "Porcentaje promedio (%)", "Total de casos")
+)
+
+# Guardar los gráficos
+guardar_multiformato(resultados_unificados$grafico_evolucion, 
+                     "cie10_po_evolucion_unificado", 12, 7)
+                     
+guardar_multiformato(resultados_unificados$grafico_promedio, 
+                     "cie10_po_promedio_unificado", 10, 8)
+```
+
+#Este redunda lo hecho arriba o en los otros graficos que estan en el otro archivo.
+
+```{r evolucion_temporal_po_cie10}
+# Función para generar gráfico de evolución temporal de los 7 grupos CIE-10 en pueblos originarios
+grafico_evolucion_temporal_po <- function(data) {
+  # Filtrar datos excluyendo valores no reportados
+  data_filtrada <- data %>%
+    filter(AÑO != "No reportado") %>%
+    filter(!is.na(Grupo_CIE10))
+  
+  # Identificar los 7 grupos CIE-10 más comunes en pueblos originarios
+  top_grupos_po <- data_filtrada %>%
+    filter(PERTENENCIA2 == 1) %>%
+    group_by(Grupo_CIE10) %>%
+    summarise(n = n()) %>%
+    arrange(desc(n)) %>%
+    head(7) %>%
+    pull(Grupo_CIE10)
+  
+  message(paste("Top 7 grupos CIE-10 en pueblos originarios:", paste(top_grupos_po, collapse = ", ")))
+  
+  # Filtrar solo para pueblos originarios y los top 7 grupos
+  datos_po <- data_filtrada %>%
+    filter(PERTENENCIA2 == 1 & Grupo_CIE10 %in% top_grupos_po)
+  
+  # Análisis por año y grupo CIE-10
+  analisis_anual_po <- datos_po %>%
+    group_by(AÑO, Grupo_CIE10) %>%
+    summarise(n_casos = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total_año = sum(n_casos),
+      porcentaje = n_casos / total_año * 100
+    ) %>%
+    ungroup()
+  
+  # Total de registros analizados
+  total_registros_po <- nrow(datos_po)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra exclusivamente la evolución temporal de los 7 grupos CIE-10 más frecuentes\n",
+    "en personas pertenecientes a pueblos originarios (n=", total_registros_po, ").\n",
+    "Para cada año, los porcentajes representan la proporción de cada grupo sobre el total de atenciones\n",
+    "a personas de pueblos originarios durante ese año."
+  )
+  
+  # Definir colores para grupos CIE-10
+  colores_cie10 <- c(
+    "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", 
+    "#FF7F00", "#FF33A3", "#A65628"
+  )
+  
+  # Generar gráfico de evolución temporal
+  grafico <- ggplot(analisis_anual_po, aes(x = AÑO, y = porcentaje, color = Grupo_CIE10, group = Grupo_CIE10)) +
+    geom_line(linewidth = 1.8) +  # Líneas más gruesas para mejor visualización
+    scale_color_manual(values = colores_cie10) +
+    labs(
+      title = "Evolución temporal de principales grupos CIE-10 en Pueblos Originarios",
+      subtitle = "Distribución porcentual anual (2010-2022)",
+      x = "Año",
+      y = "Porcentaje del total anual (%)",
+      color = "Grupo CIE-10",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      axis.title = element_text(size = 10, face = "bold"),
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 11),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.text = element_text(size = 9),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank()
+    ) +
+    guides(color = guide_legend(ncol = 2))
+  
+  return(list(
+    grafico = grafico,
+    datos = analisis_anual_po
+  ))
+}
+
+# Generar el gráfico de evolución temporal
+resultado_evolucion <- grafico_evolucion_temporal_po(datos_ordenados)
+
+# Mostrar el gráfico
+resultado_evolucion$grafico
+
+# Guardar el gráfico
+guardar_multiformato(resultado_evolucion$grafico, 
+                     "cie10_po_evolucion_temporal", 14, 8)
+```
+
+#Este es el que sirve
+
+```{r evolucion_temporal_po_desde_comparativo}
+# Función para generar gráfico de evolución temporal solo para pueblos originarios
+# usando los datos ya procesados del análisis comparativo
+grafico_evolucion_po_desde_comparativo <- function(datos_comparativos) {
+  # Extraer solo los datos de pueblos originarios del análisis comparativo
+  datos_po <- datos_comparativos$datos %>%
+    filter(grupo_poblacional == "Pertenece a Pueblos Originarios")
+  
+  # Total de registros analizados
+  total_registros_po <- sum(datos_po$n_casos)
+  
+  # Crear nota explicativa
+  nota_explicativa <- paste0(
+    "Nota: El gráfico muestra la evolución temporal de los 7 grupos CIE-10 más frecuentes en personas pertenecientes a pueblos originarios.\n",
+    "Los datos provienen del mismo análisis comparativo con población general, pero se visualizan solo los correspondientes a pueblos originarios (n=", 
+    total_registros_po, ").\n",
+    "Para cada año, los porcentajes representan la proporción de cada grupo CIE-10 dentro del total de ese grupo para ese año."
+  )
+  
+  # Colores personalizados para cada grupo CIE-10
+  colores_cie10 <- c(
+    "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", 
+    "#FF7F00", "#FF33A3", "#A65628"
+  )
+  
+  # Generar gráfico de evolución temporal solo para pueblos originarios
+  grafico <- ggplot(datos_po, aes(x = AÑO, y = porcentaje, color = Grupo_CIE10, group = Grupo_CIE10)) +
+    geom_line(linewidth = 1.8) +
+    scale_color_manual(values = colores_cie10) +
+    labs(
+      title = "Evolución temporal de la representación de Pueblos Originarios en grupos CIE-10",
+      subtitle = "Porcentaje de personas pertenecientes a pueblos originarios dentro de cada grupo diagnóstico",
+      x = "Año",
+      y = "Porcentaje dentro de cada grupo CIE-10 (%)",
+      color = "Grupo CIE-10",
+      caption = nota_explicativa
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      axis.title = element_text(size = 10, face = "bold"),
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 11),
+      plot.caption = element_text(hjust = 0, size = 8),
+      legend.text = element_text(size = 9),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank()
+    ) +
+    guides(color = guide_legend(ncol = 2))
+  
+  # Promedio por grupo
+  promedios <- datos_po %>%
+    group_by(Grupo_CIE10) %>%
+    summarise(
+      promedio = mean(porcentaje),
+      total = sum(n_casos),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(promedio))
+  
+  # Gráfico de promedio
+  grafico_promedio <- ggplot(promedios, aes(x = reorder(Grupo_CIE10, promedio), 
+                                          y = promedio, 
+                                          fill = Grupo_CIE10)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = sprintf("%.1f%%", promedio)), 
+              hjust = -0.1, size = 3.5) +
+    scale_fill_manual(values = colores_cie10) +
+    labs(
+      title = "Promedio de representación de Pueblos Originarios por grupo CIE-10",
+      subtitle = "Porcentaje promedio de personas pertenecientes a pueblos originarios dentro de cada grupo",
+      x = "",
+      y = "Porcentaje promedio (%)"
+    ) +
+    coord_flip() +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(size = 13, face = "bold"),
+      plot.subtitle = element_text(size = 10)
+    )
+  
+  return(list(
+    grafico_evolucion = grafico,
+    grafico_promedio = grafico_promedio,
+    datos = datos_po,
+    promedios = promedios
+  ))
+}
+
+# Generar el gráfico usando los datos ya procesados en resultados_comparativos
+resultados_evolucion_po <- grafico_evolucion_po_desde_comparativo(resultados_comparativos)
+
+# Mostrar el gráfico de evolución
+resultados_evolucion_po$grafico_evolucion
+
+# Mostrar el gráfico de promedio
+resultados_evolucion_po$grafico_promedio
+
+# Ver datos de promedio
+knitr::kable(
+  resultados_evolucion_po$promedios,
+  caption = "Porcentaje promedio de personas pertenecientes a pueblos originarios en cada grupo CIE-10",
+  col.names = c("Grupo CIE-10", "Porcentaje promedio (%)", "Total de casos")
+)
+
+# Guardar los gráficos
+guardar_multiformato(resultados_evolucion_po$grafico_evolucion, 
+                     "cie10_po_representacion_temporal", 14, 8)
+                     
+guardar_multiformato(resultados_evolucion_po$grafico_promedio, 
+                     "cie10_po_representacion_promedio", 10, 8)
+```
+
