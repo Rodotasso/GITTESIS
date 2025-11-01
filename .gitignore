@@ -9,8 +9,10 @@ renv/library/
 *.csv
 *.xlsx
 *.xls
+*.jpg
 *.pdf
 *.png
+*.html
 /data/
 .DS_Store
 inst/doc
@@ -23,3 +25,4 @@ data/
 E_descriptiva_files/
 grafico_simple_files/
 Prueba-de-grafico_files/
+resultados_tesis/

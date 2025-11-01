@@ -367,37 +367,67 @@ graficos_pertenencia_sexo$promedio
 # Crear directorio para guardar los resultados
 dir.create("resultados_tesis", showWarnings = FALSE)
 
+# Función mejorada para guardar en múltiples formatos
+guardar_multiformato <- function(grafico, nombre_base, ancho = 10, alto = 6, dpi = 300) {
+  # Guardar en PNG con fondo blanco
+  ggsave(paste0("resultados_tesis/", nombre_base, "_fondo_blanco.png"), 
+         grafico, width = ancho, height = alto, dpi = dpi, bg = "white")
+  
+  # Guardar en PNG con fondo transparente
+  ggsave(paste0("resultados_tesis/", nombre_base, "_transparente.png"), 
+         grafico, width = ancho, height = alto, dpi = dpi, bg = "transparent")
+  
+  # Guardar en JPG (siempre tiene fondo blanco)
+  ggsave(paste0("resultados_tesis/", nombre_base, ".jpg"), 
+         grafico, width = ancho, height = alto, dpi = dpi)
+}
+
 # Guardar gráficos anuales
-ggsave("resultados_tesis/rsh_anual.png", graficos_rsh$anual, width = 10, height = 6)
-ggsave("resultados_tesis/conadi_anual.png", graficos_conadi$anual, width = 10, height = 6)
-ggsave("resultados_tesis/egresos_anual.png", graficos_egresos$anual, width = 10, height = 6)
-ggsave("resultados_tesis/pertenencia_anual.png", graficos_pertenencia$anual, width = 10, height = 6)
+guardar_multiformato(graficos_rsh$anual, "rsh_anual", 10, 6)
+guardar_multiformato(graficos_conadi$anual, "conadi_anual", 10, 6)
+guardar_multiformato(graficos_egresos$anual, "egresos_anual", 10, 6)
+guardar_multiformato(graficos_pertenencia$anual, "pertenencia_anual", 10, 6)
 
 # Guardar gráficos de promedios
-ggsave("resultados_tesis/rsh_promedio.png", graficos_rsh$promedio, width = 8, height = 5)
-ggsave("resultados_tesis/conadi_promedio.png", graficos_conadi$promedio, width = 8, height = 5)
-ggsave("resultados_tesis/egresos_promedio.png", graficos_egresos$promedio, width = 8, height = 5)
-ggsave("resultados_tesis/pertenencia_promedio.png", graficos_pertenencia$promedio, width = 8, height = 5)
+guardar_multiformato(graficos_rsh$promedio, "rsh_promedio", 8, 5)
+guardar_multiformato(graficos_conadi$promedio, "conadi_promedio", 8, 5)
+guardar_multiformato(graficos_egresos$promedio, "egresos_promedio", 8, 5)
+guardar_multiformato(graficos_pertenencia$promedio, "pertenencia_promedio", 8, 5)
 
 # Guardar gráficos combinados
-ggsave("resultados_tesis/pertenencia_anual_combinado.png", 
-       grafico_combinado_anual, width = 14, height = 10)
-ggsave("resultados_tesis/pertenencia_promedio_combinado.png", 
-       grafico_combinado_promedio, width = 14, height = 10)
+guardar_multiformato(grafico_combinado_anual, "pertenencia_anual_combinado", 14, 10)
+guardar_multiformato(grafico_combinado_promedio, "pertenencia_promedio_combinado", 14, 10)
 
 # Guardar gráficos por sexo
-ggsave("resultados_tesis/rsh_sexo_anual.png", graficos_rsh_sexo$anual, width = 12, height = 6)
-ggsave("resultados_tesis/conadi_sexo_anual.png", graficos_conadi_sexo$anual, width = 12, height = 6)
-ggsave("resultados_tesis/egresos_sexo_anual.png", graficos_egresos_sexo$anual, width = 12, height = 6)
-ggsave("resultados_tesis/pertenencia_sexo_anual.png", graficos_pertenencia_sexo$anual, width = 12, height = 6)
+guardar_multiformato(graficos_rsh_sexo$anual, "rsh_sexo_anual", 12, 6)
+guardar_multiformato(graficos_conadi_sexo$anual, "conadi_sexo_anual", 12, 6)
+guardar_multiformato(graficos_egresos_sexo$anual, "egresos_sexo_anual", 12, 6)
+guardar_multiformato(graficos_pertenencia_sexo$anual, "pertenencia_sexo_anual", 12, 6)
 
-ggsave("resultados_tesis/rsh_sexo_promedio.png", graficos_rsh_sexo$promedio, width = 10, height = 5)
-ggsave("resultados_tesis/conadi_sexo_promedio.png", graficos_conadi_sexo$promedio, width = 10, height = 5)
-ggsave("resultados_tesis/egresos_sexo_promedio.png", graficos_egresos_sexo$promedio, width = 10, height = 5)
-ggsave("resultados_tesis/pertenencia_sexo_promedio.png", graficos_pertenencia_sexo$promedio, width = 10, height = 5)
+guardar_multiformato(graficos_rsh_sexo$promedio, "rsh_sexo_promedio", 10, 5)
+guardar_multiformato(graficos_conadi_sexo$promedio, "conadi_sexo_promedio", 10, 5)
+guardar_multiformato(graficos_egresos_sexo$promedio, "egresos_sexo_promedio", 10, 5)
+guardar_multiformato(graficos_pertenencia_sexo$promedio, "pertenencia_sexo_promedio", 10, 5)
+
+# Guardar gráficos de tendencia
+guardar_multiformato(tendencia_rsh, "rsh_tendencia_sinpuntos", 10, 6)
+guardar_multiformato(tendencia_conadi, "conadi_tendencia_sinpuntos", 10, 6)
+guardar_multiformato(tendencia_egresos, "egresos_tendencia_sinpuntos", 10, 6)
+guardar_multiformato(tendencia_pertenencia, "pertenencia_tendencia_sinpuntos", 10, 6)
+
+guardar_multiformato(tendencia_completa_rsh, "rsh_tendencia_completa", 10, 6)
+guardar_multiformato(tendencia_completa_conadi, "conadi_tendencia_completa", 10, 6)
+guardar_multiformato(tendencia_completa_egresos, "egresos_tendencia_completa", 10, 6)
+guardar_multiformato(tendencia_completa_pertenencia, "pertenencia_tendencia_completa", 10, 6)
+
+guardar_multiformato(tendencias_combinadas_anotadas, "pertenencia_tendencias_combinadas_sinpuntos", 14, 10)
+guardar_multiformato(tendencias_completas_anotadas, "pertenencia_tendencias_completas_combinadas", 14, 10)
+
+# Guardar gráfico comparativo de fuentes
+guardar_multiformato(grafico_comparativo, "comparacion_fuentes_pertenencia", 12, 7)
 
 # Mensaje de confirmación
-message("Se han guardado todos los gráficos en la carpeta 'resultados_tesis'")
+message("Se han guardado todos los gráficos en la carpeta 'resultados_tesis' en formatos PNG (con y sin fondo) y JPG")
 ```
 
 ## 5. Análisis de Tendencia de Pertenencia
