@@ -1,3 +1,4 @@
+# R files
 .Rproj.user/
 .Rhistory
 .RData
@@ -5,24 +6,33 @@
 renv/library/
 *.rds
 .renv/
-*.RData
-*.csv
-*.xlsx
-*.xls
-*.jpg
-*.pdf
-*.png
-*.html
-/data/
-.DS_Store
 inst/doc
 doc/
 Meta/
-/doc/
-/Meta/
-data/
-/.quarto/
-E_descriptiva_files/
-grafico_simple_files/
-Prueba-de-grafico_files/
-resultados_tesis/
+.quarto/
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+*.RData
+
+# Generated output
+*.jpg
+*.jpeg
+*.pdf
+*.png
+*.html
+/E_descriptiva_files/
+/grafico_simple_files/
+/Prueba-de-grafico_files/
+/resultados_tesis/
+
+# Sensitive data
+/data/
+/Lock_sensible/
+
+# System files
+.DS_Store
+__pycache__/
+*.pyc
