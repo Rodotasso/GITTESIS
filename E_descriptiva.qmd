@@ -73,13 +73,23 @@ tabla_completitud_global <- datos_preparados %>%
   ) %>%
   pivot_longer(cols = -Total, names_to = "Variable", values_to = "Completitud") %>%
   mutate(
-    `% Completitud` = scales::percent(Completitud / Total, accuracy = 0.01)
-  )
+    `% Completitud` = scales::percent(Completitud / Total, accuracy = 0.01),
+    `Tipo de Completitud` = case_when(
+      Variable == "Año" ~ "Valores no NA",
+      Variable == "Grupo Edad" ~ "Valores no NA y no 'No reportado'",
+      Variable == "Glosa Sexo" ~ "Valores no NA, no vacíos y no 'No reportado'",
+      Variable %in% c("RSH", "CONADI", "EH") ~ "Valores != 'No reportado'",
+      TRUE ~ "Otro"
+    )
+  ) %>%
+  select(Variable, `Tipo de Completitud`, Completitud, Total, `% Completitud`)
 
 # Mostrar la tabla con flextable
 ft_completitud_global <- flextable(tabla_completitud_global) %>%
   autofit() %>%
-  set_caption("Completitud global de variables")
+  set_caption("Completitud global de variables") %>%
+  theme_vanilla() %>%
+  bold(j = c("Variable", "% Completitud"))
 
 ft_completitud_global
 ```
@@ -87,6 +97,7 @@ ft_completitud_global
 ## 5. Tabla de Distribucion de Categorías y Compleitud
 
 ```{r tabla_distribucion_categorias, echo=TRUE}
+
 # Crear tabla de distribución usando variables label
 tabla_completitud <- datos_preparados %>%
   select(RSH_label, CONADI_label, EGRESO_label, AÑO) %>%
@@ -110,13 +121,32 @@ tabla_completitud <- datos_preparados %>%
   add_overall() %>%
   modify_header(label = "**DISTRIBUCIÓN DE CATEGORÍAS**") %>%
   modify_spanning_header(everything() ~ "**Año**") %>%
-  bold_labels()
+  bold_labels() %>%
+  modify_caption("**Tabla: Distribución de categorías de pertenencia a pueblos originarios por año**") %>%
+  modify_footnote(
+    all_stat_cols() ~ "Nota: Los valores corresponden a n (%). La categoría 'No reportado' incluye valores faltantes o sin información. RSH: Registro Social de Hogares, CONADI: Corporación Nacional de Desarrollo Indígena."
+  )
 
-ft_completitud <- as_flex_table(tabla_completitud)
+# Convertir a flextable y agregar título personalizado
+ft_completitud <- as_flex_table(tabla_completitud) %>%
+  set_caption("Distribución de categorías de fuentes de datos por año") %>%
+  add_footer_lines("Fuente: Elaboración propia en base a datos de egresos hospitalarios 2010-2020") %>%
+  theme_vanilla()
+
 ft_completitud
 ```
 
 ```{r tabla_completitud_corregida}
+# ============================================================================
+# TABLA: COMPLETITUD DE DATOS REPORTADOS POR FUENTE Y AÑO
+# ============================================================================
+# Esta tabla muestra la completitud de las tres fuentes de datos (RSH, 
+# CONADI y Egreso Hospitalario), excluyendo los valores "No reportado".
+# 
+# TRUE = Dato reportado (con información válida)
+# FALSE = Dato no reportado (sin información o valor faltante)
+# ============================================================================
+
 tabla_completitud <- datos_preparados %>%
   # Crear variables temporales sin "No reportado" para consistencia
   mutate(
@@ -142,8 +172,18 @@ tabla_completitud <- datos_preparados %>%
   add_overall() %>%
   modify_header(label = "**COMPLETITUD**") %>%
   modify_spanning_header(everything() ~ "**Año**") %>%
-  bold_labels()
-ft_completitud <- as_flex_table(tabla_completitud)
+  bold_labels() %>%
+  modify_caption("**Tabla: Completitud de datos reportados por fuente y año**") %>%
+  modify_footnote(
+    all_stat_cols() ~ "Nota: TRUE = dato reportado (con información), FALSE = dato no reportado (sin información o NA). Los valores corresponden a n (%). RSH: Registro Social de Hogares, CONADI: Corporación Nacional de Desarrollo Indígena."
+  )
+
+# Convertir a flextable y agregar detalles adicionales
+ft_completitud <- as_flex_table(tabla_completitud) %>%
+  set_caption("Completitud de datos reportados por fuente según año") %>%
+  add_footer_lines("Fuente: Elaboración propia. TRUE indica registro con información válida, FALSE indica ausencia de información.") %>%
+  theme_vanilla()
+
 ft_completitud
 ```
 
@@ -152,11 +192,15 @@ ft_completitud
 Definimos una función que genera tablas resumen para cada variable (RSH, CONADI, PUEBLO). Esto reduce duplicación:
 
 ```{r funcion_tabla_resumen_horizontal, echo=TRUE}
-# Función corregida para crear tablas completamente horizontales
+# Función para crear tablas resumen horizontales por año y sexo
+# Excluye las categorías INTERSEX y No reportado de GLOSA_SEXO
+# Retorna tabla con formato Frecuencia (Porcentaje%) para cada combinación
 crear_tabla_resumen_horizontal <- function(data, var_label, etiqueta_variable) {
   
-  # Paso 1: Calcular frecuencias y porcentajes sobre el total del año
+  # Paso 1: Filtrar datos para excluir INTERSEX y No reportado en GLOSA_SEXO
+  # y calcular frecuencias y porcentajes sobre el total del año
   datos_calculados <- data %>%
+    filter(!GLOSA_SEXO %in% c("INTERSEX", "No reportado")) %>%
     group_by(AÑO, GLOSA_SEXO, !!sym(var_label)) %>%
     summarise(Frecuencia = n(), .groups = "drop") %>%
     group_by(AÑO) %>%
@@ -182,7 +226,13 @@ crear_tabla_resumen_horizontal <- function(data, var_label, etiqueta_variable) {
     ) %>%
     rename(Año = AÑO) # Renombramos AÑO
   
-  # Paso 3: Renombrar las columnas (nuevo)
+  # Paso 3: Eliminar columnas que contengan "INTERSEX" o "No reportado" en el nombre
+  # (por si acaso quedaron del pivoteo)
+  tabla_pivoteada <- tabla_pivoteada %>%
+    select(-contains("INTERSEX")) %>%
+    select(-matches("^(INTERSEX|No reportado)_"))
+  
+  # Paso 4: Renombrar las columnas
   # Crear un vector de nombres nuevos
   nombres_actuales <- names(tabla_pivoteada)
   nombres_nuevos <- nombres_actuales
@@ -205,42 +255,86 @@ crear_tabla_resumen_horizontal <- function(data, var_label, etiqueta_variable) {
 ## 7. Análisis RSH por Año y Sexo
 
 ```{r analisis_rsh_año_horizontal}
+# Tabla de distribución de pertenencia según RSH por año y sexo
+# Muestra frecuencias y porcentajes de pertenencia a pueblos originarios
+# según clasificación del Registro Social de Hogares
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 print("Iniciando análisis de RSH y AÑO (formato horizontal)")
 tabla_rsh_h <- crear_tabla_resumen_horizontal(datos_preparados, "RSH_label", "RSH")
 ft_tabla_rsh_h <- flextable(tabla_rsh_h) %>% 
                   autofit() %>%
-                  set_caption(caption = "Resumen de RSH por Año (Sexo en columnas)")
-                  # La línea colformat_num() se puede eliminar
+                  set_caption(caption = "**Tabla: Distribución de pertenencia a pueblos originarios según RSH por año y sexo**") %>%
+                  add_footer_lines(c(
+                    "RSH: Registro Social de Hogares - Variable que identifica pertenencia a pueblos originarios",
+                    "Los valores se presentan como Frecuencia (Porcentaje%) calculado sobre el total anual",
+                    "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+                    "Pertenece: Persona identificada como perteneciente a pueblo originario en RSH",
+                    "No Pertenece: Persona no identificada como perteneciente en RSH",
+                    "Sin Datos: Dato no reportado en RSH para esa persona"
+                  )) %>%
+                  theme_vanilla()
 ft_tabla_rsh_h
 ```
 
 ## 8. Análisis CONADI por Año y Sexo
 
 ```{r analisis_conadi_año_horizontal}
+# Tabla de distribución de pertenencia según CONADI por año y sexo
+# Muestra frecuencias y porcentajes de pertenencia a pueblos originarios
+# según registro de la Corporación Nacional de Desarrollo Indígena
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 print("Iniciando análisis de CONADI y AÑO (formato horizontal)")
 tabla_conadi_h <- crear_tabla_resumen_horizontal(datos_preparados, "CONADI_label", "CONADI")
 ft_tabla_conadi_h <- flextable(tabla_conadi_h) %>% 
                     autofit() %>%
-                    set_caption(caption = "Resumen de CONADI por Año (Sexo en columnas)")
-                    # CORREGIDO: Se elimina la línea colformat_num() porque ya no es necesaria
+                    set_caption(caption = "**Tabla: Distribución de pertenencia a pueblos originarios según CONADI por año y sexo**") %>%
+                    add_footer_lines(c(
+                      "CONADI: Corporación Nacional de Desarrollo Indígena - Variable que identifica pertenencia a pueblos originarios",
+                      "Los valores se presentan como Frecuencia (Porcentaje%) calculado sobre el total anual",
+                      "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+                      "Pertenece: Persona registrada como perteneciente a pueblo originario en CONADI",
+                      "No Pertenece: Persona no registrada como perteneciente en CONADI",
+                      "Sin Datos: Dato no reportado en CONADI para esa persona"
+                    )) %>%
+                    theme_vanilla()
 ft_tabla_conadi_h
 ```
 
 ## 9. Análisis EH por Año y Sexo
 
 ```{r analisis_pueblo_origen_año_horizontal}
+# Tabla de distribución de pertenencia según Egresos Hospitalarios por año y sexo
+# Muestra frecuencias y porcentajes de pertenencia a pueblos originarios
+# según variable PUEBLO_ORIGINARIO de egresos hospitalarios
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 print("Iniciando análisis de Egresos Hospitalarios y AÑO (formato horizontal)")
 tabla_egresos_h <- crear_tabla_resumen_horizontal(datos_preparados, "EGRESO_label", "EGRESO_HOSPITALARIO")
 ft_tabla_egresos_h <- flextable(tabla_egresos_h) %>% 
                     autofit() %>%
-                    set_caption(caption = "Resumen de Egresos Hospitalarios por Año (Sexo en columnas)") %>%
-                    colformat_num(big.mark = ".", decimal.mark = ",")
+                    set_caption(caption = "**Tabla: Distribución de pertenencia a pueblos originarios según Egresos Hospitalarios por año y sexo**") %>%
+                    add_footer_lines(c(
+                      "Variable PUEBLO_ORIGINARIO de registros de egresos hospitalarios",
+                      "Los valores se presentan como Frecuencia (Porcentaje%) calculado sobre el total anual",
+                      "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+                      "Pertenece: Persona registrada como perteneciente a pueblo originario en egreso hospitalario",
+                      "No Pertenece: Persona no registrada como perteneciente en egreso hospitalario",
+                      "Sin Datos: Dato no reportado en egreso hospitalario para esa persona"
+                    )) %>%
+                    theme_vanilla()
 ft_tabla_egresos_h
 ```
 
 ## Análisis de Variable Enriquecida por Año y Sexo
 
 ```{r analisis_enriquecido_horizontal}
+# Tabla de distribución de Variable Enriquecida por año y sexo
+# Muestra frecuencias y porcentajes de pertenencia a pueblos originarios
+# según variable enriquecida que integra Censo 2017, RSH, CONADI y PERTENENCIA2
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 print("Iniciando análisis de Variable Enriquecida y AÑO (formato horizontal)")
 
 # Creamos una versión temporal de datos_preparados con la variable categórica
@@ -257,96 +351,216 @@ datos_tmp <- datos_preparados %>%
 tabla_enriquecida_h <- crear_tabla_resumen_horizontal(datos_tmp, "PERTENENCIA_label", "VARIABLE_ENRIQUECIDA")
 ft_tabla_enriquecida_h <- flextable(tabla_enriquecida_h) %>% 
                     autofit() %>%
-                    set_caption(caption = "Resumen de Variable Enriquecida por Año (Sexo en columnas)") %>%
-                    colformat_num(big.mark = ".", decimal.mark = ",")
+                    set_caption(caption = "**Tabla: Distribución de pertenencia según Variable Enriquecida por año y sexo**") %>%
+                    add_footer_lines(c(
+                      "Variable Enriquecida: Integración de Censo 2017, RSH, CONADI y PERTENENCIA2",
+                      "Criterio: Persona pertenece si al menos una de las fuentes la identifica como perteneciente",
+                      "Los valores se presentan como Frecuencia (Porcentaje%) calculado sobre el total anual",
+                      "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+                      "Pertenece: Identificado como perteneciente en al menos una fuente",
+                      "No Pertenece: No identificado como perteneciente en ninguna fuente",
+                      "Sin Datos: Sin información en ninguna de las fuentes"
+                    )) %>%
+                    theme_vanilla()
 ft_tabla_enriquecida_h
 ```
 
 
-## 11. Tablas Etarias
-LAS TABLAS ETARIAS NECESITAN SER CORTADAS PARA MOSTRAR MEJOR LO QUE SE NECESITA.
+## 11. Tablas Etarias por Sexo y Grupo Etario
 
-Cada tabla etaria se genera usando _datos_preparados_ y agrupando por AÑO, GRUPO_ETARIO, GLOSA_SEXO y la variable de interés. Por ejemplo, para **RSH**:
+Tablas de distribución de pertenencia por grupos etarios y sexo, excluyendo categorías INTERSEX y No reportado.
 
 ```{r tabla_etario_sexo_h, echo=TRUE}
+# Tabla etaria de pertenencia según RSH por año, grupo etario y sexo
+# Muestra solo personas que pertenecen según RSH
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 tabla_etario_h <- datos_preparados %>%
   filter(RSH_label == "Pertenece") %>%
+  filter(!GLOSA_SEXO %in% c("INTERSEX", "No reportado")) %>%
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
+  # Pivotamos solo el sexo en columnas, manteniendo grupo etario en filas
   pivot_wider(
-    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
+    names_from = GLOSA_SEXO,
     values_from = Frecuencia,
-    values_fill = 0,
-    names_sep = "_" # Separa los nombres de columna con un guion bajo (ej. "0-4_HOMBRE")
+    values_fill = 0
   ) %>%
-  arrange(AÑO)
+  # Asegurar que solo tengamos las columnas deseadas
+  select(AÑO, GRUPO_ETARIO, HOMBRE, MUJER) %>%
+  # Calcular totales por fila
+  mutate(Total = HOMBRE + MUJER) %>%
+  arrange(AÑO, GRUPO_ETARIO)
 
+# Crear tabla flextable con líneas separadoras entre años
 ft_tabla_etario_h <- flextable(tabla_etario_h) %>% 
-                   autofit() %>% 
-                   set_caption(caption = "Frecuencia de Pertenencia en RSH por año (Grupo Etario y Sexo en columnas)")
+  autofit() %>% 
+  set_caption(caption = "**Tabla: Distribución de pertenencia según RSH por año, grupo etario y sexo**") %>%
+  add_footer_lines(c(
+    "RSH: Registro Social de Hogares",
+    "Muestra únicamente personas identificadas como pertenecientes a pueblos originarios",
+    "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+    "Total: Suma de hombres y mujeres por grupo etario y año"
+  )) %>%
+  theme_vanilla() %>%
+  colformat_double(j = c("HOMBRE", "MUJER", "Total"), big.mark = ".", decimal.mark = ",", digits = 0)
+
+# Agregar líneas horizontales negras entre cada año
+años_unicos <- unique(tabla_etario_h$AÑO)
+for (i in 1:(length(años_unicos) - 1)) {
+  # Encontrar la última fila de cada año
+  ultima_fila <- max(which(tabla_etario_h$AÑO == años_unicos[i]))
+  ft_tabla_etario_h <- hline(ft_tabla_etario_h, i = ultima_fila, 
+                              border = fp_border(color = "black", width = 2))
+}
+
 ft_tabla_etario_h
 ```
 
 Y de forma similar para **CONADI** y **PUEBLO ORIGINARIO**:
 
 ```{r tabla_etario_conadi_h, echo=TRUE}
+# Tabla etaria de pertenencia según CONADI por año, grupo etario y sexo
+# Muestra solo personas que pertenecen según CONADI
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 tabla_etario_conadi_h <- datos_preparados %>%
   filter(CONADI_label == "Pertenece") %>%
+  filter(!GLOSA_SEXO %in% c("INTERSEX", "No reportado")) %>%
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
+  # Pivotamos solo el sexo en columnas, manteniendo grupo etario en filas
   pivot_wider(
-    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
+    names_from = GLOSA_SEXO,
     values_from = Frecuencia,
-    values_fill = 0,
-    names_sep = "_"
+    values_fill = 0
   ) %>%
-  arrange(AÑO)
+  # Asegurar que solo tengamos las columnas deseadas
+  select(AÑO, GRUPO_ETARIO, HOMBRE, MUJER) %>%
+  # Calcular totales por fila
+  mutate(Total = HOMBRE + MUJER) %>%
+  arrange(AÑO, GRUPO_ETARIO)
 
+# Crear tabla flextable con líneas separadoras entre años
 ft_tabla_etario_conadi_h <- flextable(tabla_etario_conadi_h) %>% 
-                           autofit() %>% 
-                           set_caption(caption = "Frecuencia de Pertenencia en CONADI por año (Grupo Etario y Sexo en columnas)")
+  autofit() %>% 
+  set_caption(caption = "**Tabla: Distribución de pertenencia según CONADI por año, grupo etario y sexo**") %>%
+  add_footer_lines(c(
+    "CONADI: Corporación Nacional de Desarrollo Indígena",
+    "Muestra únicamente personas registradas como pertenecientes a pueblos originarios",
+    "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+    "Total: Suma de hombres y mujeres por grupo etario y año"
+  )) %>%
+  theme_vanilla() %>%
+  colformat_double(j = c("HOMBRE", "MUJER", "Total"), big.mark = ".", decimal.mark = ",", digits = 0)
+
+# Agregar líneas horizontales negras entre cada año
+años_unicos <- unique(tabla_etario_conadi_h$AÑO)
+for (i in 1:(length(años_unicos) - 1)) {
+  # Encontrar la última fila de cada año
+  ultima_fila <- max(which(tabla_etario_conadi_h$AÑO == años_unicos[i]))
+  ft_tabla_etario_conadi_h <- hline(ft_tabla_etario_conadi_h, i = ultima_fila, 
+                                     border = fp_border(color = "black", width = 2))
+}
+
 ft_tabla_etario_conadi_h
 ```
 
 ```{r tabla_etario_eh, echo=TRUE}
+# Tabla etaria de pertenencia según Egresos Hospitalarios por año, grupo etario y sexo
+# Muestra solo personas que pertenecen según variable PUEBLO_ORIGINARIO
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 tabla_etario_egresos_h <- datos_preparados %>%
   filter(EGRESO_label == "Pertenece") %>%
+  filter(!GLOSA_SEXO %in% c("INTERSEX", "No reportado")) %>%
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
+  # Pivotamos solo el sexo en columnas, manteniendo grupo etario en filas
   pivot_wider(
-    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
+    names_from = GLOSA_SEXO,
     values_from = Frecuencia,
-    values_fill = 0,
-    names_sep = "_"
+    values_fill = 0
   ) %>%
-  arrange(AÑO)
+  # Asegurar que solo tengamos las columnas deseadas
+  select(AÑO, GRUPO_ETARIO, HOMBRE, MUJER) %>%
+  # Calcular totales por fila
+  mutate(Total = HOMBRE + MUJER) %>%
+  arrange(AÑO, GRUPO_ETARIO)
 
+# Crear tabla flextable con líneas separadoras entre años
 ft_tabla_etario_egresos_h <- flextable(tabla_etario_egresos_h) %>% 
-                           autofit() %>% 
-                           set_caption(caption = "Frecuencia de Pertenencia en Egresos Hospitalarios por año (Grupo Etario y Sexo en columnas)")
+  autofit() %>% 
+  set_caption(caption = "**Tabla: Distribución de pertenencia según Egresos Hospitalarios por año, grupo etario y sexo**") %>%
+  add_footer_lines(c(
+    "Variable PUEBLO_ORIGINARIO de registros de egresos hospitalarios",
+    "Muestra únicamente personas registradas como pertenecientes a pueblos originarios",
+    "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+    "Total: Suma de hombres y mujeres por grupo etario y año"
+  )) %>%
+  theme_vanilla() %>%
+  colformat_double(j = c("HOMBRE", "MUJER", "Total"), big.mark = ".", decimal.mark = ",", digits = 0)
+
+# Agregar líneas horizontales negras entre cada año
+años_unicos <- unique(tabla_etario_egresos_h$AÑO)
+for (i in 1:(length(años_unicos) - 1)) {
+  # Encontrar la última fila de cada año
+  ultima_fila <- max(which(tabla_etario_egresos_h$AÑO == años_unicos[i]))
+  ft_tabla_etario_egresos_h <- hline(ft_tabla_etario_egresos_h, i = ultima_fila, 
+                                      border = fp_border(color = "black", width = 2))
+}
+
 ft_tabla_etario_egresos_h
 ```
 
 ```{r tabla_enriquecidos_h, echo=TRUE}
+# Tabla etaria de pertenencia según Variable Enriquecida por año, grupo etario y sexo
+# Muestra solo personas que pertenecen según variable enriquecida (PERTENENCIA2)
+# Se excluyen categorías INTERSEX y No reportado de sexo
+
 tabla_etario_enriquecidos_h <- datos_preparados %>%
   filter(PERTENENCIA2 == 1) %>%
+  filter(!GLOSA_SEXO %in% c("INTERSEX", "No reportado")) %>%
+  filter(GLOSA_SEXO %in% c("HOMBRE", "MUJER")) %>%
   group_by(AÑO, GRUPO_ETARIO, GLOSA_SEXO) %>%
   summarise(Frecuencia = n(), .groups = "drop") %>%
-  # Pivotamos para poner el Grupo Etario Y el Sexo en columnas
+  # Pivotamos solo el sexo en columnas, manteniendo grupo etario en filas
   pivot_wider(
-    names_from = c(GRUPO_ETARIO, GLOSA_SEXO),
+    names_from = GLOSA_SEXO,
     values_from = Frecuencia,
-    values_fill = 0,
-    names_sep = "_"
+    values_fill = 0
   ) %>%
-  arrange(AÑO)
+  # Asegurar que solo tengamos las columnas deseadas
+  select(AÑO, GRUPO_ETARIO, HOMBRE, MUJER) %>%
+  # Calcular totales por fila
+  mutate(Total = HOMBRE + MUJER) %>%
+  arrange(AÑO, GRUPO_ETARIO)
 
+# Crear tabla flextable con líneas separadoras entre años
 ft_tabla_etario_enriquecidos_h <- flextable(tabla_etario_enriquecidos_h) %>% 
-                           autofit() %>% 
-                           set_caption(caption = "Frecuencia de Pertenencia en Variable Enriquecida por año (Grupo Etario y Sexo en columnas)")
+  autofit() %>% 
+  set_caption(caption = "**Tabla: Distribución de pertenencia según Variable Enriquecida por año, grupo etario y sexo**") %>%
+  add_footer_lines(c(
+    "Variable Enriquecida: Integración de, RSH, CONADI y Egresos Hospitalarios",
+    "Muestra únicamente personas identificadas como pertenecientes en al menos una fuente",
+    "Se excluyen las categorías INTERSEX y No reportado de la variable sexo",
+    "Total: Suma de hombres y mujeres por grupo etario y año"
+  )) %>%
+  theme_vanilla() %>%
+  colformat_double(j = c("HOMBRE", "MUJER", "Total"), big.mark = ".", decimal.mark = ",", digits = 0)
+
+# Agregar líneas horizontales negras entre cada año
+años_unicos <- unique(tabla_etario_enriquecidos_h$AÑO)
+for (i in 1:(length(años_unicos) - 1)) {
+  # Encontrar la última fila de cada año
+  ultima_fila <- max(which(tabla_etario_enriquecidos_h$AÑO == años_unicos[i]))
+  ft_tabla_etario_enriquecidos_h <- hline(ft_tabla_etario_enriquecidos_h, i = ultima_fila, 
+                                           border = fp_border(color = "black", width = 2))
+}
+
 ft_tabla_etario_enriquecidos_h
 ```
 

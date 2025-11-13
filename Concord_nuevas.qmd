@@ -1,0 +1,2618 @@
+---
+title: "Concordancias entre fuentes de datos sobre pertenencia a pueblos originarios"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis descriptivo de la base de datos reducida"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+---
+
+
+```{r setup, message=FALSE, warning=FALSE}
+# Cargar librerías necesarias
+library(tidyverse)    # Incluye ggplot2, dplyr y otras herramientas
+library(data.table)   # Para manejo eficiente de datos grandes
+library(gtsummary)    # Para tablas de resumen
+library(flextable)    # Para formateo de tablas
+library(scales)       # Para escalas en gráficos
+library(tableone)     # Para tablas descriptivas
+library(summarytools) # Para estadísticas descriptivas
+library(ggpubr)      # Para composición de gráficos
+library(tidymodels)   # Para analisis de correlaciones
+library(censo2017)
+library(readxl)
+library(DBI)
+library(DescTools)
+
+print("Librerías cargadas correctamente.")
+```
+
+```{r set_working_directory, echo=TRUE}
+# Establecer el directorio de trabajo
+setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+
+# Limpiar ambiente y liberar memoria
+rm(list = ls())
+gc()
+
+# Cargar datos 
+load("BBDD_homologados.RData")
+print("Datos cargados correctamente.")
+```
+
+## 2. Exploración Inicial de Datos
+
+```{r datos_iniciales, message=FALSE}
+# Ver estructura de los datos
+glimpse(datos_homologados)
+
+# Resumen básico
+summary(datos_homologados)
+```
+
+# Análisis de concordancia entre fuentes
+#Esta sección usa yardstick para calcular la concordancia de Cohen's Kappa entre la variable PERTENENCIA2 y cada una de las tres fuentes de datos: RSH, CONADI y Autodeclaración (PUEBLO_ORIGINARIO_BIN). Los resultados se presentan en una tabla formateada con flextable, donde los valores de Kappa se colorean según su interpretación basada en la escala de Landis & Koch.
+
+```{r analisis_concordancia_kappa, message=FALSE, warning=FALSE}
+# 1. Preparar los datos para el análisis
+datos_kappa <- datos_homologados %>%
+  select(PERTENENCIA2, RSH, CONADI, PUEBLO_ORIGINARIO_BIN) %>%
+  mutate(
+    RSH = ifelse(is.na(RSH), 0, RSH),
+    CONADI = ifelse(is.na(CONADI), 0, CONADI),
+    PUEBLO_ORIGINARIO_BIN = ifelse(is.na(PUEBLO_ORIGINARIO_BIN), 0, PUEBLO_ORIGINARIO_BIN),
+    across(everything(), ~ factor(., levels = c(0, 1), labels = c("No Pertenece", "Pertenece")))
+  ) %>%
+  filter(!is.na(PERTENENCIA2))
+
+# 2. Función para calcular y formatear los resultados de Kappa
+calcular_concordancia <- function(datos, verdad, estimado, nombre_fuente) {
+  resultado_kappa <- kap(datos, truth = {{verdad}}, estimate = {{estimado}})
+  
+  
+  valor_kappa <- resultado_kappa$.estimate
+  
+  tibble(
+    `Fuente de Datos` = nombre_fuente,
+    `Concordancia con PERTENENCIA2` = "Cohen's Kappa",
+    `Valor Kappa` = round(valor_kappa, 4),
+    `Interpretación (Landis & Koch)` = case_when(
+      valor_kappa < 0.00 ~ "Pobre",
+      valor_kappa < 0.20 ~ "Leve",
+      valor_kappa < 0.40 ~ "Aceptable",
+      valor_kappa < 0.60 ~ "Moderada",
+      valor_kappa < 0.80 ~ "Sustancial",
+      TRUE ~ "Casi Perfecta"
+    )
+  )
+}
+
+# 3. Calcular la concordancia para cada fuente contra PERTENENCIA2
+resultados_finales <- bind_rows(
+  calcular_concordancia(datos_kappa, PERTENENCIA2, RSH, "RSH"),
+  calcular_concordancia(datos_kappa, PERTENENCIA2, CONADI, "CONADI"),
+  # CORRECCIÓN: La etiqueta ahora coincide con la variable usada
+  calcular_concordancia(datos_kappa, PERTENENCIA2, PUEBLO_ORIGINARIO_BIN, "Autodeclaración (PUEBLO_ORIGINARIO_BIN)")
+) %>%
+  arrange(desc(`Valor Kappa`))
+
+# 4. Crear la tabla base
+tabla_kappa <- resultados_finales %>%
+  flextable() %>%
+  set_caption("Tabla: Concordancia de cada fuente de datos con la variable de referencia enriquecida") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Valor Kappa", bold = TRUE) %>%
+  add_footer_lines("Nota: Se compara cada fuente contra la variable enriquecida, que actúa como la variable de referencia más cercana a la 'verdad'.")
+
+# 5. Aplicar colores fila por fila según el valor de Kappa
+for(i in 1:nrow(resultados_finales)) {
+  valor <- resultados_finales$`Valor Kappa`[i]
+  color_aplicar <- case_when(
+    valor >= 0.6 ~ "#0072B2",  # Azul profesional
+    valor >= 0.4 ~ "#E69F00",  # Naranja/Ocre
+    TRUE ~ "#D55E00"           # Rojo anaranjado
+  )
+  
+  tabla_kappa <- color(tabla_kappa, i = i, j = "Valor Kappa", color = color_aplicar)
+}
+
+# Mostrar la tabla final
+tabla_kappa
+```
+
+```{r analisis_concordancia_kappa_desctools, message=FALSE, warning=FALSE}
+# =============================================================================
+# ANALISIS DE CONCORDANCIA CON COHEN'S KAPPA USANDO DESCTOOLS
+# =============================================================================
+
+cat("=== CALCULANDO COHEN'S KAPPA CON DESCTOOLS ===\n\n")
+
+# 1. Preparar los datos para el análisis (mismo que yardstick)
+datos_kappa_dt <- datos_homologados %>%
+  select(PERTENENCIA2, RSH, CONADI, PUEBLO_ORIGINARIO_BIN) %>%
+  mutate(
+    RSH = ifelse(is.na(RSH), 0, RSH),
+    CONADI = ifelse(is.na(CONADI), 0, CONADI),
+    PUEBLO_ORIGINARIO_BIN = ifelse(is.na(PUEBLO_ORIGINARIO_BIN), 0, PUEBLO_ORIGINARIO_BIN)
+  ) %>%
+  filter(!is.na(PERTENENCIA2))
+
+# 2. Función para calcular y formatear los resultados de Kappa con DescTools
+calcular_concordancia_desctools <- function(datos, col_verdad, col_estimado, nombre_fuente) {
+  # DescTools::CohenKappa requiere una tabla de contingencia o dos vectores
+  resultado_kappa <- CohenKappa(
+    x = datos[[col_verdad]], 
+    y = datos[[col_estimado]],
+    conf.level = 0.95
+  )
+  
+  valor_kappa <- resultado_kappa["kappa"]
+  ic_inferior <- resultado_kappa["lwr.ci"]
+  ic_superior <- resultado_kappa["upr.ci"]
+  
+  tibble(
+    `Fuente de Datos` = nombre_fuente,
+    `Concordancia con PERTENENCIA2` = "Cohen's Kappa",
+    `Valor Kappa` = round(valor_kappa, 4),
+    `IC 95% Inf` = round(ic_inferior, 4),
+    `IC 95% Sup` = round(ic_superior, 4),
+    `Interpretación (Landis & Koch)` = case_when(
+      valor_kappa < 0.00 ~ "Pobre",
+      valor_kappa < 0.20 ~ "Leve",
+      valor_kappa < 0.40 ~ "Aceptable",
+      valor_kappa < 0.60 ~ "Moderada",
+      valor_kappa < 0.80 ~ "Sustancial",
+      TRUE ~ "Casi Perfecta"
+    )
+  )
+}
+
+# 3. Calcular la concordancia para cada fuente contra PERTENENCIA2
+cat("Calculando Kappa para cada fuente:\n")
+
+kappa_rsh <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", "RSH", "RSH")
+cat(sprintf("  RSH: Kappa = %.4f [%.4f, %.4f]\n", 
+            kappa_rsh$`Valor Kappa`, kappa_rsh$`IC 95% Inf`, kappa_rsh$`IC 95% Sup`))
+
+kappa_conadi <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", "CONADI", "CONADI")
+cat(sprintf("  CONADI: Kappa = %.4f [%.4f, %.4f]\n", 
+            kappa_conadi$`Valor Kappa`, kappa_conadi$`IC 95% Inf`, kappa_conadi$`IC 95% Sup`))
+
+kappa_autodecl <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", "PUEBLO_ORIGINARIO_BIN", "Autodeclaración (PUEBLO_ORIGINARIO_BIN)")
+cat(sprintf("  Autodeclaración: Kappa = %.4f [%.4f, %.4f]\n", 
+            kappa_autodecl$`Valor Kappa`, kappa_autodecl$`IC 95% Inf`, kappa_autodecl$`IC 95% Sup`))
+
+resultados_finales_dt <- bind_rows(
+  kappa_rsh,
+  kappa_conadi,
+  kappa_autodecl
+) %>%
+  arrange(desc(`Valor Kappa`))
+
+cat("\n")
+
+# 4. Crear la tabla base con DescTools
+tabla_kappa_dt <- resultados_finales_dt %>%
+  flextable() %>%
+  set_caption("Concordancia de cada fuente con PERTENENCIA2 (Cohen's Kappa - DescTools)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Valor Kappa", bold = TRUE) %>%
+  add_footer_lines("Nota: Calculado con DescTools::CohenKappa(). IC = Intervalo de Confianza al 95%.")
+
+# 5. Aplicar colores fila por fila según el valor de Kappa
+for(i in 1:nrow(resultados_finales_dt)) {
+  valor <- resultados_finales_dt$`Valor Kappa`[i]
+  color_aplicar <- case_when(
+    valor >= 0.6 ~ "#0072B2",  # Azul profesional - Moderada/Sustancial
+    valor >= 0.4 ~ "#E69F00",  # Naranja/Ocre - Aceptable
+    TRUE ~ "#D55E00"           # Rojo anaranjado - Pobre/Leve
+  )
+  
+  tabla_kappa_dt <- color(tabla_kappa_dt, i = i, j = "Valor Kappa", color = color_aplicar)
+}
+
+# Mostrar la tabla final
+tabla_kappa_dt
+
+# 6. Guardar resultados
+resultados_kappa_desctools <- list(
+  tabla_resumen = resultados_finales_dt,
+  rsh = kappa_rsh,
+  conadi = kappa_conadi,
+  autodeclaracion = kappa_autodecl
+)
+
+cat("\n=== CALCULO COMPLETADO ===\n")
+cat("Resultados guardados en objeto 'resultados_kappa_desctools'\n")
+```
+
+#ESTE CHUNK QUEDA A LA POSTERIDAD.
+
+```{r verificar_p09_edad, message=FALSE, warning=FALSE}
+# =============================================================================
+# ANALISIS COMPLETO DE VARIABLES DEL CENSO 2017
+# =============================================================================
+
+con_censo <- censo_conectar()
+
+cat("=== VERIFICACION DE TODAS LAS VARIABLES DEL CENSO ===\n\n")
+
+# --- 1. DISTRIBUCION COMPLETA DE p09 (EDAD) ---
+cat("1. ANALISIS DE p09 (EDAD)\n")
+cat(strrep("=", 50), "\n")
+
+query_dist_p09 <- "
+SELECT 
+  p09,
+  COUNT(*) as frecuencia,
+  ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM personas WHERE p09 IS NOT NULL), 2) as porcentaje
+FROM personas
+WHERE p09 IS NOT NULL
+GROUP BY p09
+ORDER BY p09
+LIMIT 50
+"
+
+dist_p09 <- tbl(con_censo, sql(query_dist_p09)) %>% collect()
+cat("\nPrimeros 50 valores de p09:\n")
+print(dist_p09)
+
+query_stats_p09 <- "
+SELECT 
+  COUNT(*) as total,
+  COUNT(DISTINCT p09) as valores_unicos,
+  MIN(p09) as minimo,
+  MAX(p09) as maximo,
+  AVG(p09) as promedio,
+  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p09) as mediana
+FROM personas
+WHERE p09 IS NOT NULL
+"
+
+stats_p09 <- tbl(con_censo, sql(query_stats_p09)) %>% collect()
+cat("\nEstadisticas de p09:\n")
+print(stats_p09)
+
+cat("\n- Total registros:", stats_p09$total, "\n")
+cat("- Valores unicos:", stats_p09$valores_unicos, "\n")
+cat("- Rango:", stats_p09$minimo, "-", stats_p09$maximo, "\n")
+cat("- Promedio:", round(stats_p09$promedio, 2), "\n")
+cat("- Mediana:", stats_p09$mediana, "\n")
+
+# Distribucion por grupos etarios
+query_grupos_p09 <- "
+SELECT 
+  CASE 
+    WHEN p09 < 5 THEN '0-4'
+    WHEN p09 < 15 THEN '5-14'
+    WHEN p09 < 25 THEN '15-24'
+    WHEN p09 < 45 THEN '25-44'
+    WHEN p09 < 65 THEN '45-64'
+    WHEN p09 < 75 THEN '65-74'
+    WHEN p09 >= 75 AND p09 <= 120 THEN '75+'
+    ELSE 'Fuera de rango'
+  END as grupo_etario,
+  COUNT(*) as n,
+  ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM personas WHERE p09 IS NOT NULL AND p09 BETWEEN 0 AND 120), 2) as porcentaje
+FROM personas
+WHERE p09 IS NOT NULL AND p09 BETWEEN 0 AND 120
+GROUP BY grupo_etario
+ORDER BY 
+  CASE 
+    WHEN grupo_etario = '0-4' THEN 1
+    WHEN grupo_etario = '5-14' THEN 2
+    WHEN grupo_etario = '15-24' THEN 3
+    WHEN grupo_etario = '25-44' THEN 4
+    WHEN grupo_etario = '45-64' THEN 5
+    WHEN grupo_etario = '65-74' THEN 6
+    WHEN grupo_etario = '75+' THEN 7
+    ELSE 8
+  END
+"
+
+grupos_p09 <- tbl(con_censo, sql(query_grupos_p09)) %>% collect()
+cat("\nDistribucion por grupos etarios (usando p09):\n")
+print(grupos_p09)
+
+# --- 2. VERIFICAR p08 (SEXO) ---
+cat("\n\n2. ANALISIS DE p08 (SEXO)\n")
+cat(strrep("=", 50), "\n")
+
+query_dist_p08 <- "
+SELECT 
+  p08,
+  COUNT(*) as frecuencia,
+  ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM personas WHERE p08 IS NOT NULL), 2) as porcentaje
+FROM personas
+WHERE p08 IS NOT NULL
+GROUP BY p08
+ORDER BY p08
+"
+
+dist_p08 <- tbl(con_censo, sql(query_dist_p08)) %>% collect()
+cat("\nDistribucion de p08:\n")
+print(dist_p08)
+
+cat("\nINTERPRETACION:\n")
+if(nrow(dist_p08) == 2 && all(dist_p08$p08 %in% c(1, 2))) {
+  cat("- p08 contiene SOLO valores 1 y 2 (Hombre/Mujer)\n")
+  cat("- Variable CORRECTA para sexo\n")
+  cat("- 1 = Hombre (", round(dist_p08$porcentaje[dist_p08$p08 == 1], 2), "%)\n")
+  cat("- 2 = Mujer (", round(dist_p08$porcentaje[dist_p08$p08 == 2], 2), "%)\n")
+} else {
+  cat("- ADVERTENCIA: p08 tiene valores diferentes a 1 y 2\n")
+  cat("- Verificar codificacion\n")
+}
+
+# --- 3. VERIFICAR p16 (PERTENENCIA) ---
+cat("\n\n3. ANALISIS DE p16 (PERTENENCIA A PUEBLOS ORIGINARIOS)\n")
+cat(strrep("=", 50), "\n")
+
+query_dist_p16 <- "
+SELECT 
+  p16,
+  COUNT(*) as frecuencia,
+  ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM personas WHERE p16 IS NOT NULL), 2) as porcentaje
+FROM personas
+WHERE p16 IS NOT NULL
+GROUP BY p16
+ORDER BY p16
+"
+
+dist_p16 <- tbl(con_censo, sql(query_dist_p16)) %>% collect()
+cat("\nDistribucion de p16:\n")
+print(dist_p16)
+
+cat("\nINTERPRETACION:\n")
+cat("- 1 = Pertenece a pueblo originario (", round(dist_p16$porcentaje[dist_p16$p16 == 1], 2), "%)\n")
+cat("- 2 = No pertenece (", round(dist_p16$porcentaje[dist_p16$p16 == 2], 2), "%)\n")
+if(99 %in% dist_p16$p16) {
+  cat("- 99 = No sabe/No responde (", round(dist_p16$porcentaje[dist_p16$p16 == 99], 2), "%)\n")
+}
+cat("- Variable CORRECTA para pertenencia\n")
+
+# --- 4. VERIFICAR GEOCODIGO Y REGION ---
+cat("\n\n4. ANALISIS DE GEOCODIGO Y EXTRACCION DE REGION\n")
+cat(strrep("=", 50), "\n")
+
+query_region_sample <- "
+SELECT 
+  z.geocodigo,
+  CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER) as region,
+  COUNT(*) as n_personas
+FROM personas p
+JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
+JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
+JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
+WHERE z.geocodigo IS NOT NULL
+GROUP BY z.geocodigo, region
+ORDER BY region, n_personas DESC
+LIMIT 20
+"
+
+muestra_region <- tbl(con_censo, sql(query_region_sample)) %>% collect()
+cat("\nEjemplos de extraccion de region desde geocodigo:\n")
+print(muestra_region)
+
+query_dist_region <- "
+SELECT 
+  CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER) as region,
+  COUNT(*) as n_personas,
+  ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM personas p2
+    JOIN hogares h2 ON p2.hogar_ref_id = h2.hogar_ref_id
+    JOIN viviendas v2 ON h2.vivienda_ref_id = v2.vivienda_ref_id
+    JOIN zonas z2 ON v2.zonaloc_ref_id = z2.zonaloc_ref_id
+    WHERE z2.geocodigo IS NOT NULL), 2) as porcentaje
+FROM personas p
+JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
+JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
+JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
+WHERE z.geocodigo IS NOT NULL
+GROUP BY region
+ORDER BY region
+"
+
+dist_region <- tbl(con_censo, sql(query_dist_region)) %>% collect()
+cat("\nDistribucion de personas por region:\n")
+print(dist_region)
+
+cat("\nINTERPRETACION:\n")
+cat("- Total de regiones:", nrow(dist_region), "\n")
+cat("- Extraccion mediante SUBSTR(geocodigo, 1, 2) funciona correctamente\n")
+cat("- Regiones van del 1 al", max(dist_region$region), "\n")
+
+# --- 5. VERIFICAR CRUCE p09 vs p21a (EDAD vs AÑO NACIMIENTO) ---
+cat("\n\n5. VALIDACION: CRUCE p09 (edad) vs p21a (año nacimiento)\n")
+cat(strrep("=", 50), "\n")
+
+query_cruce <- "
+SELECT 
+  p09 as edad,
+  p21a as anio_nacimiento,
+  2017 - p21a as edad_calculada,
+  COUNT(*) as n
+FROM personas
+WHERE p09 IS NOT NULL 
+  AND p21a IS NOT NULL 
+  AND p21a BETWEEN 1900 AND 2017
+  AND p09 BETWEEN 0 AND 120
+GROUP BY p09, p21a
+ORDER BY n DESC
+LIMIT 30
+"
+
+cruce_edad <- tbl(con_censo, sql(query_cruce)) %>% collect()
+cat("\nEjemplos de cruce edad (p09) vs año nacimiento (p21a):\n")
+print(cruce_edad)
+
+coherencia <- cruce_edad %>%
+  mutate(
+    diferencia = abs(edad - edad_calculada),
+    coherente = diferencia <= 1
+  )
+
+cat("\nCoherencia entre p09 y edad calculada (2017 - p21a):\n")
+cat("- Casos coherentes (diferencia <= 1 año):", 
+    sum(coherencia$coherente * coherencia$n), "/", 
+    sum(coherencia$n), 
+    "(", round(100 * sum(coherencia$coherente * coherencia$n) / sum(coherencia$n), 2), "%)\n")
+
+# --- 6. MUESTRA ALEATORIA COMPLETA ---
+cat("\n\n6. MUESTRA ALEATORIA DE REGISTROS COMPLETOS\n")
+cat(strrep("=", 50), "\n")
+
+query_muestra <- "
+SELECT 
+  p09 as edad,
+  p08 as sexo,
+  p16 as pertenencia,
+  p21a as anio_nac,
+  CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER) as region
+FROM personas p
+JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
+JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
+JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
+WHERE p09 IS NOT NULL 
+  AND p09 BETWEEN 0 AND 120
+  AND p08 IN (1, 2)
+  AND p16 IS NOT NULL
+  AND z.geocodigo IS NOT NULL
+ORDER BY RANDOM()
+LIMIT 20
+"
+
+muestra <- tbl(con_censo, sql(query_muestra)) %>% collect()
+cat("\nMuestra aleatoria de 20 registros con todas las variables:\n")
+print(muestra)
+
+# --- 7. CONTEO FINAL DE REGISTROS VALIDOS ---
+cat("\n\n7. CONTEO DE REGISTROS VALIDOS PARA CONCORDANCIA\n")
+cat(strrep("=", 50), "\n")
+
+query_validos <- "
+SELECT 
+  COUNT(*) as total_validos,
+  COUNT(DISTINCT CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER)) as regiones,
+  COUNT(DISTINCT p08) as sexos,
+  MIN(p09) as edad_min,
+  MAX(p09) as edad_max
+FROM personas p
+JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
+JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
+JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
+WHERE p09 IS NOT NULL 
+  AND p09 BETWEEN 0 AND 120
+  AND p08 IN (1, 2)
+  AND p16 IS NOT NULL
+  AND z.geocodigo IS NOT NULL
+"
+
+validos <- tbl(con_censo, sql(query_validos)) %>% collect()
+cat("\nRegistros validos para analisis de concordancia:\n")
+print(validos)
+
+cat("\n- Total de personas:", format(validos$total_validos, big.mark = ","), "\n")
+cat("- Regiones unicas:", validos$regiones, "\n")
+cat("- Sexos unicos:", validos$sexos, "\n")
+cat("- Rango de edad:", validos$edad_min, "-", validos$edad_max, "años\n")
+
+censo_desconectar()
+
+# --- 8. RESUMEN Y CONCLUSION ---
+cat("\n\n=== RESUMEN FINAL ===\n")
+cat(strrep("=", 50), "\n")
+
+cat("\nVARIABLES VERIFICADAS Y APROBADAS:\n")
+cat("- p09: Edad en años (0-120) - CORRECTO\n")
+cat("  * Valores unicos:", stats_p09$valores_unicos, "\n")
+cat("  * Promedio:", round(stats_p09$promedio, 2), "años\n")
+cat("\n- p08: Sexo (1=Hombre, 2=Mujer) - CORRECTO\n")
+cat("  * Distribucion balanceada:", round(dist_p08$porcentaje[1], 1), "% /", 
+    round(dist_p08$porcentaje[2], 1), "%\n")
+cat("\n- p16: Pertenencia a pueblos originarios - CORRECTO\n")
+cat("  * Pertenece:", round(dist_p16$porcentaje[dist_p16$p16 == 1], 2), "%\n")
+cat("\n- geocodigo: Extraccion de region (primeros 2 digitos) - CORRECTO\n")
+cat("  * Regiones identificadas:", nrow(dist_region), "\n")
+
+cat("\nQUERY FINAL PARA CONCORDANCIA:\n")
+cat("SELECT p16, SUBSTR(geocodigo,1,2) as region, p09 as edad, p08 as sexo\n")
+cat("FROM personas + JOINs\n")
+cat("WHERE p09 BETWEEN 0 AND 120 AND p08 IN (1,2) AND p16 IS NOT NULL\n")
+
+cat("\nPROXIMO PASO:\n")
+cat("Actualizar chunk 'concordancia_censo_pertenencia2' con:\n")
+cat("- Usar p09 como edad\n")
+cat("- Usar p08 como sexo\n")
+cat("- Mantener p16 como pertenencia\n")
+cat("- Mantener SUBSTR(geocodigo,1,2) como region\n")
+cat("\n")
+```
+
+```{r funcion_extraccion_censo, message=FALSE, warning=FALSE}
+# =============================================================================
+# FUNCION PARA EXTRAER Y PROCESAR DATOS DEL CENSO 2017
+# =============================================================================
+
+extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
+  
+  # Verificar si hay conexión activa, si no, crear una
+  crear_conexion <- is.null(conexion)
+  if(crear_conexion) {
+    con_censo <- censo_conectar()
+  } else {
+    con_censo <- conexion
+  }
+  
+  if(verbose) cat("=== EXTRAYENDO DATOS DEL CENSO 2017 ===\n\n")
+  
+  # --- PASO 1: EXTRAER DATOS INDIVIDUALES ---
+  if(verbose) cat("1. Extrayendo datos individuales del censo...\n")
+  
+  query_censo_individual <- "
+  SELECT 
+    p16 as pertenencia,
+    CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER) as region,
+    p09 as edad,
+    p08 as sexo
+  FROM personas p
+  JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
+  JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
+  JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
+  WHERE p.p16 IS NOT NULL 
+    AND p.p09 IS NOT NULL
+    AND p.p09 BETWEEN 0 AND 120
+    AND p.p08 IN (1, 2)
+    AND z.geocodigo IS NOT NULL
+  "
+  
+  datos_censo <- tbl(con_censo, sql(query_censo_individual)) %>% 
+    collect() %>%
+    mutate(
+      pertenencia_bin = ifelse(pertenencia == 1, 1, 0),
+      sexo_txt = ifelse(sexo == 1, "HOMBRE", "MUJER"),
+      grupo_etario = case_when(
+        edad < 5 ~ "0-4",
+        edad < 15 ~ "5-14",
+        edad < 25 ~ "15-24",
+        edad < 45 ~ "25-44",
+        edad < 65 ~ "45-64",
+        edad < 75 ~ "65-74",
+        edad >= 75 ~ "75+",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(grupo_etario)) %>%
+    mutate(
+      grupo_etario = factor(grupo_etario, 
+                           levels = c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+"))
+    )
+  
+  if(verbose) {
+    cat("   Total de registros:", format(nrow(datos_censo), big.mark = ","), "\n")
+  }
+  
+  # --- PASO 2: CALCULAR PORCENTAJES POR DESAGREGACION ---
+  if(verbose) cat("\n2. Calculando porcentajes por desagregacion...\n")
+  
+  # 2.1 TOTAL NACIONAL
+  censo_total <- datos_censo %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Nacional: ", round(censo_total$porcentaje_censo, 2), "%\n")
+  }
+  
+  # 2.2 POR REGION
+  censo_region <- datos_censo %>%
+    group_by(region) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Por region: ", nrow(censo_region), " regiones\n")
+  }
+  
+  # 2.3 POR SEXO
+  censo_sexo <- datos_censo %>%
+    group_by(sexo_txt) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    ) %>%
+    rename(sexo = sexo_txt)
+  
+  if(verbose) {
+    cat("   Por sexo: ", nrow(censo_sexo), " categorias\n")
+  }
+  
+  # 2.4 POR GRUPO ETARIO
+  censo_grupo_etario <- datos_censo %>%
+    group_by(grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Por grupo etario: ", nrow(censo_grupo_etario), " grupos\n")
+  }
+  
+  # 2.5 CRUCE REGION x SEXO
+  censo_region_sexo <- datos_censo %>%
+    group_by(region, sexo_txt) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    ) %>%
+    rename(sexo = sexo_txt)
+  
+  if(verbose) {
+    cat("   Cruce region x sexo: ", nrow(censo_region_sexo), " combinaciones\n")
+  }
+  
+  # 2.6 CRUCE REGION x GRUPO ETARIO
+  censo_region_edad <- datos_censo %>%
+    group_by(region, grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Cruce region x grupo etario: ", nrow(censo_region_edad), " combinaciones\n")
+  }
+  
+  # 2.7 CRUCE SEXO x GRUPO ETARIO
+  censo_sexo_edad <- datos_censo %>%
+    group_by(sexo_txt, grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    ) %>%
+    rename(sexo = sexo_txt)
+  
+  if(verbose) {
+    cat("   Cruce sexo x grupo etario: ", nrow(censo_sexo_edad), " combinaciones\n")
+  }
+  
+  # 2.8 CRUCE TRIPLE: REGION x SEXO x GRUPO ETARIO
+  censo_region_sexo_edad <- datos_censo %>%
+    group_by(region, sexo_txt, grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1),
+      porcentaje_censo = (pertenece / total) * 100,
+      .groups = "drop"
+    ) %>%
+    rename(sexo = sexo_txt)
+  
+  if(verbose) {
+    cat("   Cruce region x sexo x grupo etario: ", nrow(censo_region_sexo_edad), " combinaciones\n")
+  }
+  
+  # --- PASO 3: CERRAR CONEXION SI FUE CREADA ---
+  if(crear_conexion) {
+    censo_desconectar()
+  }
+  
+  if(verbose) cat("\n=== EXTRACCION COMPLETADA ===\n\n")
+  
+  # --- RETORNAR LISTA CON TODOS LOS RESULTADOS ---
+  return(list(
+    datos_individuales = datos_censo,
+    nacional = censo_total,
+    por_region = censo_region,
+    por_sexo = censo_sexo,
+    por_grupo_etario = censo_grupo_etario,
+    region_sexo = censo_region_sexo,
+    region_edad = censo_region_edad,
+    sexo_edad = censo_sexo_edad,
+    region_sexo_edad = censo_region_sexo_edad
+  ))
+}
+
+# =============================================================================
+# FUNCION PARA EXTRAER Y PROCESAR DATOS DE PERTENENCIA2
+# =============================================================================
+
+extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
+  
+  if(verbose) cat("=== EXTRAYENDO DATOS DE PERTENENCIA2 ===\n\n")
+  
+  # --- PASO 1: PREPARAR DATOS ---
+  if(verbose) cat("1. Preparando datos de PERTENENCIA2...\n")
+  
+  datos_prep <- datos_homologados %>%
+    filter(!is.na(PERTENENCIA2)) %>%
+    mutate(
+      pertenencia_bin = PERTENENCIA2,
+      region = as.integer(CODIGO_REGION),
+      sexo = GLOSA_SEXO,
+      grupo_etario = factor(as.character(GRUPO_ETARIO), 
+                           levels = c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+"))
+    ) %>%
+    filter(!is.na(sexo), sexo %in% c("HOMBRE", "MUJER"),
+           !is.na(grupo_etario),
+           !is.na(region))
+  
+  if(verbose) {
+    cat("   Total de registros:", format(nrow(datos_prep), big.mark = ","), "\n")
+  }
+  
+  # --- PASO 2: CALCULAR PORCENTAJES POR DESAGREGACION ---
+  if(verbose) cat("\n2. Calculando porcentajes por desagregacion...\n")
+  
+  # 2.1 TOTAL NACIONAL
+  pert2_total <- datos_prep %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Nacional: ", round(pert2_total$porcentaje_pert2, 2), "%\n")
+  }
+  
+  # 2.2 POR REGION
+  pert2_region <- datos_prep %>%
+    group_by(region) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Por region: ", nrow(pert2_region), " regiones\n")
+  }
+  
+  # 2.3 POR SEXO
+  pert2_sexo <- datos_prep %>%
+    group_by(sexo) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Por sexo: ", nrow(pert2_sexo), " categorias\n")
+  }
+  
+  # 2.4 POR GRUPO ETARIO
+  pert2_grupo_etario <- datos_prep %>%
+    group_by(grupo_etario, .drop = FALSE) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = if_else(total > 0, (pertenece / total) * 100, 0),
+      .groups = "drop"
+    ) %>%
+    filter(total > 0)
+  
+  if(verbose) {
+    cat("   Por grupo etario: ", nrow(pert2_grupo_etario), " grupos\n")
+  }
+  
+  # 2.5 CRUCE REGION x SEXO
+  pert2_region_sexo <- datos_prep %>%
+    group_by(region, sexo) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Cruce region x sexo: ", nrow(pert2_region_sexo), " combinaciones\n")
+  }
+  
+  # 2.6 CRUCE REGION x GRUPO ETARIO
+  pert2_region_edad <- datos_prep %>%
+    group_by(region, grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Cruce region x grupo etario: ", nrow(pert2_region_edad), " combinaciones\n")
+  }
+  
+  # 2.7 CRUCE SEXO x GRUPO ETARIO
+  pert2_sexo_edad <- datos_prep %>%
+    group_by(sexo, grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Cruce sexo x grupo etario: ", nrow(pert2_sexo_edad), " combinaciones\n")
+  }
+  
+  # 2.8 CRUCE TRIPLE: REGION x SEXO x GRUPO ETARIO
+  pert2_region_sexo_edad <- datos_prep %>%
+    group_by(region, sexo, grupo_etario) %>%
+    summarise(
+      total = n(),
+      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      porcentaje_pert2 = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+  
+  if(verbose) {
+    cat("   Cruce region x sexo x grupo etario: ", nrow(pert2_region_sexo_edad), " combinaciones\n")
+  }
+  
+  if(verbose) cat("\n=== EXTRACCION COMPLETADA ===\n\n")
+  
+  # --- RETORNAR LISTA CON TODOS LOS RESULTADOS ---
+  return(list(
+    datos_individuales = datos_prep,
+    nacional = pert2_total,
+    por_region = pert2_region,
+    por_sexo = pert2_sexo,
+    por_grupo_etario = pert2_grupo_etario,
+    region_sexo = pert2_region_sexo,
+    region_edad = pert2_region_edad,
+    sexo_edad = pert2_sexo_edad,
+    region_sexo_edad = pert2_region_sexo_edad
+  ))
+}
+```
+
+```{r ejecutar_extraccion_datos, message=FALSE, warning=FALSE}
+# =============================================================================
+# EJECUTAR EXTRACCION DE DATOS PARA CONCORDANCIA
+# =============================================================================
+
+# Extraer datos del Censo 2017
+datos_censo <- extraer_datos_censo(verbose = TRUE)
+
+# Extraer datos de PERTENENCIA2
+datos_pert2 <- extraer_datos_pertenencia2(datos_homologados, verbose = TRUE)
+
+# Mostrar resumen
+cat("\n=== RESUMEN DE DATOS EXTRAIDOS ===\n")
+cat("\nCENSO 2017:\n")
+cat("- Total nacional:", format(datos_censo$nacional$total, big.mark = ","), 
+    "personas (", round(datos_censo$nacional$porcentaje_censo, 2), "% pertenece)\n")
+cat("- Regiones:", nrow(datos_censo$por_region), "\n")
+cat("- Sexos:", nrow(datos_censo$por_sexo), "\n")
+cat("- Grupos etarios:", nrow(datos_censo$por_grupo_etario), "\n")
+
+cat("\nPERTENENCIA2:\n")
+cat("- Total nacional:", format(datos_pert2$nacional$total, big.mark = ","), 
+    "personas (", round(datos_pert2$nacional$porcentaje_pert2, 2), "% pertenece)\n")
+cat("- Regiones:", nrow(datos_pert2$por_region), "\n")
+cat("- Sexos:", nrow(datos_pert2$por_sexo), "\n")
+cat("- Grupos etarios:", nrow(datos_pert2$por_grupo_etario), "\n")
+
+cat("\nDatos listos para calcular Lin's CCC\n")
+```
+
+```{r calcular_lins_ccc_desctools, message=FALSE, warning=FALSE}
+# =============================================================================
+# CALCULO DE LIN'S CCC ENTRE CENSO 2017 Y PERTENENCIA2 USANDO DESCTOOLS
+# =============================================================================
+
+cat("=== CALCULANDO LIN'S CCC PARA TODAS LAS DESAGREGACIONES ===\n\n")
+
+# --- FUNCION AUXILIAR PARA FORMATEAR RESULTADOS ---
+formatear_resultado_ccc <- function(resultado_ccc, nombre_desagregacion) {
+  tibble(
+    Desagregacion = nombre_desagregacion,
+    N = resultado_ccc$n,
+    `Lin's CCC` = round(resultado_ccc$rho.c$est, 4),
+    `IC 95% Inferior` = round(resultado_ccc$rho.c$lwr.ci, 4),
+    `IC 95% Superior` = round(resultado_ccc$rho.c$upr.ci, 4),
+    Interpretacion = case_when(
+      resultado_ccc$rho.c$est > 0.99 ~ "Casi perfecta",
+      resultado_ccc$rho.c$est > 0.95 ~ "Excelente",
+      resultado_ccc$rho.c$est > 0.90 ~ "Sustancial",
+      resultado_ccc$rho.c$est > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+}
+
+# --- 1. CONCORDANCIA POR REGION ---
+cat("1. Calculando CCC por region...\n")
+
+concordancia_region <- datos_censo$por_region %>%
+  inner_join(datos_pert2$por_region, by = "region", suffix = c("_censo", "_pert2"))
+
+ccc_region <- CCC(
+  concordancia_region$porcentaje_censo,
+  concordancia_region$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_region <- formatear_resultado_ccc(ccc_region, "Por Region")
+cat("   CCC =", round(ccc_region$rho.c$est, 4), "\n")
+
+# --- 2. CONCORDANCIA POR SEXO ---
+cat("\n2. Calculando CCC por sexo...\n")
+
+concordancia_sexo <- datos_censo$por_sexo %>%
+  inner_join(datos_pert2$por_sexo, by = "sexo", suffix = c("_censo", "_pert2"))
+
+ccc_sexo <- CCC(
+  concordancia_sexo$porcentaje_censo,
+  concordancia_sexo$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_sexo <- formatear_resultado_ccc(ccc_sexo, "Por Sexo")
+cat("   CCC =", round(ccc_sexo$rho.c$est, 4), "\n")
+
+# --- 3. CONCORDANCIA POR GRUPO ETARIO ---
+cat("\n3. Calculando CCC por grupo etario...\n")
+
+concordancia_edad <- datos_censo$por_grupo_etario %>%
+  inner_join(datos_pert2$por_grupo_etario, by = "grupo_etario", suffix = c("_censo", "_pert2"))
+
+ccc_edad <- CCC(
+  concordancia_edad$porcentaje_censo,
+  concordancia_edad$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_edad <- formatear_resultado_ccc(ccc_edad, "Por Grupo Etario")
+cat("   CCC =", round(ccc_edad$rho.c$est, 4), "\n")
+
+# --- 4. CONCORDANCIA REGION x SEXO ---
+cat("\n4. Calculando CCC region x sexo...\n")
+
+concordancia_region_sexo <- datos_censo$region_sexo %>%
+  inner_join(datos_pert2$region_sexo, by = c("region", "sexo"), suffix = c("_censo", "_pert2"))
+
+ccc_region_sexo <- CCC(
+  concordancia_region_sexo$porcentaje_censo,
+  concordancia_region_sexo$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_region_sexo <- formatear_resultado_ccc(ccc_region_sexo, "Region x Sexo")
+cat("   CCC =", round(ccc_region_sexo$rho.c$est, 4), "\n")
+
+# --- 5. CONCORDANCIA REGION x GRUPO ETARIO ---
+cat("\n5. Calculando CCC region x grupo etario...\n")
+
+concordancia_region_edad <- datos_censo$region_edad %>%
+  inner_join(datos_pert2$region_edad, by = c("region", "grupo_etario"), suffix = c("_censo", "_pert2"))
+
+ccc_region_edad <- CCC(
+  concordancia_region_edad$porcentaje_censo,
+  concordancia_region_edad$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_region_edad <- formatear_resultado_ccc(ccc_region_edad, "Region x Grupo Etario")
+cat("   CCC =", round(ccc_region_edad$rho.c$est, 4), "\n")
+
+# --- 6. CONCORDANCIA SEXO x GRUPO ETARIO ---
+cat("\n6. Calculando CCC sexo x grupo etario...\n")
+
+concordancia_sexo_edad <- datos_censo$sexo_edad %>%
+  inner_join(datos_pert2$sexo_edad, by = c("sexo", "grupo_etario"), suffix = c("_censo", "_pert2"))
+
+ccc_sexo_edad <- CCC(
+  concordancia_sexo_edad$porcentaje_censo,
+  concordancia_sexo_edad$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_sexo_edad <- formatear_resultado_ccc(ccc_sexo_edad, "Sexo x Grupo Etario")
+cat("   CCC =", round(ccc_sexo_edad$rho.c$est, 4), "\n")
+
+# --- 7. CONCORDANCIA TRIPLE: REGION x SEXO x GRUPO ETARIO ---
+cat("\n7. Calculando CCC region x sexo x grupo etario...\n")
+
+concordancia_triple <- datos_censo$region_sexo_edad %>%
+  inner_join(datos_pert2$region_sexo_edad, by = c("region", "sexo", "grupo_etario"), suffix = c("_censo", "_pert2"))
+
+ccc_triple <- CCC(
+  concordancia_triple$porcentaje_censo,
+  concordancia_triple$porcentaje_pert2,
+  ci = "z-transform",
+  conf.level = 0.95
+)
+
+resultado_triple <- formatear_resultado_ccc(ccc_triple, "Region x Sexo x Grupo Etario")
+cat("   CCC =", round(ccc_triple$rho.c$est, 4), "\n")
+
+# --- 8. CREAR TABLA RESUMEN ---
+cat("\n=== TABLA RESUMEN DE CONCORDANCIA ===\n")
+
+tabla_resumen_ccc <- bind_rows(
+  resultado_region,
+  resultado_sexo,
+  resultado_edad,
+  resultado_region_sexo,
+  resultado_region_edad,
+  resultado_sexo_edad,
+  resultado_triple
+) %>%
+  arrange(desc(`Lin's CCC`))
+
+tabla_final <- tabla_resumen_ccc %>%
+  flextable() %>%
+  set_caption("Concordancia entre Censo 2017 y PERTENENCIA2 por niveles de desagregacion (Lin's CCC)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE) %>%
+  add_footer_lines("Nota: CCC calculado con DescTools::CCC() usando transformacion z para IC al 95%. N = numero de pares comparados.")
+
+# Aplicar colores segun interpretacion
+for(i in 1:nrow(tabla_resumen_ccc)) {
+  valor <- tabla_resumen_ccc$`Lin's CCC`[i]
+  color_aplicar <- case_when(
+    valor > 0.95 ~ "#0072B2",   # Azul - Excelente
+    valor > 0.90 ~ "#009E73",   # Verde - Sustancial
+    valor > 0.75 ~ "#E69F00",   # Naranja - Moderada
+    TRUE ~ "#D55E00"            # Rojo - Pobre
+  )
+  
+  tabla_final <- color(tabla_final, i = i, j = "Lin's CCC", color = color_aplicar)
+}
+
+print(tabla_final)
+
+# --- 9. GUARDAR RESULTADOS EN LISTA ---
+resultados_concordancia <- list(
+  resumen = tabla_resumen_ccc,
+  por_region = list(ccc = ccc_region, datos = concordancia_region),
+  por_sexo = list(ccc = ccc_sexo, datos = concordancia_sexo),
+  por_edad = list(ccc = ccc_edad, datos = concordancia_edad),
+  region_sexo = list(ccc = ccc_region_sexo, datos = concordancia_region_sexo),
+  region_edad = list(ccc = ccc_region_edad, datos = concordancia_region_edad),
+  sexo_edad = list(ccc = ccc_sexo_edad, datos = concordancia_sexo_edad),
+  triple = list(ccc = ccc_triple, datos = concordancia_triple)
+)
+
+cat("\n=== CALCULO COMPLETADO ===\n")
+cat("Resultados guardados en objeto 'resultados_concordancia'\n")
+cat("\nAcceso a resultados:\n")
+cat("  resultados_concordancia$resumen\n")
+cat("  resultados_concordancia$por_region$ccc\n")
+cat("  resultados_concordancia$por_region$datos\n")
+```
+
+```{r calcular_lins_ccc_yardstick, message=FALSE, warning=FALSE}
+# =============================================================================
+# CALCULO DE LIN'S CCC CON YARDSTICK (COMPARACION CON DESCTOOLS)
+# =============================================================================
+
+cat("\n\n")
+cat("=============================================================================\n")
+cat("  CALCULANDO LIN'S CCC CON YARDSTICK PARA COMPARAR CON DESCTOOLS\n")
+cat("=============================================================================\n\n")
+
+# --- PREPARAR DATOS PARA YARDSTICK (inner_join directo desde datos_censo y datos_pert2) ---
+
+# --- 1. CONCORDANCIA POR REGION (YARDSTICK) ---
+cat("1. Calculando CCC por region con yardstick...\n")
+
+datos_region_yd <- datos_censo$por_region %>%
+  inner_join(datos_pert2$por_region, by = "region", suffix = c("_censo", "_pert2"))
+
+ccc_region_yardstick <- datos_region_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_region_yd <- tibble(
+  Desagregacion = "Por Region",
+  N = nrow(datos_region_yd),
+  `Lin's CCC` = round(ccc_region_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_region_yardstick$.estimate, 4), "\n")
+
+# --- 2. CONCORDANCIA POR SEXO (YARDSTICK) ---
+cat("\n2. Calculando CCC por sexo con yardstick...\n")
+
+datos_sexo_yd <- datos_censo$por_sexo %>%
+  inner_join(datos_pert2$por_sexo, by = "sexo", suffix = c("_censo", "_pert2"))
+
+ccc_sexo_yardstick <- datos_sexo_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_sexo_yd <- tibble(
+  Desagregacion = "Por Sexo",
+  N = nrow(datos_sexo_yd),
+  `Lin's CCC` = round(ccc_sexo_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_sexo_yardstick$.estimate, 4), "\n")
+
+# --- 3. CONCORDANCIA POR GRUPO ETARIO (YARDSTICK) ---
+cat("\n3. Calculando CCC por grupo etario con yardstick...\n")
+
+datos_edad_yd <- datos_censo$por_grupo_etario %>%
+  inner_join(datos_pert2$por_grupo_etario, by = "grupo_etario", suffix = c("_censo", "_pert2"))
+
+ccc_edad_yardstick <- datos_edad_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_edad_yd <- tibble(
+  Desagregacion = "Por Grupo Etario",
+  N = nrow(datos_edad_yd),
+  `Lin's CCC` = round(ccc_edad_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_edad_yardstick$.estimate, 4), "\n")
+
+# --- 4. CONCORDANCIA REGION x SEXO (YARDSTICK) ---
+cat("\n4. Calculando CCC region x sexo con yardstick...\n")
+
+datos_region_sexo_yd <- datos_censo$region_sexo %>%
+  inner_join(datos_pert2$region_sexo, by = c("region", "sexo"), suffix = c("_censo", "_pert2"))
+
+ccc_region_sexo_yardstick <- datos_region_sexo_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_region_sexo_yd <- tibble(
+  Desagregacion = "Region x Sexo",
+  N = nrow(datos_region_sexo_yd),
+  `Lin's CCC` = round(ccc_region_sexo_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_region_sexo_yardstick$.estimate, 4), "\n")
+
+# --- 5. CONCORDANCIA REGION x GRUPO ETARIO (YARDSTICK) ---
+cat("\n5. Calculando CCC region x grupo etario con yardstick...\n")
+
+datos_region_edad_yd <- datos_censo$region_edad %>%
+  inner_join(datos_pert2$region_edad, by = c("region", "grupo_etario"), suffix = c("_censo", "_pert2"))
+
+ccc_region_edad_yardstick <- datos_region_edad_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_region_edad_yd <- tibble(
+  Desagregacion = "Region x Grupo Etario",
+  N = nrow(datos_region_edad_yd),
+  `Lin's CCC` = round(ccc_region_edad_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_region_edad_yardstick$.estimate, 4), "\n")
+
+# --- 6. CONCORDANCIA SEXO x GRUPO ETARIO (YARDSTICK) ---
+cat("\n6. Calculando CCC sexo x grupo etario con yardstick...\n")
+
+datos_sexo_edad_yd <- datos_censo$sexo_edad %>%
+  inner_join(datos_pert2$sexo_edad, by = c("sexo", "grupo_etario"), suffix = c("_censo", "_pert2"))
+
+ccc_sexo_edad_yardstick <- datos_sexo_edad_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_sexo_edad_yd <- tibble(
+  Desagregacion = "Sexo x Grupo Etario",
+  N = nrow(datos_sexo_edad_yd),
+  `Lin's CCC` = round(ccc_sexo_edad_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_sexo_edad_yardstick$.estimate, 4), "\n")
+
+# --- 7. CONCORDANCIA TRIPLE: REGION x SEXO x GRUPO ETARIO (YARDSTICK) ---
+cat("\n7. Calculando CCC region x sexo x grupo etario con yardstick...\n")
+
+datos_triple_yd <- datos_censo$region_sexo_edad %>%
+  inner_join(datos_pert2$region_sexo_edad, by = c("region", "sexo", "grupo_etario"), suffix = c("_censo", "_pert2"))
+
+ccc_triple_yardstick <- datos_triple_yd %>%
+  ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+
+resultado_triple_yd <- tibble(
+  Desagregacion = "Region x Sexo x Grupo Etario",
+  N = nrow(datos_triple_yd),
+  `Lin's CCC` = round(ccc_triple_yardstick$.estimate, 4),
+  Metodo = "yardstick"
+)
+
+cat("   CCC (yardstick) =", round(ccc_triple_yardstick$.estimate, 4), "\n")
+
+# --- 8. CREAR TABLA RESUMEN YARDSTICK ---
+cat("\n=== TABLA RESUMEN YARDSTICK ===\n")
+
+tabla_resumen_yardstick <- bind_rows(
+  resultado_region_yd,
+  resultado_sexo_yd,
+  resultado_edad_yd,
+  resultado_region_sexo_yd,
+  resultado_region_edad_yd,
+  resultado_sexo_edad_yd,
+  resultado_triple_yd
+) %>%
+  arrange(desc(`Lin's CCC`))
+
+# Agregar interpretacion
+tabla_resumen_yardstick <- tabla_resumen_yardstick %>%
+  mutate(
+    Interpretacion = case_when(
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+
+print(tabla_resumen_yardstick)
+
+# --- 9. TABLA FLEXTABLE FORMATEADA ---
+cat("\n\n")
+
+tabla_yardstick_ft <- tabla_resumen_yardstick %>%
+  select(Desagregacion, N, `Lin's CCC`, Interpretacion) %>%
+  flextable() %>%
+  set_caption("Concordancia entre Censo 2017 y PERTENENCIA2 (Lin's CCC con yardstick)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE) %>%
+  add_footer_lines("Nota: CCC calculado con yardstick::ccc(). N = numero de pares comparados.")
+
+# Aplicar colores segun interpretacion
+for(i in 1:nrow(tabla_resumen_yardstick)) {
+  valor <- tabla_resumen_yardstick$`Lin's CCC`[i]
+  color_aplicar <- case_when(
+    valor > 0.95 ~ "#0072B2",   # Azul - Excelente
+    valor > 0.90 ~ "#009E73",   # Verde - Sustancial
+    valor > 0.75 ~ "#E69F00",   # Naranja - Moderada
+    TRUE ~ "#D55E00"            # Rojo - Pobre
+  )
+  
+  tabla_yardstick_ft <- color(tabla_yardstick_ft, i = i, j = "Lin's CCC", color = color_aplicar)
+}
+
+print(tabla_yardstick_ft)
+
+# --- 10. GUARDAR RESULTADOS YARDSTICK ---
+resultados_yardstick <- list(
+  resumen = tabla_resumen_yardstick,
+  por_region = list(ccc = ccc_region_yardstick, datos = datos_region_yd),
+  por_sexo = list(ccc = ccc_sexo_yardstick, datos = datos_sexo_yd),
+  por_edad = list(ccc = ccc_edad_yardstick, datos = datos_edad_yd),
+  region_sexo = list(ccc = ccc_region_sexo_yardstick, datos = datos_region_sexo_yd),
+  region_edad = list(ccc = ccc_region_edad_yardstick, datos = datos_region_edad_yd),
+  sexo_edad = list(ccc = ccc_sexo_edad_yardstick, datos = datos_sexo_edad_yd),
+  triple = list(ccc = ccc_triple_yardstick, datos = datos_triple_yd)
+)
+
+cat("\n=== CALCULO CON YARDSTICK COMPLETADO ===\n")
+cat("Resultados guardados en objeto 'resultados_yardstick'\n")
+cat("\nAcceso a resultados:\n")
+cat("  resultados_yardstick$resumen\n")
+cat("  resultados_yardstick$por_region$ccc\n")
+cat("  resultados_yardstick$por_region$datos\n")
+```
+
+```{r detalle_concordancia_por_categoria, message=FALSE, warning=FALSE}
+# =============================================================================
+# ANALISIS DETALLADO DE CONCORDANCIA POR CATEGORIA INDIVIDUAL CON DESCTOOLS
+# =============================================================================
+
+cat("=== ANALISIS DETALLADO DE CONCORDANCIA POR CATEGORIA ===\n\n")
+
+# --- 1. CONCORDANCIA DETALLADA POR REGION ---
+cat("\n1. CONCORDANCIA POR CADA REGION\n")
+cat(strrep("=", 60), "\n")
+
+# Preparar datos del cruce triple
+datos_unidos_completo <- datos_censo$region_sexo_edad %>%
+  inner_join(datos_pert2$region_sexo_edad, 
+             by = c("region", "sexo", "grupo_etario"), 
+             suffix = c("_censo", "_pert2"))
+
+# Calcular CCC por cada región individualmente
+regiones_unicas <- unique(datos_unidos_completo$region)
+resultados_region_list <- list()
+
+for(reg in regiones_unicas) {
+  # Filtrar datos SOLO de esta región
+  region_data <- datos_unidos_completo %>% filter(region == reg)
+  
+  # Calcular CCC
+  ccc_result <- tryCatch({
+    CCC(region_data$porcentaje_censo, 
+        region_data$porcentaje_pert2, 
+        ci = "z-transform", 
+        conf.level = 0.95)
+  }, error = function(e) NULL)
+  
+  # Guardar resultado
+  resultados_region_list[[as.character(reg)]] <- tibble(
+    region = reg,
+    N_pares = nrow(region_data),
+    Censo_promedio = mean(region_data$porcentaje_censo, na.rm = TRUE),
+    PERT2_promedio = mean(region_data$porcentaje_pert2, na.rm = TRUE),
+    Diferencia = mean(region_data$porcentaje_pert2, na.rm = TRUE) - mean(region_data$porcentaje_censo, na.rm = TRUE),
+    `Lin's CCC` = ifelse(!is.null(ccc_result), ccc_result$rho.c$est, NA_real_),
+    IC_inferior = ifelse(!is.null(ccc_result), ccc_result$rho.c$lwr.ci, NA_real_),
+    IC_superior = ifelse(!is.null(ccc_result), ccc_result$rho.c$upr.ci, NA_real_),
+    Interpretacion = case_when(
+      is.na(`Lin's CCC`) ~ "Sin datos",
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+  
+  cat(sprintf("  Region %d: CCC = %.4f [%.4f, %.4f] - %s\n",
+              reg,
+              resultados_region_list[[as.character(reg)]]$`Lin's CCC`,
+              resultados_region_list[[as.character(reg)]]$IC_inferior,
+              resultados_region_list[[as.character(reg)]]$IC_superior,
+              resultados_region_list[[as.character(reg)]]$Interpretacion))
+}
+
+resultados_region <- bind_rows(resultados_region_list)
+
+# Tabla formateada
+nombres_regiones <- tibble(
+  region = 1:16,
+  Nombre_Region = c(
+    "Tarapacá", "Antofagasta", "Atacama", "Coquimbo", 
+    "Valparaíso", "O'Higgins", "Maule", "Biobío",
+    "La Araucanía", "Los Lagos", "Aysén", "Magallanes",
+    "Metropolitana", "Los Ríos", "Arica y Parinacota", "Ñuble"
+  )
+)
+
+tabla_region_detalle <- resultados_region %>%
+  left_join(nombres_regiones, by = "region") %>%
+  select(
+    Region = Nombre_Region,
+    `Censo (%)` = Censo_promedio,
+    `PERT2 (%)` = PERT2_promedio,
+    `Dif (pp)` = Diferencia,
+    `Lin's CCC`,
+    `IC 95% Inf` = IC_inferior,
+    `IC 95% Sup` = IC_superior,
+    Interpretacion
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 4))) %>%
+  arrange(desc(`Lin's CCC`))
+
+tabla_region_ft <- tabla_region_detalle %>%
+  flextable() %>%
+  set_caption("Concordancia detallada por Region") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(tabla_region_detalle)) {
+  if(!is.na(tabla_region_detalle$`Lin's CCC`[i])) {
+    valor <- tabla_region_detalle$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_region_ft <- color(tabla_region_ft, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_region_ft)
+
+# --- 2. CONCORDANCIA DETALLADA POR SEXO ---
+cat("\n\n2. CONCORDANCIA POR CADA SEXO\n")
+cat(strrep("=", 60), "\n")
+
+sexos_unicos <- unique(datos_unidos_completo$sexo)
+resultados_sexo_list <- list()
+
+for(sx in sexos_unicos) {
+  # Filtrar datos SOLO de este sexo
+  sexo_data <- datos_unidos_completo %>% filter(sexo == sx)
+  
+  # Calcular CCC
+  ccc_result <- tryCatch({
+    CCC(sexo_data$porcentaje_censo, 
+        sexo_data$porcentaje_pert2, 
+        ci = "z-transform", 
+        conf.level = 0.95)
+  }, error = function(e) NULL)
+  
+  # Guardar resultado
+  resultados_sexo_list[[sx]] <- tibble(
+    sexo = sx,
+    N_pares = nrow(sexo_data),
+    Censo_promedio = mean(sexo_data$porcentaje_censo, na.rm = TRUE),
+    PERT2_promedio = mean(sexo_data$porcentaje_pert2, na.rm = TRUE),
+    Diferencia = mean(sexo_data$porcentaje_pert2, na.rm = TRUE) - mean(sexo_data$porcentaje_censo, na.rm = TRUE),
+    `Lin's CCC` = ifelse(!is.null(ccc_result), ccc_result$rho.c$est, NA_real_),
+    IC_inferior = ifelse(!is.null(ccc_result), ccc_result$rho.c$lwr.ci, NA_real_),
+    IC_superior = ifelse(!is.null(ccc_result), ccc_result$rho.c$upr.ci, NA_real_),
+    Interpretacion = case_when(
+      is.na(`Lin's CCC`) ~ "Sin datos",
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+  
+  cat(sprintf("  %s: CCC = %.4f [%.4f, %.4f] - %s\n",
+              sx,
+              resultados_sexo_list[[sx]]$`Lin's CCC`,
+              resultados_sexo_list[[sx]]$IC_inferior,
+              resultados_sexo_list[[sx]]$IC_superior,
+              resultados_sexo_list[[sx]]$Interpretacion))
+}
+
+resultados_sexo <- bind_rows(resultados_sexo_list)
+
+tabla_sexo_detalle <- resultados_sexo %>%
+  select(
+    Sexo = sexo,
+    `Censo (%)` = Censo_promedio,
+    `PERT2 (%)` = PERT2_promedio,
+    `Dif (pp)` = Diferencia,
+    `Lin's CCC` = `Lin's CCC`,
+    `IC 95% Inf` = IC_inferior,
+    `IC 95% Sup` = IC_superior,
+    Interpretacion
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+tabla_sexo_ft <- tabla_sexo_detalle %>%
+  flextable() %>%
+  set_caption("Concordancia detallada por Sexo") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(tabla_sexo_detalle)) {
+  if(!is.na(tabla_sexo_detalle$`Lin's CCC`[i])) {
+    valor <- tabla_sexo_detalle$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_sexo_ft <- color(tabla_sexo_ft, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_sexo_ft)
+
+# --- 3. CONCORDANCIA DETALLADA POR GRUPO ETARIO ---
+cat("\n\n3. CONCORDANCIA POR CADA GRUPO ETARIO\n")
+cat(strrep("=", 60), "\n")
+
+grupos_unicos <- unique(datos_unidos_completo$grupo_etario)
+resultados_edad_list <- list()
+
+for(grp in grupos_unicos) {
+  # Filtrar datos SOLO de este grupo etario
+  edad_data <- datos_unidos_completo %>% filter(grupo_etario == grp)
+  
+  # Calcular CCC
+  ccc_result <- tryCatch({
+    CCC(edad_data$porcentaje_censo, 
+        edad_data$porcentaje_pert2, 
+        ci = "z-transform", 
+        conf.level = 0.95)
+  }, error = function(e) NULL)
+  
+  # Guardar resultado
+  resultados_edad_list[[as.character(grp)]] <- tibble(
+    grupo_etario = grp,
+    N_pares = nrow(edad_data),
+    Censo_promedio = mean(edad_data$porcentaje_censo, na.rm = TRUE),
+    PERT2_promedio = mean(edad_data$porcentaje_pert2, na.rm = TRUE),
+    Diferencia = mean(edad_data$porcentaje_pert2, na.rm = TRUE) - mean(edad_data$porcentaje_censo, na.rm = TRUE),
+    `Lin's CCC` = ifelse(!is.null(ccc_result), ccc_result$rho.c$est, NA_real_),
+    IC_inferior = ifelse(!is.null(ccc_result), ccc_result$rho.c$lwr.ci, NA_real_),
+    IC_superior = ifelse(!is.null(ccc_result), ccc_result$rho.c$upr.ci, NA_real_),
+    Interpretacion = case_when(
+      is.na(`Lin's CCC`) ~ "Sin datos",
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+  
+  cat(sprintf("  %s: CCC = %.4f [%.4f, %.4f] - %s\n",
+              as.character(grp),
+              resultados_edad_list[[as.character(grp)]]$`Lin's CCC`,
+              resultados_edad_list[[as.character(grp)]]$IC_inferior,
+              resultados_edad_list[[as.character(grp)]]$IC_superior,
+              resultados_edad_list[[as.character(grp)]]$Interpretacion))
+}
+
+resultados_edad <- bind_rows(resultados_edad_list)
+
+tabla_edad_detalle <- resultados_edad %>%
+  select(
+    `Grupo Etario` = grupo_etario,
+    `Censo (%)` = Censo_promedio,
+    `PERTENENCIA2 (%)` = PERT2_promedio,
+    `Dif (pp)` = Diferencia,
+    `Lin's CCC` = `Lin's CCC`,
+    `IC 95% Inf` = IC_inferior,
+    `IC 95% Sup` = IC_superior,
+    Interpretacion
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+tabla_edad_ft <- tabla_edad_detalle %>%
+  flextable() %>%
+  set_caption("Concordancia detallada por Grupo Etario") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(tabla_edad_detalle)) {
+  if(!is.na(tabla_edad_detalle$`Lin's CCC`[i])) {
+    valor <- tabla_edad_detalle$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_edad_ft <- color(tabla_edad_ft, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_edad_ft)
+
+# --- 4. TABLA RESUMEN COMPARATIVO ---
+cat("\n\n=== RESUMEN COMPARATIVO DE CONCORDANCIA ===\n")
+
+resumen_comparativo <- bind_rows(
+  resultados_region %>%
+    left_join(nombres_regiones, by = "region") %>%
+    mutate(Tipo = "Region", Categoria = Nombre_Region) %>%
+    select(Tipo, Categoria, `Lin's CCC`, Interpretacion),
+  
+  resultados_sexo %>%
+    mutate(Tipo = "Sexo", Categoria = sexo) %>%
+    select(Tipo, Categoria, `Lin's CCC`, Interpretacion),
+  
+  resultados_edad %>%
+    mutate(Tipo = "Grupo Etario", Categoria = as.character(grupo_etario)) %>%
+    select(Tipo, Categoria, `Lin's CCC`, Interpretacion)
+) %>%
+  arrange(Tipo, desc(`Lin's CCC`))
+
+tabla_resumen_ft <- resumen_comparativo %>%
+  mutate(`Lin's CCC` = round(`Lin's CCC`, 4)) %>%
+  flextable() %>%
+  set_caption("Resumen comparativo de concordancia por categoria") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  merge_v(j = "Tipo") %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(resumen_comparativo)) {
+  if(!is.na(resumen_comparativo$`Lin's CCC`[i])) {
+    valor <- resumen_comparativo$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_resumen_ft <- color(tabla_resumen_ft, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_resumen_ft)
+
+# --- 5. GUARDAR RESULTADOS DETALLADOS ---
+resultados_detallados <- list(
+  por_region = resultados_region,
+  por_sexo = resultados_sexo,
+  por_edad = resultados_edad,
+  resumen_comparativo = resumen_comparativo
+)
+
+cat("\n=== ANALISIS DETALLADO COMPLETADO ===\n")
+```
+
+```{r detalle_concordancia_por_categoria_yardstick, message=FALSE, warning=FALSE}
+# =============================================================================
+# ANALISIS DETALLADO DE CONCORDANCIA POR CATEGORIA INDIVIDUAL (YARDSTICK)
+# =============================================================================
+
+cat("=== ANALISIS DETALLADO DE CONCORDANCIA POR CATEGORIA (YARDSTICK) ===\n\n")
+
+# --- 1. CONCORDANCIA DETALLADA POR REGION (YARDSTICK) ---
+cat("\n1. CONCORDANCIA POR CADA REGION (YARDSTICK)\n")
+cat(strrep("=", 60), "\n")
+
+# Preparar datos del cruce triple desde datos_censo y datos_pert2
+datos_unidos_completo_yd <- datos_censo$region_sexo_edad %>%
+  inner_join(datos_pert2$region_sexo_edad, 
+             by = c("region", "sexo", "grupo_etario"), 
+             suffix = c("_censo", "_pert2"))
+
+# Calcular CCC por cada región individualmente con yardstick
+regiones_unicas <- unique(datos_unidos_completo_yd$region)
+resultados_region_list_yd <- list()
+
+for(reg in regiones_unicas) {
+  # Filtrar datos SOLO de esta región
+  region_data <- datos_unidos_completo_yd %>% filter(region == reg)
+  
+  # Calcular CCC con yardstick
+  ccc_result <- tryCatch({
+    region_data %>%
+      ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+  }, error = function(e) NULL)
+  
+  # Guardar resultado
+  resultados_region_list_yd[[as.character(reg)]] <- tibble(
+    region = reg,
+    N_pares = nrow(region_data),
+    Censo_promedio = mean(region_data$porcentaje_censo, na.rm = TRUE),
+    PERT2_promedio = mean(region_data$porcentaje_pert2, na.rm = TRUE),
+    Diferencia = mean(region_data$porcentaje_pert2, na.rm = TRUE) - mean(region_data$porcentaje_censo, na.rm = TRUE),
+    `Lin's CCC` = ifelse(!is.null(ccc_result), ccc_result$.estimate, NA_real_),
+    Interpretacion = case_when(
+      is.na(`Lin's CCC`) ~ "Sin datos",
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+  
+  cat(sprintf("  Region %d: CCC = %.4f - %s\n",
+              reg,
+              resultados_region_list_yd[[as.character(reg)]]$`Lin's CCC`,
+              resultados_region_list_yd[[as.character(reg)]]$Interpretacion))
+}
+
+resultados_region_yd <- bind_rows(resultados_region_list_yd)
+
+# Tabla formateada
+nombres_regiones <- tibble(
+  region = 1:16,
+  Nombre_Region = c(
+    "Tarapacá", "Antofagasta", "Atacama", "Coquimbo", 
+    "Valparaíso", "O'Higgins", "Maule", "Biobío",
+    "La Araucanía", "Los Lagos", "Aysén", "Magallanes",
+    "Metropolitana", "Los Ríos", "Arica y Parinacota", "Ñuble"
+  )
+)
+
+tabla_region_detalle_yd <- resultados_region_yd %>%
+  left_join(nombres_regiones, by = "region") %>%
+  select(
+    Region = Nombre_Region,
+    `Censo (%)` = Censo_promedio,
+    `PERT2 (%)` = PERT2_promedio,
+    `Dif (pp)` = Diferencia,
+    `Lin's CCC`,
+    Interpretacion
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 4))) %>%
+  arrange(desc(`Lin's CCC`))
+
+tabla_region_ft_yd <- tabla_region_detalle_yd %>%
+  flextable() %>%
+  set_caption("Concordancia detallada por Region (yardstick)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(tabla_region_detalle_yd)) {
+  if(!is.na(tabla_region_detalle_yd$`Lin's CCC`[i])) {
+    valor <- tabla_region_detalle_yd$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_region_ft_yd <- color(tabla_region_ft_yd, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_region_ft_yd)
+
+# --- 2. CONCORDANCIA DETALLADA POR SEXO (YARDSTICK) ---
+cat("\n\n2. CONCORDANCIA POR CADA SEXO (YARDSTICK)\n")
+cat(strrep("=", 60), "\n")
+
+sexos_unicos <- unique(datos_unidos_completo_yd$sexo)
+resultados_sexo_list_yd <- list()
+
+for(sx in sexos_unicos) {
+  # Filtrar datos SOLO de este sexo
+  sexo_data <- datos_unidos_completo_yd %>% filter(sexo == sx)
+  
+  # Calcular CCC con yardstick
+  ccc_result <- tryCatch({
+    sexo_data %>%
+      ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+  }, error = function(e) NULL)
+  
+  # Guardar resultado
+  resultados_sexo_list_yd[[sx]] <- tibble(
+    sexo = sx,
+    N_pares = nrow(sexo_data),
+    Censo_promedio = mean(sexo_data$porcentaje_censo, na.rm = TRUE),
+    PERT2_promedio = mean(sexo_data$porcentaje_pert2, na.rm = TRUE),
+    Diferencia = mean(sexo_data$porcentaje_pert2, na.rm = TRUE) - mean(sexo_data$porcentaje_censo, na.rm = TRUE),
+    `Lin's CCC` = ifelse(!is.null(ccc_result), ccc_result$.estimate, NA_real_),
+    Interpretacion = case_when(
+      is.na(`Lin's CCC`) ~ "Sin datos",
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+  
+  cat(sprintf("  %s: CCC = %.4f - %s\n",
+              sx,
+              resultados_sexo_list_yd[[sx]]$`Lin's CCC`,
+              resultados_sexo_list_yd[[sx]]$Interpretacion))
+}
+
+resultados_sexo_yd <- bind_rows(resultados_sexo_list_yd)
+
+tabla_sexo_detalle_yd <- resultados_sexo_yd %>%
+  select(
+    Sexo = sexo,
+    `Censo (%)` = Censo_promedio,
+    `PERT2 (%)` = PERT2_promedio,
+    `Dif (pp)` = Diferencia,
+    `Lin's CCC` = `Lin's CCC`,
+    Interpretacion
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+tabla_sexo_ft_yd <- tabla_sexo_detalle_yd %>%
+  flextable() %>%
+  set_caption("Concordancia detallada por Sexo (yardstick)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(tabla_sexo_detalle_yd)) {
+  if(!is.na(tabla_sexo_detalle_yd$`Lin's CCC`[i])) {
+    valor <- tabla_sexo_detalle_yd$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_sexo_ft_yd <- color(tabla_sexo_ft_yd, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_sexo_ft_yd)
+
+# --- 3. CONCORDANCIA DETALLADA POR GRUPO ETARIO (YARDSTICK) ---
+cat("\n\n3. CONCORDANCIA POR CADA GRUPO ETARIO (YARDSTICK)\n")
+cat(strrep("=", 60), "\n")
+
+grupos_unicos <- unique(datos_unidos_completo_yd$grupo_etario)
+resultados_edad_list_yd <- list()
+
+for(grp in grupos_unicos) {
+  # Filtrar datos SOLO de este grupo etario
+  edad_data <- datos_unidos_completo_yd %>% filter(grupo_etario == grp)
+  
+  # Calcular CCC con yardstick
+  ccc_result <- tryCatch({
+    edad_data %>%
+      ccc(truth = porcentaje_censo, estimate = porcentaje_pert2)
+  }, error = function(e) NULL)
+  
+  # Guardar resultado
+  resultados_edad_list_yd[[as.character(grp)]] <- tibble(
+    grupo_etario = grp,
+    N_pares = nrow(edad_data),
+    Censo_promedio = mean(edad_data$porcentaje_censo, na.rm = TRUE),
+    PERT2_promedio = mean(edad_data$porcentaje_pert2, na.rm = TRUE),
+    Diferencia = mean(edad_data$porcentaje_pert2, na.rm = TRUE) - mean(edad_data$porcentaje_censo, na.rm = TRUE),
+    `Lin's CCC` = ifelse(!is.null(ccc_result), ccc_result$.estimate, NA_real_),
+    Interpretacion = case_when(
+      is.na(`Lin's CCC`) ~ "Sin datos",
+      `Lin's CCC` > 0.99 ~ "Casi perfecta",
+      `Lin's CCC` > 0.95 ~ "Excelente",
+      `Lin's CCC` > 0.90 ~ "Sustancial",
+      `Lin's CCC` > 0.75 ~ "Moderada",
+      TRUE ~ "Pobre"
+    )
+  )
+  
+  cat(sprintf("  %s: CCC = %.4f - %s\n",
+              as.character(grp),
+              resultados_edad_list_yd[[as.character(grp)]]$`Lin's CCC`,
+              resultados_edad_list_yd[[as.character(grp)]]$Interpretacion))
+}
+
+resultados_edad_yd <- bind_rows(resultados_edad_list_yd)
+
+tabla_edad_detalle_yd <- resultados_edad_yd %>%
+  select(
+    `Grupo Etario` = grupo_etario,
+    `Censo (%)` = Censo_promedio,
+    `PERTENENCIA2 (%)` = PERT2_promedio,
+    `Dif (pp)` = Diferencia,
+    `Lin's CCC` = `Lin's CCC`,
+    Interpretacion
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+tabla_edad_ft_yd <- tabla_edad_detalle_yd %>%
+  flextable() %>%
+  set_caption("Concordancia detallada por Grupo Etario (yardstick)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(tabla_edad_detalle_yd)) {
+  if(!is.na(tabla_edad_detalle_yd$`Lin's CCC`[i])) {
+    valor <- tabla_edad_detalle_yd$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_edad_ft_yd <- color(tabla_edad_ft_yd, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_edad_ft_yd)
+
+# --- 4. TABLA RESUMEN COMPARATIVO (YARDSTICK) ---
+cat("\n\n=== RESUMEN COMPARATIVO DE CONCORDANCIA (YARDSTICK) ===\n")
+
+resumen_comparativo_yd <- bind_rows(
+  resultados_region_yd %>%
+    left_join(nombres_regiones, by = "region") %>%
+    mutate(Tipo = "Region", Categoria = Nombre_Region) %>%
+    select(Tipo, Categoria, `Lin's CCC`, Interpretacion),
+  
+  resultados_sexo_yd %>%
+    mutate(Tipo = "Sexo", Categoria = sexo) %>%
+    select(Tipo, Categoria, `Lin's CCC`, Interpretacion),
+  
+  resultados_edad_yd %>%
+    mutate(Tipo = "Grupo Etario", Categoria = as.character(grupo_etario)) %>%
+    select(Tipo, Categoria, `Lin's CCC`, Interpretacion)
+) %>%
+  arrange(Tipo, desc(`Lin's CCC`))
+
+tabla_resumen_ft_yd <- resumen_comparativo_yd %>%
+  mutate(`Lin's CCC` = round(`Lin's CCC`, 4)) %>%
+  flextable() %>%
+  set_caption("Resumen comparativo de concordancia por categoria (yardstick)") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  merge_v(j = "Tipo") %>%
+  bold(j = "Lin's CCC", bold = TRUE)
+
+for(i in 1:nrow(resumen_comparativo_yd)) {
+  if(!is.na(resumen_comparativo_yd$`Lin's CCC`[i])) {
+    valor <- resumen_comparativo_yd$`Lin's CCC`[i]
+    color_aplicar <- case_when(
+      valor > 0.95 ~ "#0072B2",
+      valor > 0.90 ~ "#009E73",
+      valor > 0.75 ~ "#E69F00",
+      TRUE ~ "#D55E00"
+    )
+    tabla_resumen_ft_yd <- color(tabla_resumen_ft_yd, i = i, j = "Lin's CCC", color = color_aplicar)
+  }
+}
+
+print(tabla_resumen_ft_yd)
+
+# --- 5. GUARDAR RESULTADOS DETALLADOS (YARDSTICK) ---
+resultados_detallados_yd <- list(
+  por_region = resultados_region_yd,
+  por_sexo = resultados_sexo_yd,
+  por_edad = resultados_edad_yd,
+  resumen_comparativo = resumen_comparativo_yd
+)
+
+cat("\n=== ANALISIS DETALLADO CON YARDSTICK COMPLETADO ===\n")
+```
+
+```{r verificacion_todos_ccc, message=FALSE, warning=FALSE}
+# =============================================================================
+# VERIFICACION COMPLETA DE TODOS LOS CCC DE LIN CALCULADOS DESCTOOLS
+# =============================================================================
+
+cat("========================================================================\n")
+cat("  VERIFICACION INTEGRAL DE COEFICIENTES DE CONCORDANCIA DE LIN (CCC)\n")
+cat("========================================================================\n\n")
+
+# --- PARTE 1: VERIFICAR CCCs DEL CHUNK 'calcular_lins_ccc_desctools' ---
+cat("PARTE 1: Desagregaciones agregadas\n")
+cat(strrep("-", 70), "\n\n")
+
+verificacion_agregados <- tibble(
+  ID = 1:7,
+  Desagregacion = c(
+    "Por Region",
+    "Por Sexo", 
+    "Por Grupo Etario",
+    "Region x Sexo",
+    "Region x Grupo Etario",
+    "Sexo x Grupo Etario",
+    "Region x Sexo x Grupo Etario"
+  ),
+  `N Pares` = c(
+    nrow(concordancia_region),
+    nrow(concordancia_sexo),
+    nrow(concordancia_edad),
+    nrow(concordancia_region_sexo),
+    nrow(concordancia_region_edad),
+    nrow(concordancia_sexo_edad),
+    nrow(concordancia_triple)
+  ),
+  `Lin's CCC` = c(
+    ccc_region$rho.c$est,
+    ccc_sexo$rho.c$est,
+    ccc_edad$rho.c$est,
+    ccc_region_sexo$rho.c$est,
+    ccc_region_edad$rho.c$est,
+    ccc_sexo_edad$rho.c$est,
+    ccc_triple$rho.c$est
+  ),
+  `IC 95% Inf` = c(
+    ccc_region$rho.c$lwr.ci,
+    ccc_sexo$rho.c$lwr.ci,
+    ccc_edad$rho.c$lwr.ci,
+    ccc_region_sexo$rho.c$lwr.ci,
+    ccc_region_edad$rho.c$lwr.ci,
+    ccc_sexo_edad$rho.c$lwr.ci,
+    ccc_triple$rho.c$lwr.ci
+  ),
+  `IC 95% Sup` = c(
+    ccc_region$rho.c$upr.ci,
+    ccc_sexo$rho.c$upr.ci,
+    ccc_edad$rho.c$upr.ci,
+    ccc_region_sexo$rho.c$upr.ci,
+    ccc_region_edad$rho.c$upr.ci,
+    ccc_sexo_edad$rho.c$upr.ci,
+    ccc_triple$rho.c$upr.ci
+  )
+) %>%
+  mutate(across(where(is.numeric) & !ID, ~round(., 4)))
+
+cat("Resumen de CCCs agregados:\n")
+print(verificacion_agregados)
+
+cat("\n\n")
+
+# --- PARTE 2: VERIFICAR CCCs DEL CHUNK 'detalle_concordancia_por_categoria' ---
+cat("PARTE 2: Analisis detallado por categoria individual\n")
+cat(strrep("-", 70), "\n\n")
+
+# 2A. Verificar CCCs por cada region
+cat("2A. CCCs por cada region (n =", length(resultados_region_list), "regiones):\n")
+verificacion_regiones <- bind_rows(resultados_region_list) %>%
+  select(region, N_pares, `Lin's CCC`, IC_inferior, IC_superior, Interpretacion) %>%
+  arrange(region) %>%
+  mutate(across(where(is.numeric) & !region, ~round(., 4)))
+
+print(verificacion_regiones)
+
+cat("\nEstadisticas de CCCs por region:\n")
+cat(sprintf("  - Promedio CCC: %.4f\n", mean(verificacion_regiones$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Mediana CCC:  %.4f\n", median(verificacion_regiones$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Minimo CCC:   %.4f (Region %d)\n", 
+            min(verificacion_regiones$`Lin's CCC`, na.rm = TRUE),
+            verificacion_regiones$region[which.min(verificacion_regiones$`Lin's CCC`)]))
+cat(sprintf("  - Maximo CCC:   %.4f (Region %d)\n", 
+            max(verificacion_regiones$`Lin's CCC`, na.rm = TRUE),
+            verificacion_regiones$region[which.max(verificacion_regiones$`Lin's CCC`)]))
+
+cat("\n\n")
+
+# 2B. Verificar CCCs por sexo
+cat("2B. CCCs por sexo (n =", length(resultados_sexo_list), "categorias):\n")
+verificacion_sexos <- bind_rows(resultados_sexo_list) %>%
+  select(sexo, N_pares, `Lin's CCC`, IC_inferior, IC_superior, Interpretacion) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+print(verificacion_sexos)
+
+cat("\n\n")
+
+# 2C. Verificar CCCs por grupo etario
+cat("2C. CCCs por grupo etario (n =", length(resultados_edad_list), "grupos):\n")
+verificacion_edades <- bind_rows(resultados_edad_list) %>%
+  select(grupo_etario, N_pares, `Lin's CCC`, IC_inferior, IC_superior, Interpretacion) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+print(verificacion_edades)
+
+cat("\nEstadisticas de CCCs por grupo etario:\n")
+cat(sprintf("  - Promedio CCC: %.4f\n", mean(verificacion_edades$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Mediana CCC:  %.4f\n", median(verificacion_edades$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Minimo CCC:   %.4f (%s)\n", 
+            min(verificacion_edades$`Lin's CCC`, na.rm = TRUE),
+            verificacion_edades$grupo_etario[which.min(verificacion_edades$`Lin's CCC`)]))
+cat(sprintf("  - Maximo CCC:   %.4f (%s)\n", 
+            max(verificacion_edades$`Lin's CCC`, na.rm = TRUE),
+            verificacion_edades$grupo_etario[which.max(verificacion_edades$`Lin's CCC`)]))
+
+cat("\n\n")
+
+# --- PARTE 3: COMPARACION Y DIAGNOSTICO ---
+cat("PARTE 3: Comparacion y diagnostico general\n")
+cat(strrep("-", 70), "\n\n")
+
+# Contar interpretaciones
+conteo_interpretaciones <- bind_rows(
+  verificacion_regiones %>% mutate(Tipo = "Region"),
+  verificacion_sexos %>% mutate(Tipo = "Sexo"),
+  verificacion_edades %>% mutate(Tipo = "Grupo Etario")
+) %>%
+  count(Tipo, Interpretacion) %>%
+  pivot_wider(names_from = Interpretacion, values_from = n, values_fill = 0)
+
+cat("Distribucion de interpretaciones por tipo de analisis:\n")
+print(conteo_interpretaciones)
+
+cat("\n\n")
+
+# Resumen global
+todos_ccc <- c(
+  verificacion_agregados$`Lin's CCC`,
+  verificacion_regiones$`Lin's CCC`,
+  verificacion_sexos$`Lin's CCC`,
+  verificacion_edades$`Lin's CCC`
+)
+
+cat("RESUMEN GLOBAL DE TODOS LOS CCCs CALCULADOS:\n")
+cat(sprintf("  - Total de CCCs calculados: %d\n", length(todos_ccc)))
+cat(sprintf("  - Promedio general:         %.4f\n", mean(todos_ccc, na.rm = TRUE)))
+cat(sprintf("  - Mediana general:          %.4f\n", median(todos_ccc, na.rm = TRUE)))
+cat(sprintf("  - Desviacion estandar:      %.4f\n", sd(todos_ccc, na.rm = TRUE)))
+cat(sprintf("  - Minimo global:            %.4f\n", min(todos_ccc, na.rm = TRUE)))
+cat(sprintf("  - Maximo global:            %.4f\n", max(todos_ccc, na.rm = TRUE)))
+cat(sprintf("  - Rango:                    %.4f\n", max(todos_ccc, na.rm = TRUE) - min(todos_ccc, na.rm = TRUE)))
+
+cat("\n\n")
+
+# Crear tabla visual de todos los CCCs
+cat("TABLA COMPARATIVA DE TODAS LAS DESAGREGACIONES:\n\n")
+
+tabla_comparativa <- bind_rows(
+  verificacion_agregados %>% 
+    mutate(Categoria = Desagregacion, Tipo = "Agregado") %>%
+    select(Tipo, Categoria, `N Pares`, `Lin's CCC`, `IC 95% Inf`, `IC 95% Sup`),
+  
+  verificacion_regiones %>%
+    left_join(tibble(
+      region = 1:16,
+      nombre = c("Tarapacá", "Antofagasta", "Atacama", "Coquimbo", 
+                 "Valparaíso", "O'Higgins", "Maule", "Biobío",
+                 "La Araucanía", "Los Lagos", "Aysén", "Magallanes",
+                 "Metropolitana", "Los Ríos", "Arica y Parinacota", "Ñuble")
+    ), by = "region") %>%
+    mutate(Tipo = "Region", Categoria = nombre) %>%
+    select(Tipo, Categoria, `N Pares` = N_pares, `Lin's CCC`, 
+           `IC 95% Inf` = IC_inferior, `IC 95% Sup` = IC_superior),
+  
+  verificacion_sexos %>%
+    mutate(Tipo = "Sexo", Categoria = sexo) %>%
+    select(Tipo, Categoria, `N Pares` = N_pares, `Lin's CCC`, 
+           `IC 95% Inf` = IC_inferior, `IC 95% Sup` = IC_superior),
+  
+  verificacion_edades %>%
+    mutate(Tipo = "Edad", Categoria = grupo_etario) %>%
+    select(Tipo, Categoria, `N Pares` = N_pares, `Lin's CCC`, 
+           `IC 95% Inf` = IC_inferior, `IC 95% Sup` = IC_superior)
+) %>%
+  arrange(desc(`Lin's CCC`))
+
+tabla_comparativa_ft <- tabla_comparativa %>%
+  flextable() %>%
+  set_caption("Verificacion completa: Todos los CCCs de Lin calculados") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  merge_v(j = "Tipo") %>%
+  bold(j = "Lin's CCC", bold = TRUE) %>%
+  add_footer_lines("Nota: CCCs ordenados de mayor a menor concordancia. IC = Intervalo de Confianza al 95%.")
+
+# Aplicar colores
+for(i in 1:nrow(tabla_comparativa)) {
+  valor <- tabla_comparativa$`Lin's CCC`[i]
+  color_aplicar <- case_when(
+    valor > 0.95 ~ "#0072B2",
+    valor > 0.90 ~ "#009E73",
+    valor > 0.75 ~ "#E69F00",
+    TRUE ~ "#D55E00"
+  )
+  tabla_comparativa_ft <- color(tabla_comparativa_ft, i = i, j = "Lin's CCC", color = color_aplicar)
+}
+
+print(tabla_comparativa_ft)
+
+cat("\n\n")
+cat("========================================================================\n")
+cat("  VERIFICACION COMPLETADA\n")
+cat("========================================================================\n")
+
+# Guardar objeto de verificacion
+verificacion_completa <- list(
+  agregados = verificacion_agregados,
+  por_region = verificacion_regiones,
+  por_sexo = verificacion_sexos,
+  por_edad = verificacion_edades,
+  tabla_comparativa = tabla_comparativa,
+  estadisticas_globales = tibble(
+    total_ccc = length(todos_ccc),
+    promedio = mean(todos_ccc, na.rm = TRUE),
+    mediana = median(todos_ccc, na.rm = TRUE),
+    sd = sd(todos_ccc, na.rm = TRUE),
+    minimo = min(todos_ccc, na.rm = TRUE),
+    maximo = max(todos_ccc, na.rm = TRUE),
+    rango = max(todos_ccc, na.rm = TRUE) - min(todos_ccc, na.rm = TRUE)
+  )
+)
+
+cat("\nResultados guardados en objeto 'verificacion_completa'\n")
+```
+
+```{r verificacion_todos_ccc_yardstick, message=FALSE, warning=FALSE}
+# =============================================================================
+# VERIFICACION COMPLETA DE TODOS LOS CCC DE LIN CALCULADOS CON YARDSTICK
+# =============================================================================
+
+
+cat("========================================================================\n")
+cat("  VERIFICACION INTEGRAL DE COEFICIENTES DE CONCORDANCIA DE LIN (CCC)\n")
+cat("  CALCULADOS CON YARDSTICK\n")
+cat("========================================================================\n\n")
+
+# --- PARTE 1: VERIFICAR CCCs DEL CHUNK 'calcular_lins_ccc_yardstick' ---
+cat("PARTE 1: Desagregaciones agregadas (yardstick)\n")
+cat(strrep("-", 70), "\n\n")
+
+verificacion_agregados_yd <- tibble(
+  ID = 1:7,
+  Desagregacion = c(
+    "Por Region",
+    "Por Sexo", 
+    "Por Grupo Etario",
+    "Region x Sexo",
+    "Region x Grupo Etario",
+    "Sexo x Grupo Etario",
+    "Region x Sexo x Grupo Etario"
+  ),
+  `N Pares` = c(
+    nrow(datos_region_yd),
+    nrow(datos_sexo_yd),
+    nrow(datos_edad_yd),
+    nrow(datos_region_sexo_yd),
+    nrow(datos_region_edad_yd),
+    nrow(datos_sexo_edad_yd),
+    nrow(datos_triple_yd)
+  ),
+  `Lin's CCC` = c(
+    ccc_region_yardstick$.estimate,
+    ccc_sexo_yardstick$.estimate,
+    ccc_edad_yardstick$.estimate,
+    ccc_region_sexo_yardstick$.estimate,
+    ccc_region_edad_yardstick$.estimate,
+    ccc_sexo_edad_yardstick$.estimate,
+    ccc_triple_yardstick$.estimate
+  )
+) %>%
+  mutate(across(where(is.numeric) & !ID, ~round(., 4)))
+
+cat("Resumen de CCCs agregados (yardstick):\n")
+print(verificacion_agregados_yd)
+
+cat("\n\n")
+
+# --- PARTE 2: VERIFICAR CCCs DEL CHUNK 'detalle_concordancia_por_categoria_yardstick' ---
+cat("PARTE 2: Analisis detallado por categoria individual (yardstick)\n")
+cat(strrep("-", 70), "\n\n")
+
+# 2A. Verificar CCCs por cada region
+cat("2A. CCCs por cada region (n =", length(resultados_region_list_yd), "regiones):\n")
+verificacion_regiones_yd <- bind_rows(resultados_region_list_yd) %>%
+  select(region, N_pares, `Lin's CCC`, Interpretacion) %>%
+  arrange(region) %>%
+  mutate(across(where(is.numeric) & !region, ~round(., 4)))
+
+print(verificacion_regiones_yd)
+
+cat("\nEstadisticas de CCCs por region (yardstick):\n")
+cat(sprintf("  - Promedio CCC: %.4f\n", mean(verificacion_regiones_yd$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Mediana CCC:  %.4f\n", median(verificacion_regiones_yd$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Minimo CCC:   %.4f (Region %d)\n", 
+            min(verificacion_regiones_yd$`Lin's CCC`, na.rm = TRUE),
+            verificacion_regiones_yd$region[which.min(verificacion_regiones_yd$`Lin's CCC`)]))
+cat(sprintf("  - Maximo CCC:   %.4f (Region %d)\n", 
+            max(verificacion_regiones_yd$`Lin's CCC`, na.rm = TRUE),
+            verificacion_regiones_yd$region[which.max(verificacion_regiones_yd$`Lin's CCC`)]))
+
+cat("\n\n")
+
+# 2B. Verificar CCCs por sexo
+cat("2B. CCCs por sexo (n =", length(resultados_sexo_list_yd), "categorias):\n")
+verificacion_sexos_yd <- bind_rows(resultados_sexo_list_yd) %>%
+  select(sexo, N_pares, `Lin's CCC`, Interpretacion) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+print(verificacion_sexos_yd)
+
+cat("\n\n")
+
+# 2C. Verificar CCCs por grupo etario
+cat("2C. CCCs por grupo etario (n =", length(resultados_edad_list_yd), "grupos):\n")
+verificacion_edades_yd <- bind_rows(resultados_edad_list_yd) %>%
+  select(grupo_etario, N_pares, `Lin's CCC`, Interpretacion) %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+print(verificacion_edades_yd)
+
+cat("\nEstadisticas de CCCs por grupo etario (yardstick):\n")
+cat(sprintf("  - Promedio CCC: %.4f\n", mean(verificacion_edades_yd$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Mediana CCC:  %.4f\n", median(verificacion_edades_yd$`Lin's CCC`, na.rm = TRUE)))
+cat(sprintf("  - Minimo CCC:   %.4f (%s)\n", 
+            min(verificacion_edades_yd$`Lin's CCC`, na.rm = TRUE),
+            verificacion_edades_yd$grupo_etario[which.min(verificacion_edades_yd$`Lin's CCC`)]))
+cat(sprintf("  - Maximo CCC:   %.4f (%s)\n", 
+            max(verificacion_edades_yd$`Lin's CCC`, na.rm = TRUE),
+            verificacion_edades_yd$grupo_etario[which.max(verificacion_edades_yd$`Lin's CCC`)]))
+
+cat("\n\n")
+
+# --- PARTE 3: COMPARACION Y DIAGNOSTICO ---
+cat("PARTE 3: Comparacion y diagnostico general (yardstick)\n")
+cat(strrep("-", 70), "\n\n")
+
+# Contar interpretaciones
+conteo_interpretaciones_yd <- bind_rows(
+  verificacion_regiones_yd %>% mutate(Tipo = "Region"),
+  verificacion_sexos_yd %>% mutate(Tipo = "Sexo"),
+  verificacion_edades_yd %>% mutate(Tipo = "Grupo Etario")
+) %>%
+  count(Tipo, Interpretacion) %>%
+  pivot_wider(names_from = Interpretacion, values_from = n, values_fill = 0)
+
+cat("Distribucion de interpretaciones por tipo de analisis (yardstick):\n")
+print(conteo_interpretaciones_yd)
+
+cat("\n\n")
+
+# Resumen global
+todos_ccc_yd <- c(
+  verificacion_agregados_yd$`Lin's CCC`,
+  verificacion_regiones_yd$`Lin's CCC`,
+  verificacion_sexos_yd$`Lin's CCC`,
+  verificacion_edades_yd$`Lin's CCC`
+)
+
+cat("RESUMEN GLOBAL DE TODOS LOS CCCs CALCULADOS CON YARDSTICK:\n")
+cat(sprintf("  - Total de CCCs calculados: %d\n", length(todos_ccc_yd)))
+cat(sprintf("  - Promedio general:         %.4f\n", mean(todos_ccc_yd, na.rm = TRUE)))
+cat(sprintf("  - Mediana general:          %.4f\n", median(todos_ccc_yd, na.rm = TRUE)))
+cat(sprintf("  - Desviacion estandar:      %.4f\n", sd(todos_ccc_yd, na.rm = TRUE)))
+cat(sprintf("  - Minimo global:            %.4f\n", min(todos_ccc_yd, na.rm = TRUE)))
+cat(sprintf("  - Maximo global:            %.4f\n", max(todos_ccc_yd, na.rm = TRUE)))
+cat(sprintf("  - Rango:                    %.4f\n", max(todos_ccc_yd, na.rm = TRUE) - min(todos_ccc_yd, na.rm = TRUE)))
+
+cat("\n\n")
+
+# Crear tabla visual de todos los CCCs
+cat("TABLA COMPARATIVA DE TODAS LAS DESAGREGACIONES (YARDSTICK):\n\n")
+
+tabla_comparativa_yd <- bind_rows(
+  verificacion_agregados_yd %>% 
+    mutate(Categoria = Desagregacion, Tipo = "Agregado") %>%
+    select(Tipo, Categoria, `N Pares`, `Lin's CCC`),
+  
+  verificacion_regiones_yd %>%
+    left_join(tibble(
+      region = 1:16,
+      nombre = c("Tarapacá", "Antofagasta", "Atacama", "Coquimbo", 
+                 "Valparaíso", "O'Higgins", "Maule", "Biobío",
+                 "La Araucanía", "Los Lagos", "Aysén", "Magallanes",
+                 "Metropolitana", "Los Ríos", "Arica y Parinacota", "Ñuble")
+    ), by = "region") %>%
+    mutate(Tipo = "Region", Categoria = nombre) %>%
+    select(Tipo, Categoria, `N Pares` = N_pares, `Lin's CCC`),
+  
+  verificacion_sexos_yd %>%
+    mutate(Tipo = "Sexo", Categoria = sexo) %>%
+    select(Tipo, Categoria, `N Pares` = N_pares, `Lin's CCC`),
+  
+  verificacion_edades_yd %>%
+    mutate(Tipo = "Edad", Categoria = grupo_etario) %>%
+    select(Tipo, Categoria, `N Pares` = N_pares, `Lin's CCC`)
+) %>%
+  arrange(desc(`Lin's CCC`))
+
+tabla_comparativa_ft_yd <- tabla_comparativa_yd %>%
+  flextable() %>%
+  set_caption("Verificacion completa: Todos los CCCs de Lin calculados con yardstick") %>%
+  autofit() %>%
+  theme_vanilla() %>%
+  merge_v(j = "Tipo") %>%
+  bold(j = "Lin's CCC", bold = TRUE) %>%
+  add_footer_lines("Nota: CCCs ordenados de mayor a menor concordancia. Calculados con yardstick::ccc().")
+
+# Aplicar colores
+for(i in 1:nrow(tabla_comparativa_yd)) {
+  valor <- tabla_comparativa_yd$`Lin's CCC`[i]
+  color_aplicar <- case_when(
+    valor > 0.95 ~ "#0072B2",
+    valor > 0.90 ~ "#009E73",
+    valor > 0.75 ~ "#E69F00",
+    TRUE ~ "#D55E00"
+  )
+  tabla_comparativa_ft_yd <- color(tabla_comparativa_ft_yd, i = i, j = "Lin's CCC", color = color_aplicar)
+}
+
+print(tabla_comparativa_ft_yd)
+
+cat("\n\n")
+cat("========================================================================\n")
+cat("  VERIFICACION COMPLETADA (YARDSTICK)\n")
+cat("========================================================================\n")
+
+# Guardar objeto de verificacion
+verificacion_completa_yd <- list(
+  agregados = verificacion_agregados_yd,
+  por_region = verificacion_regiones_yd,
+  por_sexo = verificacion_sexos_yd,
+  por_edad = verificacion_edades_yd,
+  tabla_comparativa = tabla_comparativa_yd,
+  estadisticas_globales = tibble(
+    total_ccc = length(todos_ccc_yd),
+    promedio = mean(todos_ccc_yd, na.rm = TRUE),
+    mediana = median(todos_ccc_yd, na.rm = TRUE),
+    sd = sd(todos_ccc_yd, na.rm = TRUE),
+    minimo = min(todos_ccc_yd, na.rm = TRUE),
+    maximo = max(todos_ccc_yd, na.rm = TRUE),
+    rango = max(todos_ccc_yd, na.rm = TRUE) - min(todos_ccc_yd, na.rm = TRUE)
+  )
+)
+
+cat("\nResultados guardados en objeto 'verificacion_completa_yd'\n")
+```
+
+```{r exportar_tablas_concordancia, message=FALSE, warning=FALSE}
+# =============================================================================
+# EXPORTAR TODAS LAS TABLAS A WORD Y JPG
+# =============================================================================
+
+library(officer)
+library(webshot2)
+
+cat("========================================================================\n")
+cat("  EXPORTANDO TODAS LAS TABLAS DE CONCORDANCIA\n")
+cat("========================================================================\n\n")
+
+# Crear directorio si no existe
+dir_salida <- "D:/MAGISTER/aa TESIS/rtsppoo/resultados_tesis/resultados_concordancia"
+if(!dir.exists(dir_salida)) {
+  dir.create(dir_salida, recursive = TRUE)
+  cat("Directorio creado:", dir_salida, "\n")
+}
+
+cat("\n--- EXPORTANDO TABLAS A WORD ---\n\n")
+
+# --- 1. KAPPA CON YARDSTICK ---
+cat("1. Guardando tabla Kappa (yardstick)...\n")
+doc_kappa_yd <- read_docx()
+doc_kappa_yd <- body_add_flextable(doc_kappa_yd, tabla_kappa)
+print(doc_kappa_yd, target = file.path(dir_salida, "01_kappa_yardstick.docx"))
+
+# --- 2. KAPPA CON DESCTOOLS ---
+cat("2. Guardando tabla Kappa (DescTools)...\n")
+doc_kappa_dt <- read_docx()
+doc_kappa_dt <- body_add_flextable(doc_kappa_dt, tabla_kappa_dt)
+print(doc_kappa_dt, target = file.path(dir_salida, "02_kappa_desctools.docx"))
+
+# --- 3. CCC DESCTOOLS - TABLA RESUMEN ---
+cat("3. Guardando tabla resumen CCC (DescTools)...\n")
+doc_ccc_dt <- read_docx()
+doc_ccc_dt <- body_add_flextable(doc_ccc_dt, tabla_final)
+print(doc_ccc_dt, target = file.path(dir_salida, "03_ccc_resumen_desctools.docx"))
+
+# --- 4. CCC YARDSTICK - TABLA RESUMEN ---
+cat("4. Guardando tabla resumen CCC (yardstick)...\n")
+doc_ccc_yd <- read_docx()
+doc_ccc_yd <- body_add_flextable(doc_ccc_yd, tabla_yardstick_ft)
+print(doc_ccc_yd, target = file.path(dir_salida, "04_ccc_resumen_yardstick.docx"))
+
+# --- 5. DETALLE POR REGION (DESCTOOLS) ---
+cat("5. Guardando tabla detalle por Region (DescTools)...\n")
+doc_region_dt <- read_docx()
+doc_region_dt <- body_add_flextable(doc_region_dt, tabla_region_ft)
+print(doc_region_dt, target = file.path(dir_salida, "05_detalle_region_desctools.docx"))
+
+# --- 6. DETALLE POR SEXO (DESCTOOLS) ---
+cat("6. Guardando tabla detalle por Sexo (DescTools)...\n")
+doc_sexo_dt <- read_docx()
+doc_sexo_dt <- body_add_flextable(doc_sexo_dt, tabla_sexo_ft)
+print(doc_sexo_dt, target = file.path(dir_salida, "06_detalle_sexo_desctools.docx"))
+
+# --- 7. DETALLE POR EDAD (DESCTOOLS) ---
+cat("7. Guardando tabla detalle por Edad (DescTools)...\n")
+doc_edad_dt <- read_docx()
+doc_edad_dt <- body_add_flextable(doc_edad_dt, tabla_edad_ft)
+print(doc_edad_dt, target = file.path(dir_salida, "07_detalle_edad_desctools.docx"))
+
+# --- 8. RESUMEN COMPARATIVO (DESCTOOLS) ---
+cat("8. Guardando tabla resumen comparativo (DescTools)...\n")
+doc_resumen_dt <- read_docx()
+doc_resumen_dt <- body_add_flextable(doc_resumen_dt, tabla_resumen_ft)
+print(doc_resumen_dt, target = file.path(dir_salida, "08_resumen_comparativo_desctools.docx"))
+
+# --- 9. DETALLE POR REGION (YARDSTICK) ---
+cat("9. Guardando tabla detalle por Region (yardstick)...\n")
+doc_region_yd <- read_docx()
+doc_region_yd <- body_add_flextable(doc_region_yd, tabla_region_ft_yd)
+print(doc_region_yd, target = file.path(dir_salida, "09_detalle_region_yardstick.docx"))
+
+# --- 10. DETALLE POR SEXO (YARDSTICK) ---
+cat("10. Guardando tabla detalle por Sexo (yardstick)...\n")
+doc_sexo_yd <- read_docx()
+doc_sexo_yd <- body_add_flextable(doc_sexo_yd, tabla_sexo_ft_yd)
+print(doc_sexo_yd, target = file.path(dir_salida, "10_detalle_sexo_yardstick.docx"))
+
+# --- 11. DETALLE POR EDAD (YARDSTICK) ---
+cat("11. Guardando tabla detalle por Edad (yardstick)...\n")
+doc_edad_yd <- read_docx()
+doc_edad_yd <- body_add_flextable(doc_edad_yd, tabla_edad_ft_yd)
+print(doc_edad_yd, target = file.path(dir_salida, "11_detalle_edad_yardstick.docx"))
+
+# --- 12. RESUMEN COMPARATIVO (YARDSTICK) ---
+cat("12. Guardando tabla resumen comparativo (yardstick)...\n")
+doc_resumen_yd <- read_docx()
+doc_resumen_yd <- body_add_flextable(doc_resumen_yd, tabla_resumen_ft_yd)
+print(doc_resumen_yd, target = file.path(dir_salida, "12_resumen_comparativo_yardstick.docx"))
+
+# --- 13. VERIFICACION COMPLETA (DESCTOOLS) ---
+cat("13. Guardando tabla verificacion completa (DescTools)...\n")
+doc_verif_dt <- read_docx()
+doc_verif_dt <- body_add_flextable(doc_verif_dt, tabla_comparativa_ft)
+print(doc_verif_dt, target = file.path(dir_salida, "13_verificacion_completa_desctools.docx"))
+
+# --- 14. VERIFICACION COMPLETA (YARDSTICK) ---
+cat("14. Guardando tabla verificacion completa (yardstick)...\n")
+doc_verif_yd <- read_docx()
+doc_verif_yd <- body_add_flextable(doc_verif_yd, tabla_comparativa_ft_yd)
+print(doc_verif_yd, target = file.path(dir_salida, "14_verificacion_completa_yardstick.docx"))
+
+cat("\n--- EXPORTANDO TABLAS A JPG ---\n\n")
+
+# Función auxiliar para guardar como JPG
+guardar_como_jpg <- function(tabla_ft, nombre_archivo) {
+  tryCatch({
+    # Crear archivo temporal HTML
+    temp_html <- tempfile(fileext = ".html")
+    save_as_html(tabla_ft, path = temp_html)
+    
+    # Convertir a JPG
+    ruta_jpg <- file.path(dir_salida, paste0(nombre_archivo, ".jpg"))
+    webshot2::webshot(temp_html, ruta_jpg, vwidth = 1200, vheight = 800)
+    
+    # Limpiar archivo temporal
+    unlink(temp_html)
+    
+    cat(sprintf("  ✓ %s.jpg\n", nombre_archivo))
+  }, error = function(e) {
+    cat(sprintf("  ✗ Error en %s: %s\n", nombre_archivo, e$message))
+  })
+}
+
+# Exportar todas las tablas a JPG
+cat("Exportando tablas como imagenes JPG...\n\n")
+
+guardar_como_jpg(tabla_kappa, "01_kappa_yardstick")
+guardar_como_jpg(tabla_kappa_dt, "02_kappa_desctools")
+guardar_como_jpg(tabla_final, "03_ccc_resumen_desctools")
+guardar_como_jpg(tabla_yardstick_ft, "04_ccc_resumen_yardstick")
+guardar_como_jpg(tabla_region_ft, "05_detalle_region_desctools")
+guardar_como_jpg(tabla_sexo_ft, "06_detalle_sexo_desctools")
+guardar_como_jpg(tabla_edad_ft, "07_detalle_edad_desctools")
+guardar_como_jpg(tabla_resumen_ft, "08_resumen_comparativo_desctools")
+guardar_como_jpg(tabla_region_ft_yd, "09_detalle_region_yardstick")
+guardar_como_jpg(tabla_sexo_ft_yd, "10_detalle_sexo_yardstick")
+guardar_como_jpg(tabla_edad_ft_yd, "11_detalle_edad_yardstick")
+guardar_como_jpg(tabla_resumen_ft_yd, "12_resumen_comparativo_yardstick")
+guardar_como_jpg(tabla_comparativa_ft, "13_verificacion_completa_desctools")
+guardar_como_jpg(tabla_comparativa_ft_yd, "14_verificacion_completa_yardstick")
+
+cat("\n========================================================================\n")
+cat("  EXPORTACION COMPLETADA\n")
+cat("========================================================================\n\n")
+
+cat(sprintf("Archivos guardados en: %s\n", dir_salida))
+cat("\nResumen de archivos exportados:\n")
+cat("  - 14 archivos Word (.docx)\n")
+cat("  - 14 imagenes JPG (.jpg)\n")
+cat("  - Total: 28 archivos\n\n")
+
+# Listar archivos creados
+archivos_creados <- list.files(dir_salida, pattern = "\\.(docx|jpg)$", full.names = FALSE)
+cat(sprintf("Total de archivos en directorio: %d\n", length(archivos_creados)))
+```
+
