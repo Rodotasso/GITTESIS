@@ -204,13 +204,13 @@ quarto::quarto_render("E_descriptiva.qmd")
 
 ### Aspectos Éticos
 - El protocolo será sometido a revisión del Comité Ético Científico de la Facultad de Medicina, Universidad de Chile
-- Se respetan los principios de autodeterminación étnica (Convenio 169 OIT)
+- Se respetan los principios de autodeterminación étnica (Convenio 169 de la Organización Internacional del Trabajo - OIT)
 - Cumplimiento con Ley N° 19.628 de Protección de Datos Personales
 - Los valores faltantes en pertenencia étnica NO se imputan en análisis principales
 
 ### Normativas Aplicadas
 - Ley Indígena N° 19.253 (1993)
-- Convenio 169 de la OIT
+- Convenio 169 de la Organización Internacional del Trabajo (OIT)
 - Norma Técnica N° 231 del MINSAL (2018)
 - Decreto N° 21 del MINSAL (2023)
 
@@ -307,11 +307,13 @@ Este proyecto es parte de una tesis académica. El código está disponible bajo
 
 ## 🔗 Enlaces Útiles
 
+*Nota: Los siguientes enlaces fueron verificados en noviembre 2024. Las URLs de sitios gubernamentales pueden cambiar con el tiempo.*
+
 - [Protocolo Completo](./Protocolo%20Tesis%20RTS.md)
-- [MINSAL - DEIS](https://deis.minsal.cl/)
+- [MINSAL - DEIS](https://deis.minsal.cl/) - Departamento de Estadísticas e Información de Salud
 - [Registro Social de Hogares](https://www.registrosocial.gob.cl/)
-- [CONADI](https://www.conadi.gob.cl/)
-- [Censo 2017](https://www.ine.cl/estadisticas/sociales/censos-de-poblacion-y-vivienda/censo-de-poblacion-y-vivienda)
+- [CONADI](https://www.conadi.gob.cl/) - Corporación Nacional de Desarrollo Indígena
+- [Censo 2017](https://www.ine.cl/estadisticas/sociales/censos-de-poblacion-y-vivienda/censo-de-poblacion-y-vivienda) - Instituto Nacional de Estadísticas
 
 ---
 
