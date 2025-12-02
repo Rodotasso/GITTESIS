@@ -832,7 +832,8 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     summarise(
       total = n(),
       pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
-      porcentaje_pert2 = if_else(total > 0, (pertenece / total) * 100, 0),
+     
+      porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     ) %>%
     filter(total > 0)
@@ -960,11 +961,11 @@ formatear_resultado_ccc <- function(resultado_ccc, nombre_desagregacion) {
     `IC 95% Inferior` = round(resultado_ccc$rho.c$lwr.ci, 4),
     `IC 95% Superior` = round(resultado_ccc$rho.c$upr.ci, 4),
     Interpretacion = case_when(
-      resultado_ccc$rho.c$est > 0.99 ~ "Casi perfecta",
-      resultado_ccc$rho.c$est > 0.95 ~ "Excelente",
-      resultado_ccc$rho.c$est > 0.90 ~ "Sustancial",
-      resultado_ccc$rho.c$est > 0.75 ~ "Moderada",
-      TRUE ~ "Pobre"
+      resultado_ccc$rho.c$est > 0.80 ~ "Casi perfecta",
+      resultado_ccc$rho.c$est > 0.61 ~ "Sustancial",
+      resultado_ccc$rho.c$est > 0.41 ~ "Moderada",
+      resultado_ccc$rho.c$est > 0.21 ~ "Aceptable",
+      TRUE ~ "Leve"
     )
   )
 }
