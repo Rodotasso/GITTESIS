@@ -7,8 +7,9 @@ format:
     html:
         embed-resources: true
         self-contained: true
+        toc: true
 ---
-
+#### USAR ARCHIVO R PARA CREAR FUNCIONES APARTE Y LLAMARLAS CON SOURCE. 
 
 ```{r setup, message=FALSE, warning=FALSE}
 # Cargar librerías necesarias
@@ -25,6 +26,8 @@ library(censo2017)
 library(readxl)
 library(DBI)
 library(DescTools)
+library(officer)      # Para exportar a Word
+library(webshot2)     # Para exportar tablas como imágenes JPG
 
 print("Librerías cargadas correctamente.")
 ```
@@ -79,7 +82,7 @@ datos_kappa_dt <- datos_homologados %>%
   mutate(
     RSH = ifelse(is.na(RSH), 0, RSH),
     CONADI = ifelse(is.na(CONADI), 0, CONADI),
-    PUEBLO_ORIGINARIO_BIN = ifelse(is.na(PUEBLO_ORIGINARIO_BIN), 0, PUEBLO_ORIGINARIO_BIN)
+    Egresos_Hospitalarios = ifelse(is.na(PUEBLO_ORIGINARIO_BIN), 0, PUEBLO_ORIGINARIO_BIN)
   ) %>%
   filter(!is.na(PERTENENCIA2))
 
@@ -98,7 +101,7 @@ calcular_concordancia_desctools <- function(datos, col_verdad, col_estimado, nom
   
   tibble(
     `Fuente de Datos` = nombre_fuente,
-    `Concordancia con PERTENENCIA2` = "Cohen's Kappa",
+    `Concordancia con Variable Enriquecida` = "Cohen's Kappa",
     `Valor Kappa` = round(valor_kappa, 4),
     `IC 95% Inf` = round(ic_inferior, 4),
     `IC 95% Sup` = round(ic_superior, 4),
@@ -113,7 +116,7 @@ calcular_concordancia_desctools <- function(datos, col_verdad, col_estimado, nom
   )
 }
 
-# 3. Calcular la concordancia para cada fuente contra PERTENENCIA2
+# 3. Calcular la concordancia para cada fuente contra Variable Enriquecida
 cat("Calculando Kappa para cada fuente:\n")
 
 kappa_rsh <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", "RSH", "RSH")
@@ -124,8 +127,8 @@ kappa_conadi <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", 
 cat(sprintf("  CONADI: Kappa = %.4f [%.4f, %.4f]\n", 
             kappa_conadi$`Valor Kappa`, kappa_conadi$`IC 95% Inf`, kappa_conadi$`IC 95% Sup`))
 
-kappa_autodecl <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", "PUEBLO_ORIGINARIO_BIN", "Autodeclaración (PUEBLO_ORIGINARIO_BIN)")
-cat(sprintf("  Autodeclaración: Kappa = %.4f [%.4f, %.4f]\n", 
+kappa_autodecl <- calcular_concordancia_desctools(datos_kappa_dt, "PERTENENCIA2", "PUEBLO_ORIGINARIO_BIN", "Egresos Hospitalarios")
+cat(sprintf("  Egresos Hospitalarios: Kappa = %.4f [%.4f, %.4f]\n", 
             kappa_autodecl$`Valor Kappa`, kappa_autodecl$`IC 95% Inf`, kappa_autodecl$`IC 95% Sup`))
 
 resultados_finales_dt <- bind_rows(
@@ -140,7 +143,7 @@ cat("\n")
 # 4. Crear la tabla base con DescTools
 tabla_kappa_dt <- resultados_finales_dt %>%
   flextable() %>%
-  set_caption("Concordancia de cada fuente con PERTENENCIA2 (Cohen's Kappa - DescTools)") %>%
+  set_caption("Concordancia de cada fuente contra Variable Enriquecida (Cohen's Kappa - DescTools)") %>%
   autofit() %>%
   theme_vanilla() %>%
   bold(j = "Valor Kappa", bold = TRUE) %>%
@@ -173,9 +176,9 @@ cat("\n=== CALCULO COMPLETADO ===\n")
 cat("Resultados guardados en objeto 'resultados_kappa_desctools'\n")
 ```
 
-#ESTE CHUNK QUEDA A LA POSTERIDAD.
+# ESTE CHUNK QUEDA A LA POSTERIDAD.
 
-```{r verificar_p09_edad, message=FALSE, warning=FALSE}
+```{r verificar_p09_edad, echo=FALSE, message=FALSE, warning=FALSE}
 # =============================================================================
 # ANALISIS COMPLETO DE VARIABLES DEL CENSO 2017
 # =============================================================================
@@ -487,13 +490,15 @@ cat("FROM personas + JOINs\n")
 cat("WHERE p09 BETWEEN 0 AND 120 AND p08 IN (1,2) AND p16 IS NOT NULL\n")
 
 cat("\nPROXIMO PASO:\n")
-cat("Actualizar chunk 'concordancia_censo_pertenencia2' con:\n")
+cat("Actualizar chunk 'concordancia_censo_variable_enriquecida' con:\n")
 cat("- Usar p09 como edad\n")
 cat("- Usar p08 como sexo\n")
 cat("- Mantener p16 como pertenencia\n")
 cat("- Mantener SUBSTR(geocodigo,1,2) como region\n")
 cat("\n")
 ```
+
+# Funciones para hacer los calculos mas faciles.
 
 ```{r funcion_extraccion_censo, message=FALSE, warning=FALSE}
 # =============================================================================
@@ -698,20 +703,20 @@ extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
 }
 
 # =============================================================================
-# FUNCION PARA EXTRAER Y PROCESAR DATOS DE PERTENENCIA2
+# FUNCION PARA EXTRAER Y PROCESAR DATOS DE VARIABLE ENRIQUECIDA
 # =============================================================================
 
-extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
+extraer_datos_variable_enriquecida <- function(datos_homologados, verbose = TRUE) {
   
-  if(verbose) cat("=== EXTRAYENDO DATOS DE PERTENENCIA2 ===\n\n")
+  if(verbose) cat("=== EXTRAYENDO DATOS DE VARIABLE ENRIQUECIDA ===\n\n")
   
   # --- PASO 1: PREPARAR DATOS ---
-  if(verbose) cat("1. Preparando datos de PERTENENCIA2...\n")
+  if(verbose) cat("1. Preparando datos de Variable Enriquecida...\n")
   
   datos_prep <- datos_homologados %>%
     filter(!is.na(PERTENENCIA2)) %>%
     mutate(
-      pertenencia_bin = PERTENENCIA2,
+      enriquecida_bin = PERTENENCIA2,
       region = as.integer(CODIGO_REGION),
       sexo = GLOSA_SEXO,
       grupo_etario = factor(as.character(GRUPO_ETARIO), 
@@ -732,7 +737,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
   pert2_total <- datos_prep %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -746,7 +751,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(region) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -760,7 +765,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(sexo) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -774,7 +779,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(grupo_etario, .drop = FALSE) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
      
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
@@ -790,7 +795,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(region, sexo) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -804,7 +809,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(region, grupo_etario) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -818,7 +823,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(sexo, grupo_etario) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -832,7 +837,7 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
     group_by(region, sexo, grupo_etario) %>%
     summarise(
       total = n(),
-      pertenece = sum(pertenencia_bin == 1, na.rm = TRUE),
+      pertenece = sum(enriquecida_bin == 1, na.rm = TRUE),
       porcentaje_pert2 = (pertenece / total) * 100,
       .groups = "drop"
     )
@@ -866,8 +871,8 @@ extraer_datos_pertenencia2 <- function(datos_homologados, verbose = TRUE) {
 # Extraer datos del Censo 2017
 datos_censo <- extraer_datos_censo(verbose = TRUE)
 
-# Extraer datos de PERTENENCIA2
-datos_pert2 <- extraer_datos_pertenencia2(datos_homologados, verbose = TRUE)
+# Extraer datos de Variable Enriquecida
+datos_pert2 <- extraer_datos_variable_enriquecida(datos_homologados, verbose = TRUE)
 
 # Mostrar resumen
 cat("\n=== RESUMEN DE DATOS EXTRAIDOS ===\n")
@@ -878,7 +883,7 @@ cat("- Regiones:", nrow(datos_censo$por_region), "\n")
 cat("- Sexos:", nrow(datos_censo$por_sexo), "\n")
 cat("- Grupos etarios:", nrow(datos_censo$por_grupo_etario), "\n")
 
-cat("\nPERTENENCIA2:\n")
+cat("\nVariable Enriquecida:\n")
 cat("- Total nacional:", format(datos_pert2$nacional$total, big.mark = ","), 
     "personas (", round(datos_pert2$nacional$porcentaje_pert2, 2), "% pertenece)\n")
 cat("- Regiones:", nrow(datos_pert2$por_region), "\n")
@@ -890,7 +895,7 @@ cat("\nDatos listos para calcular Lin's CCC\n")
 
 ```{r calcular_lins_ccc_desctools, message=FALSE, warning=FALSE}
 # =============================================================================
-# CALCULO DE LIN'S CCC ENTRE CENSO 2017 Y PERTENENCIA2 USANDO DESCTOOLS
+# CALCULO DE LIN'S CCC ENTRE CENSO 2017 Y VARIABLE ENRIQUECIDA USANDO DESCTOOLS
 # =============================================================================
 
 cat("=== CALCULANDO LIN'S CCC PARA TODAS LAS DESAGREGACIONES ===\n\n")
@@ -1041,7 +1046,7 @@ tabla_resumen_ccc <- bind_rows(
 
 tabla_final <- tabla_resumen_ccc %>%
   flextable() %>%
-  set_caption("Concordancia entre Censo 2017 y PERTENENCIA2 por niveles de desagregacion (Lin's CCC)") %>%
+  set_caption("Concordancia entre Censo 2017 y Variable Enriquecida por niveles de desagregacion (Lin's CCC)") %>%
   autofit() %>%
   theme_vanilla() %>%
   bold(j = "Lin's CCC", bold = TRUE) %>%
@@ -1330,7 +1335,7 @@ tabla_edad_detalle <- resultados_edad %>%
   select(
     `Grupo Etario` = grupo_etario,
     `Censo (%)` = Censo_promedio,
-    `PERTENENCIA2 (%)` = PERT2_promedio,
+    `Variable Enriquecida (%)` = PERT2_promedio,
     `Dif (pp)` = Diferencia,
     `Lin's CCC` = `Lin's CCC`,
     `IC 95% Inf` = IC_inferior,
@@ -1678,89 +1683,47 @@ if(!dir.exists(dir_salida)) {
 
 cat("\n--- EXPORTANDO TABLAS A WORD ---\n\n")
 
-# --- 1. KAPPA CON YARDSTICK ---
-cat("1. Guardando tabla Kappa (yardstick)...\n")
-doc_kappa_yd <- read_docx()
-doc_kappa_yd <- body_add_flextable(doc_kappa_yd, tabla_kappa)
-print(doc_kappa_yd, target = file.path(dir_salida, "01_kappa_yardstick.docx"))
-
-# --- 2. KAPPA CON DESCTOOLS ---
-cat("2. Guardando tabla Kappa (DescTools)...\n")
+# --- 1. KAPPA CON DESCTOOLS ---
+cat("1. Guardando tabla Kappa (DescTools)...\n")
 doc_kappa_dt <- read_docx()
 doc_kappa_dt <- body_add_flextable(doc_kappa_dt, tabla_kappa_dt)
-print(doc_kappa_dt, target = file.path(dir_salida, "02_kappa_desctools.docx"))
+print(doc_kappa_dt, target = file.path(dir_salida, "01_kappa_desctools.docx"))
 
-# --- 3. CCC DESCTOOLS - TABLA RESUMEN ---
-cat("3. Guardando tabla resumen CCC (DescTools)...\n")
+# --- 2. CCC DESCTOOLS - TABLA RESUMEN ---
+cat("2. Guardando tabla resumen CCC (DescTools)...\n")
 doc_ccc_dt <- read_docx()
 doc_ccc_dt <- body_add_flextable(doc_ccc_dt, tabla_final)
-print(doc_ccc_dt, target = file.path(dir_salida, "03_ccc_resumen_desctools.docx"))
+print(doc_ccc_dt, target = file.path(dir_salida, "02_ccc_resumen_desctools.docx"))
 
-# --- 4. CCC YARDSTICK - TABLA RESUMEN ---
-cat("4. Guardando tabla resumen CCC (yardstick)...\n")
-doc_ccc_yd <- read_docx()
-doc_ccc_yd <- body_add_flextable(doc_ccc_yd, tabla_yardstick_ft)
-print(doc_ccc_yd, target = file.path(dir_salida, "04_ccc_resumen_yardstick.docx"))
-
-# --- 5. DETALLE POR REGION (DESCTOOLS) ---
-cat("5. Guardando tabla detalle por Region (DescTools)...\n")
+# --- 3. DETALLE POR REGION (DESCTOOLS) ---
+cat("3. Guardando tabla detalle por Region (DescTools)...\n")
 doc_region_dt <- read_docx()
 doc_region_dt <- body_add_flextable(doc_region_dt, tabla_region_ft)
-print(doc_region_dt, target = file.path(dir_salida, "05_detalle_region_desctools.docx"))
+print(doc_region_dt, target = file.path(dir_salida, "03_detalle_region_desctools.docx"))
 
-# --- 6. DETALLE POR SEXO (DESCTOOLS) ---
-cat("6. Guardando tabla detalle por Sexo (DescTools)...\n")
+# --- 4. DETALLE POR SEXO (DESCTOOLS) ---
+cat("4. Guardando tabla detalle por Sexo (DescTools)...\n")
 doc_sexo_dt <- read_docx()
 doc_sexo_dt <- body_add_flextable(doc_sexo_dt, tabla_sexo_ft)
-print(doc_sexo_dt, target = file.path(dir_salida, "06_detalle_sexo_desctools.docx"))
+print(doc_sexo_dt, target = file.path(dir_salida, "04_detalle_sexo_desctools.docx"))
 
-# --- 7. DETALLE POR EDAD (DESCTOOLS) ---
-cat("7. Guardando tabla detalle por Edad (DescTools)...\n")
+# --- 5. DETALLE POR EDAD (DESCTOOLS) ---
+cat("5. Guardando tabla detalle por Edad (DescTools)...\n")
 doc_edad_dt <- read_docx()
 doc_edad_dt <- body_add_flextable(doc_edad_dt, tabla_edad_ft)
-print(doc_edad_dt, target = file.path(dir_salida, "07_detalle_edad_desctools.docx"))
+print(doc_edad_dt, target = file.path(dir_salida, "05_detalle_edad_desctools.docx"))
 
-# --- 8. RESUMEN COMPARATIVO (DESCTOOLS) ---
-cat("8. Guardando tabla resumen comparativo (DescTools)...\n")
+# --- 6. RESUMEN COMPARATIVO (DESCTOOLS) ---
+cat("6. Guardando tabla resumen comparativo (DescTools)...\n")
 doc_resumen_dt <- read_docx()
 doc_resumen_dt <- body_add_flextable(doc_resumen_dt, tabla_resumen_ft)
-print(doc_resumen_dt, target = file.path(dir_salida, "08_resumen_comparativo_desctools.docx"))
+print(doc_resumen_dt, target = file.path(dir_salida, "06_resumen_comparativo_desctools.docx"))
 
-# --- 9. DETALLE POR REGION (YARDSTICK) ---
-cat("9. Guardando tabla detalle por Region (yardstick)...\n")
-doc_region_yd <- read_docx()
-doc_region_yd <- body_add_flextable(doc_region_yd, tabla_region_ft_yd)
-print(doc_region_yd, target = file.path(dir_salida, "09_detalle_region_yardstick.docx"))
-
-# --- 10. DETALLE POR SEXO (YARDSTICK) ---
-cat("10. Guardando tabla detalle por Sexo (yardstick)...\n")
-doc_sexo_yd <- read_docx()
-doc_sexo_yd <- body_add_flextable(doc_sexo_yd, tabla_sexo_ft_yd)
-print(doc_sexo_yd, target = file.path(dir_salida, "10_detalle_sexo_yardstick.docx"))
-
-# --- 11. DETALLE POR EDAD (YARDSTICK) ---
-cat("11. Guardando tabla detalle por Edad (yardstick)...\n")
-doc_edad_yd <- read_docx()
-doc_edad_yd <- body_add_flextable(doc_edad_yd, tabla_edad_ft_yd)
-print(doc_edad_yd, target = file.path(dir_salida, "11_detalle_edad_yardstick.docx"))
-
-# --- 12. RESUMEN COMPARATIVO (YARDSTICK) ---
-cat("12. Guardando tabla resumen comparativo (yardstick)...\n")
-doc_resumen_yd <- read_docx()
-doc_resumen_yd <- body_add_flextable(doc_resumen_yd, tabla_resumen_ft_yd)
-print(doc_resumen_yd, target = file.path(dir_salida, "12_resumen_comparativo_yardstick.docx"))
-
-# --- 13. VERIFICACION COMPLETA (DESCTOOLS) ---
-cat("13. Guardando tabla verificacion completa (DescTools)...\n")
+# --- 7. VERIFICACION COMPLETA (DESCTOOLS) ---
+cat("7. Guardando tabla verificacion completa (DescTools)...\n")
 doc_verif_dt <- read_docx()
 doc_verif_dt <- body_add_flextable(doc_verif_dt, tabla_comparativa_ft)
-print(doc_verif_dt, target = file.path(dir_salida, "13_verificacion_completa_desctools.docx"))
-
-# --- 14. VERIFICACION COMPLETA (YARDSTICK) ---
-cat("14. Guardando tabla verificacion completa (yardstick)...\n")
-doc_verif_yd <- read_docx()
-doc_verif_yd <- body_add_flextable(doc_verif_yd, tabla_comparativa_ft_yd)
-print(doc_verif_yd, target = file.path(dir_salida, "14_verificacion_completa_yardstick.docx"))
+print(doc_verif_dt, target = file.path(dir_salida, "07_verificacion_completa_desctools.docx"))
 
 cat("\n--- EXPORTANDO TABLAS A JPG ---\n\n")
 
@@ -1787,20 +1750,13 @@ guardar_como_jpg <- function(tabla_ft, nombre_archivo) {
 # Exportar todas las tablas a JPG
 cat("Exportando tablas como imagenes JPG...\n\n")
 
-guardar_como_jpg(tabla_kappa, "01_kappa_yardstick")
-guardar_como_jpg(tabla_kappa_dt, "02_kappa_desctools")
-guardar_como_jpg(tabla_final, "03_ccc_resumen_desctools")
-guardar_como_jpg(tabla_yardstick_ft, "04_ccc_resumen_yardstick")
-guardar_como_jpg(tabla_region_ft, "05_detalle_region_desctools")
-guardar_como_jpg(tabla_sexo_ft, "06_detalle_sexo_desctools")
-guardar_como_jpg(tabla_edad_ft, "07_detalle_edad_desctools")
-guardar_como_jpg(tabla_resumen_ft, "08_resumen_comparativo_desctools")
-guardar_como_jpg(tabla_region_ft_yd, "09_detalle_region_yardstick")
-guardar_como_jpg(tabla_sexo_ft_yd, "10_detalle_sexo_yardstick")
-guardar_como_jpg(tabla_edad_ft_yd, "11_detalle_edad_yardstick")
-guardar_como_jpg(tabla_resumen_ft_yd, "12_resumen_comparativo_yardstick")
-guardar_como_jpg(tabla_comparativa_ft, "13_verificacion_completa_desctools")
-guardar_como_jpg(tabla_comparativa_ft_yd, "14_verificacion_completa_yardstick")
+guardar_como_jpg(tabla_kappa_dt, "01_kappa_desctools")
+guardar_como_jpg(tabla_final, "02_ccc_resumen_desctools")
+guardar_como_jpg(tabla_region_ft, "03_detalle_region_desctools")
+guardar_como_jpg(tabla_sexo_ft, "04_detalle_sexo_desctools")
+guardar_como_jpg(tabla_edad_ft, "05_detalle_edad_desctools")
+guardar_como_jpg(tabla_resumen_ft, "06_resumen_comparativo_desctools")
+guardar_como_jpg(tabla_comparativa_ft, "07_verificacion_completa_desctools")
 
 cat("\n========================================================================\n")
 cat("  EXPORTACION COMPLETADA\n")
@@ -1808,9 +1764,9 @@ cat("========================================================================\n\
 
 cat(sprintf("Archivos guardados en: %s\n", dir_salida))
 cat("\nResumen de archivos exportados:\n")
-cat("  - 14 archivos Word (.docx)\n")
-cat("  - 14 imagenes JPG (.jpg)\n")
-cat("  - Total: 28 archivos\n\n")
+cat("  - 7 archivos Word (.docx)\n")
+cat("  - 7 imagenes JPG (.jpg)\n")
+cat("  - Total: 14 archivos\n\n")
 
 # Listar archivos creados
 archivos_creados <- list.files(dir_salida, pattern = "\\.(docx|jpg)$", full.names = FALSE)

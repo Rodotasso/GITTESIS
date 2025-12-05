@@ -716,5 +716,5 @@ guardar_multiformato(resultados_evolucion_pg$grafico_evolucion,
 guardar_multiformato(resultados_evolucion_pg$grafico_promedio, 
                      "cie10_pg_representacion_promedio", 10, 8)
 
-message("Todos los gráficos han sido guardados en formato PNG (con y sin fondo) y JPG")
+message("Todos los gráficos han sido guardados en formato JPG")
 ```

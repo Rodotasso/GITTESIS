@@ -21,7 +21,6 @@ library(scales)       # Para escalas en gráficos
 library(tableone)     # Para tablas descriptivas
 library(summarytools) # Para estadísticas descriptivas
 library(ggpubr)      # Para composición de gráficos
-library(tidymodels)   # Para analisis de correlaciones
 print("Librerías cargadas correctamente.")
 ```
 

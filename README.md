@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 📋 Descripción General
+## Descripción General
 
 Este repositorio contiene el código, análisis y documentación de la tesis de Magíster en Salud Pública de la Universidad de Chile:
 
@@ -15,7 +15,7 @@ Este repositorio contiene el código, análisis y documentación de la tesis de 
 
 ---
 
-## 🎯 Objetivos del Estudio
+## Objetivos del Estudio
 
 ### Objetivo General
 Evaluar la relación entre la completitud y representatividad de los registros de pertenencia a pueblos originarios en Chile y construir perfiles epidemiológicos basados en estos datos.
@@ -28,7 +28,7 @@ Evaluar la relación entre la completitud y representatividad de los registros d
 
 ---
 
-## 🔬 Metodología
+## Metodología
 
 ### Diseño del Estudio
 - **Tipo:** Estudio observacional, descriptivo y longitudinal de tipo poblacional
@@ -55,7 +55,7 @@ Evaluar la relación entre la completitud y representatividad de los registros d
 
 ---
 
-## 📁 Estructura del Repositorio
+## Estructura del Repositorio
 
 ```
 GITTESIS/
@@ -102,7 +102,7 @@ GITTESIS/
 
 ---
 
-## 🛠️ Requisitos Técnicos
+## Requisitos Técnicos
 
 ### Software Requerido
 - **R** (versión ≥ 4.0.0)
@@ -148,7 +148,7 @@ renv::restore()
 
 ---
 
-## 🚀 Uso y Ejecución
+## Uso y Ejecución
 
 ### 1. Clonar el Repositorio
 ```bash
@@ -195,10 +195,10 @@ quarto::quarto_render("E_descriptiva.qmd")
 
 ---
 
-## 🔒 Consideraciones Éticas y de Privacidad
+## Consideraciones Éticas y de Privacidad
 
 ### Protección de Datos
-- ⚠️ **Los datos originales NO están incluidos en este repositorio** por contener información sensible
+-  **Los datos originales NO están incluidos en este repositorio** por contener información sensible
 - Todos los identificadores personales (RUN) están anonimizados mediante códigos irreversibles
 - La variable de pueblo específico fue transformada a formato dicotómico para proteger identidades colectivas
 
@@ -216,7 +216,7 @@ quarto::quarto_render("E_descriptiva.qmd")
 
 ---
 
-## 📊 Principales Análisis Realizados
+## Principales Análisis Realizados
 
 ### 1. Caracterización de Registros
 - Completitud de la variable pertenencia en cada fuente
@@ -241,7 +241,7 @@ quarto::quarto_render("E_descriptiva.qmd")
 
 ---
 
-## 📚 Referencias Clave
+## Referencias Clave
 
 - **Gracey, M., & King, M. (2009).** Indigenous health part 1: determinants and disease patterns. *The Lancet*, 374(9683), 65-75.
 - **Oyarce, A., & Pedrero, M. (2009).** Una metodología innovadora para la caracterización de la situación de salud de las poblaciones indígenas de Chile. *Notas de Población*, (89), 119-145.
@@ -252,7 +252,7 @@ Ver lista completa de referencias en: `Protocolo Tesis RTS.md`
 
 ---
 
-## 👥 Contribuciones y Colaboración
+## Contribuciones y Colaboración
 
 Este repositorio fue creado para:
 - Facilitar la revisión por parte de profesores guía y evaluadores
@@ -268,12 +268,12 @@ Si eres revisor o estás interesado en este trabajo:
 
 ---
 
-## 📧 Contacto
+## Contacto
 
 **Rodolfo José Tasso Suazo**  
 Estudiante de Magíster en Salud Pública  
 Universidad de Chile  
-📧 Email: rtasso@uchile.cl
+Email: rtasso@uchile.cl
 
 **Profesora Guía:**  
 Sandra Flores Alvarado  
@@ -281,23 +281,14 @@ Facultad de Medicina, Universidad de Chile
 
 ---
 
-## 📝 Licencia
+## Licencia
 
 Este proyecto es parte de una tesis académica. El código está disponible bajo licencia MIT para fines educativos y de investigación. Los datos utilizados están sujetos a restricciones de privacidad y no se distribuyen públicamente.
 
 ---
 
-## 🙏 Agradecimientos
 
-- Departamento de Estadísticas e Información de Salud (DEIS-MINSAL)
-- Ministerio de Desarrollo Social y Familia (MIDESOF)
-- Corporación Nacional de Desarrollo Indígena (CONADI)
-- Instituto Nacional de Estadísticas (INE)
-- Programa de Magíster en Salud Pública, Universidad de Chile
-
----
-
-## 📅 Historial de Versiones
+## Historial de Versiones
 
 - **Nov 2024:** Actualización de análisis de concordancia y estadística descriptiva
 - **2024:** Desarrollo del análisis principal
@@ -305,7 +296,7 @@ Este proyecto es parte de una tesis académica. El código está disponible bajo
 
 ---
 
-## 🔗 Enlaces Útiles
+## Enlaces Útiles
 
 *Nota: Los siguientes enlaces fueron verificados en noviembre 2024. Las URLs de sitios gubernamentales pueden cambiar con el tiempo.*
 

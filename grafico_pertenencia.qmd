@@ -25,6 +25,8 @@ library(tidyverse)
 library(data.table)
 library(gtsummary)
 library(flextable)
+library(officer)
+library(webshot2)
 library(scales)
 library(ggpubr)
 
@@ -363,71 +365,16 @@ graficos_pertenencia_sexo$promedio
 
 ## 4. Guardar Resultados Gráficos
 
-```{r guardar_graficos}
+```{r setup_guardar}
 # Crear directorio para guardar los resultados
 dir.create("resultados_tesis", showWarnings = FALSE)
 
-# Función mejorada para guardar en múltiples formatos
+# Función para guardar gráficos en formato JPG
 guardar_multiformato <- function(grafico, nombre_base, ancho = 10, alto = 6, dpi = 300) {
-  # Guardar en PNG con fondo blanco
-  ggsave(paste0("resultados_tesis/", nombre_base, "_fondo_blanco.png"), 
-         grafico, width = ancho, height = alto, dpi = dpi, bg = "white")
-  
-  # Guardar en PNG con fondo transparente
-  ggsave(paste0("resultados_tesis/", nombre_base, "_transparente.png"), 
-         grafico, width = ancho, height = alto, dpi = dpi, bg = "transparent")
-  
-  # Guardar en JPG (siempre tiene fondo blanco)
+  # Guardar solo en JPG (con fondo blanco)
   ggsave(paste0("resultados_tesis/", nombre_base, ".jpg"), 
-         grafico, width = ancho, height = alto, dpi = dpi)
+         grafico, width = ancho, height = alto, dpi = dpi, bg = "white")
 }
-
-# Guardar gráficos anuales
-guardar_multiformato(graficos_rsh$anual, "rsh_anual", 10, 6)
-guardar_multiformato(graficos_conadi$anual, "conadi_anual", 10, 6)
-guardar_multiformato(graficos_egresos$anual, "egresos_anual", 10, 6)
-guardar_multiformato(graficos_pertenencia$anual, "pertenencia_anual", 10, 6)
-
-# Guardar gráficos de promedios
-guardar_multiformato(graficos_rsh$promedio, "rsh_promedio", 8, 5)
-guardar_multiformato(graficos_conadi$promedio, "conadi_promedio", 8, 5)
-guardar_multiformato(graficos_egresos$promedio, "egresos_promedio", 8, 5)
-guardar_multiformato(graficos_pertenencia$promedio, "pertenencia_promedio", 8, 5)
-
-# Guardar gráficos combinados
-guardar_multiformato(grafico_combinado_anual, "pertenencia_anual_combinado", 14, 10)
-guardar_multiformato(grafico_combinado_promedio, "pertenencia_promedio_combinado", 14, 10)
-
-# Guardar gráficos por sexo
-guardar_multiformato(graficos_rsh_sexo$anual, "rsh_sexo_anual", 12, 6)
-guardar_multiformato(graficos_conadi_sexo$anual, "conadi_sexo_anual", 12, 6)
-guardar_multiformato(graficos_egresos_sexo$anual, "egresos_sexo_anual", 12, 6)
-guardar_multiformato(graficos_pertenencia_sexo$anual, "pertenencia_sexo_anual", 12, 6)
-
-guardar_multiformato(graficos_rsh_sexo$promedio, "rsh_sexo_promedio", 10, 5)
-guardar_multiformato(graficos_conadi_sexo$promedio, "conadi_sexo_promedio", 10, 5)
-guardar_multiformato(graficos_egresos_sexo$promedio, "egresos_sexo_promedio", 10, 5)
-guardar_multiformato(graficos_pertenencia_sexo$promedio, "pertenencia_sexo_promedio", 10, 5)
-
-# Guardar gráficos de tendencia
-guardar_multiformato(tendencia_rsh, "rsh_tendencia_sinpuntos", 10, 6)
-guardar_multiformato(tendencia_conadi, "conadi_tendencia_sinpuntos", 10, 6)
-guardar_multiformato(tendencia_egresos, "egresos_tendencia_sinpuntos", 10, 6)
-guardar_multiformato(tendencia_pertenencia, "pertenencia_tendencia_sinpuntos", 10, 6)
-
-guardar_multiformato(tendencia_completa_rsh, "rsh_tendencia_completa", 10, 6)
-guardar_multiformato(tendencia_completa_conadi, "conadi_tendencia_completa", 10, 6)
-guardar_multiformato(tendencia_completa_egresos, "egresos_tendencia_completa", 10, 6)
-guardar_multiformato(tendencia_completa_pertenencia, "pertenencia_tendencia_completa", 10, 6)
-
-guardar_multiformato(tendencias_combinadas_anotadas, "pertenencia_tendencias_combinadas_sinpuntos", 14, 10)
-guardar_multiformato(tendencias_completas_anotadas, "pertenencia_tendencias_completas_combinadas", 14, 10)
-
-# Guardar gráfico comparativo de fuentes
-guardar_multiformato(grafico_comparativo, "comparacion_fuentes_pertenencia", 12, 7)
-
-# Mensaje de confirmación
-message("Se han guardado todos los gráficos en la carpeta 'resultados_tesis' en formatos PNG (con y sin fondo) y JPG")
 ```
 
 ## 5. Análisis de Tendencia de Pertenencia
@@ -650,23 +597,6 @@ tendencias_completas_anotadas <- annotate_figure(tendencias_completas_combinadas
 # Mostrar gráficos combinados anotados
 tendencias_combinadas_anotadas
 tendencias_completas_anotadas
-
-# Añadir al guardado de gráficos
-ggsave("resultados_tesis/rsh_tendencia_sinpuntos.png", tendencia_rsh, width = 10, height = 6)
-ggsave("resultados_tesis/conadi_tendencia_sinpuntos.png", tendencia_conadi, width = 10, height = 6)
-ggsave("resultados_tesis/egresos_tendencia_sinpuntos.png", tendencia_egresos, width = 10, height = 6)
-ggsave("resultados_tesis/pertenencia_tendencia_sinpuntos.png", tendencia_pertenencia, width = 10, height = 6)
-
-ggsave("resultados_tesis/rsh_tendencia_completa.png", tendencia_completa_rsh, width = 10, height = 6)
-ggsave("resultados_tesis/conadi_tendencia_completa.png", tendencia_completa_conadi, width = 10, height = 6)
-ggsave("resultados_tesis/egresos_tendencia_completa.png", tendencia_completa_egresos, width = 10, height = 6)
-ggsave("resultados_tesis/pertenencia_tendencia_completa.png", tendencia_completa_pertenencia, width = 10, height = 6)
-
-ggsave("resultados_tesis/pertenencia_tendencias_combinadas_sinpuntos.png", 
-       tendencias_combinadas_anotadas, width = 14, height = 10)
-       
-ggsave("resultados_tesis/pertenencia_tendencias_completas_combinadas.png", 
-       tendencias_completas_anotadas, width = 14, height = 10)
 ```
 
 ## 6. Análisis Evolutivo Comparativo entre Fuentes
@@ -775,14 +705,623 @@ grafico_comparativo_fuentes <- function(data) {
       legend.text = element_text(size = 9)
     )
   
-  return(grafico)
+  return(list(grafico = grafico, datos = datos_combinados))
 }
 
 # Generar y mostrar el gráfico comparativo
-grafico_comparativo <- grafico_comparativo_fuentes(datos_ordenados)
-grafico_comparativo
+resultado_comparativo <- grafico_comparativo_fuentes(datos_ordenados)
+resultado_comparativo$grafico
 
-# Guardar el gráfico
-ggsave("resultados_tesis/comparacion_fuentes_pertenencia.png", grafico_comparativo, 
-       width = 12, height = 7, dpi = 300)
+# Crear tabla con los datos anuales
+tabla_pertenencia_anual <- resultado_comparativo$datos %>%
+  pivot_wider(names_from = fuente, values_from = porcentaje) %>%
+  arrange(AÑO) %>%
+  mutate(across(where(is.numeric), ~round(., 2)))
+
+# Calcular diferencias año a año (cambio absoluto y relativo)
+tabla_cambios <- tabla_pertenencia_anual %>%
+  arrange(AÑO) %>%
+  mutate(
+    # Cambio absoluto (diferencia en puntos porcentuales)
+    Diff_Abs_RSH = RSH - lag(RSH),
+    Diff_Abs_CONADI = CONADI - lag(CONADI),
+    Diff_Abs_Egresos = `Egresos Hospitalarios` - lag(`Egresos Hospitalarios`),
+    Diff_Abs_Enriquecida = `Pertenencia Enriquecida` - lag(`Pertenencia Enriquecida`),
+    
+    # Cambio relativo (variación porcentual respecto al año anterior)
+    Diff_Rel_RSH = ((RSH - lag(RSH)) / lag(RSH)) * 100,
+    Diff_Rel_CONADI = ((CONADI - lag(CONADI)) / lag(CONADI)) * 100,
+    Diff_Rel_Egresos = ((`Egresos Hospitalarios` - lag(`Egresos Hospitalarios`)) / lag(`Egresos Hospitalarios`)) * 100,
+    Diff_Rel_Enriquecida = ((`Pertenencia Enriquecida` - lag(`Pertenencia Enriquecida`)) / lag(`Pertenencia Enriquecida`)) * 100
+  ) %>%
+  mutate(across(starts_with("Diff_"), ~round(., 2)))
+
+# Mostrar tabla con porcentajes
+cat("\n### Tabla 1: Porcentaje de pertenencia a pueblos originarios por año y fuente\n\n")
+print(knitr::kable(tabla_pertenencia_anual, 
+                   caption = "Porcentaje anual de pertenencia según fuente de datos",
+                   col.names = c("Año", "RSH (%)", "CONADI (%)", "Egresos Hosp. (%)", "Pert. Enriquecida (%)")))
+
+# Mostrar tabla con cambios año a año (absolutos)
+cat("\n### Tabla 2: Cambios absolutos año a año (puntos porcentuales)\n\n")
+tabla_cambios_abs <- tabla_cambios %>%
+  select(AÑO, Diff_Abs_RSH, Diff_Abs_CONADI, Diff_Abs_Egresos, Diff_Abs_Enriquecida)
+
+print(knitr::kable(tabla_cambios_abs, 
+                   caption = "Diferencia absoluta en puntos porcentuales respecto al año anterior (Método: resta simple)",
+                   col.names = c("Año", "Δ RSH (pp)", "Δ CONADI (pp)", "Δ Egresos (pp)", "Δ Enriquecida (pp)")))
+
+# Mostrar tabla con cambios año a año (relativos)
+cat("\n### Tabla 3: Cambios relativos año a año (variación porcentual)\n\n")
+tabla_cambios_rel <- tabla_cambios %>%
+  select(AÑO, Diff_Rel_RSH, Diff_Rel_CONADI, Diff_Rel_Egresos, Diff_Rel_Enriquecida)
+
+print(knitr::kable(tabla_cambios_rel, 
+                   caption = "Variación porcentual respecto al año anterior (Método: [(año_t - año_t-1) / año_t-1] * 100)",
+                   col.names = c("Año", "Δ RSH (%)", "Δ CONADI (%)", "Δ Egresos (%)", "Δ Enriquecida (%)")))
+
+# Exportar tablas a HTML con formato mejorado
+library(flextable)
+
+# Tabla 1: Porcentajes anuales
+ft_porcentajes <- flextable(tabla_pertenencia_anual) %>%
+  set_caption(caption = "Tabla 1: Porcentaje de pertenencia a pueblos originarios por año según fuente de datos") %>%
+  set_header_labels(
+    AÑO = "Año",
+    RSH = "RSH (%)",
+    CONADI = "CONADI (%)",
+    `Egresos Hospitalarios` = "Egresos Hosp. (%)",
+    `Pertenencia Enriquecida` = "Pert. Enriquecida (%)"
+  ) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "center", part = "body") %>%
+  color(j = 2:5, color = "#000000", part = "body") %>%
+  bold(part = "header") %>%
+  fontsize(size = 11, part = "body") %>%
+  fontsize(size = 12, part = "header") %>%
+  autofit() %>%
+  add_footer_lines(values = c(
+    "Fuente: Base de datos de egresos hospitalarios 2010-2022",
+    "Nota: Se incluyen solo registros con información reportada (excluye valores no reportados o missing)",
+    "Las diferencias entre fuentes reflejan variaciones en cobertura y métodos de registro"
+  )) %>%
+  fontsize(size = 9, part = "footer") %>%
+  color(color = "#666666", part = "footer")
+
+save_as_html(ft_porcentajes, path = "resultados_tesis/tabla_pertenencia_anual_porcentajes.html")
+save_as_docx(ft_porcentajes, path = "resultados_tesis/tabla_pertenencia_anual_porcentajes.docx")
+webshot2::webshot(
+  url = "resultados_tesis/tabla_pertenencia_anual_porcentajes.html",
+  file = "resultados_tesis/tabla_pertenencia_anual_porcentajes.jpg",
+  vwidth = 1200,
+  vheight = 800
+)
+
+# Tabla 2: Cambios absolutos (puntos porcentuales)
+ft_cambios_abs <- flextable(tabla_cambios_abs) %>%
+  set_caption(caption = "Tabla 2: Cambios año a año en porcentaje de pertenencia (puntos porcentuales)") %>%
+  set_header_labels(
+    AÑO = "Año",
+    Diff_Abs_RSH = "Δ RSH (pp)",
+    Diff_Abs_CONADI = "Δ CONADI (pp)",
+    Diff_Abs_Egresos = "Δ Egresos (pp)",
+    Diff_Abs_Enriquecida = "Δ Enriquecida (pp)"
+  ) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "center", part = "body") %>%
+  bold(part = "header") %>%
+  fontsize(size = 11, part = "body") %>%
+  fontsize(size = 12, part = "header") %>%
+  bg(i = ~ Diff_Abs_RSH > 2 | Diff_Abs_CONADI > 2 | Diff_Abs_Egresos > 2 | Diff_Abs_Enriquecida > 2, 
+     bg = "#ffe6e6", part = "body") %>%
+  bg(i = ~ Diff_Abs_RSH < -2 | Diff_Abs_CONADI < -2 | Diff_Abs_Egresos < -2 | Diff_Abs_Enriquecida < -2, 
+     bg = "#e6e6ff", part = "body") %>%
+  autofit() %>%
+  add_footer_lines(values = c(
+    "Método de cálculo: Diferencia simple = Porcentaje(año_t) - Porcentaje(año_t-1)",
+    "Interpretación: Valores positivos indican incremento, negativos indican disminución",
+    "Código de colores: Rojo = incremento >2pp, Azul = disminución >2pp",
+    "Nota: Primer año (2010) sin valor de cambio por falta de año anterior de comparación"
+  )) %>%
+  fontsize(size = 9, part = "footer") %>%
+  color(color = "#666666", part = "footer")
+
+save_as_html(ft_cambios_abs, path = "resultados_tesis/tabla_pertenencia_anual_cambios_absolutos.html")
+save_as_docx(ft_cambios_abs, path = "resultados_tesis/tabla_pertenencia_anual_cambios_absolutos.docx")
+webshot2::webshot(
+  url = "resultados_tesis/tabla_pertenencia_anual_cambios_absolutos.html",
+  file = "resultados_tesis/tabla_pertenencia_anual_cambios_absolutos.jpg",
+  vwidth = 1200,
+  vheight = 800
+)
+
+# Tabla 3: Cambios relativos (variación porcentual)
+ft_cambios_rel <- flextable(tabla_cambios_rel) %>%
+  set_caption(caption = "Tabla 3: Cambios año a año en pertenencia (variación porcentual relativa)") %>%
+  set_header_labels(
+    AÑO = "Año",
+    Diff_Rel_RSH = "Δ RSH (%)",
+    Diff_Rel_CONADI = "Δ CONADI (%)",
+    Diff_Rel_Egresos = "Δ Egresos (%)",
+    Diff_Rel_Enriquecida = "Δ Enriquecida (%)"
+  ) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "center", part = "body") %>%
+  bold(part = "header") %>%
+  fontsize(size = 11, part = "body") %>%
+  fontsize(size = 12, part = "header") %>%
+  bg(i = ~ Diff_Rel_RSH > 20 | Diff_Rel_CONADI > 20 | Diff_Rel_Egresos > 20 | Diff_Rel_Enriquecida > 20, 
+     bg = "#ffe6e6", part = "body") %>%
+  bg(i = ~ Diff_Rel_RSH < -20 | Diff_Rel_CONADI < -20 | Diff_Rel_Egresos < -20 | Diff_Rel_Enriquecida < -20, 
+     bg = "#e6e6ff", part = "body") %>%
+  autofit() %>%
+  add_footer_lines(values = c(
+    "Método de cálculo: Variación relativa = [(Año_t - Año_t-1) / Año_t-1] × 100",
+    "Interpretación: Indica el cambio porcentual respecto al valor del año anterior",
+    "Ejemplo: Si RSH pasa de 5% a 6%, el cambio relativo es +20% (aumentó un 20% respecto a 5%)",
+    "Código de colores: Rojo = incremento >20%, Azul = disminución >20%"
+  )) %>%
+  fontsize(size = 9, part = "footer") %>%
+  color(color = "#666666", part = "footer")
+
+save_as_html(ft_cambios_rel, path = "resultados_tesis/tabla_pertenencia_anual_cambios_relativos.html")
+save_as_docx(ft_cambios_rel, path = "resultados_tesis/tabla_pertenencia_anual_cambios_relativos.docx")
+webshot2::webshot(
+  url = "resultados_tesis/tabla_pertenencia_anual_cambios_relativos.html",
+  file = "resultados_tesis/tabla_pertenencia_anual_cambios_relativos.jpg",
+  vwidth = 1200,
+  vheight = 800
+)
+
+message("Tablas exportadas exitosamente (HTML, Word y JPG):")
+message("  1. tabla_pertenencia_anual_porcentajes (HTML/DOCX/JPG)")
+message("  2. tabla_pertenencia_anual_cambios_absolutos (HTML/DOCX/JPG)")
+message("  3. tabla_pertenencia_anual_cambios_relativos (HTML/DOCX/JPG)")
 ```
+
+## 3. Análisis de Tendencia Mensual por Año
+
+```{r tendencia_mensual_anual, fig.width=14, fig.height=10}
+# Función para generar gráficos de tendencia mensual comparando las 4 variables
+# Genera un gráfico por cada año disponible
+
+generar_graficos_tendencia_mensual <- function(data) {
+  
+  # Verificar que exista variable de fecha
+  if(!("FECHA_EGRESO_FMT_DEIS" %in% names(data))) {
+    message("No se encuentra la variable FECHA_EGRESO_FMT_DEIS en los datos")
+    return(NULL)
+  }
+  
+  # Preparar datos: extraer mes y año de la fecha de egreso
+  datos_prep <- data %>%
+    mutate(
+      FECHA_EGRESO = as.Date(FECHA_EGRESO_FMT_DEIS),
+      MES = month(FECHA_EGRESO),
+      MES_NOMBRE = factor(month.abb[MES], levels = month.abb),
+      AÑO_NUM = year(FECHA_EGRESO)
+    ) %>%
+    filter(!is.na(FECHA_EGRESO), !is.na(AÑO_NUM))
+  
+  # Obtener años disponibles
+  años_disponibles <- sort(unique(datos_prep$AÑO_NUM))
+  
+  # Lista para almacenar gráficos
+  lista_graficos <- list()
+  
+  # Generar un gráfico por cada año
+  for(año_actual in años_disponibles) {
+    
+    # Filtrar datos del año actual
+    datos_año <- datos_prep %>%
+      filter(AÑO_NUM == año_actual)
+    
+    # Calcular proporciones mensuales para cada variable
+    
+    # RSH
+    datos_rsh <- datos_año %>%
+      group_by(MES, MES_NOMBRE) %>%
+      summarise(
+        pertenece = sum(RSH == 1, na.rm = TRUE),
+        total = n(),
+        porcentaje = (pertenece / total) * 100,
+        .groups = "drop"
+      ) %>%
+      mutate(Variable = "RSH")
+    
+    # CONADI
+    datos_conadi <- datos_año %>%
+      group_by(MES, MES_NOMBRE) %>%
+      summarise(
+        pertenece = sum(CONADI == 1, na.rm = TRUE),
+        total = n(),
+        porcentaje = (pertenece / total) * 100,
+        .groups = "drop"
+      ) %>%
+      mutate(Variable = "CONADI")
+    
+    # Egresos hospitalarios (EGRESO_HOSPITALARIO)
+    datos_egresos <- datos_año %>%
+      group_by(MES, MES_NOMBRE) %>%
+      summarise(
+        pertenece = sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE),
+        total = n(),
+        porcentaje = (pertenece / total) * 100,
+        .groups = "drop"
+      ) %>%
+      mutate(Variable = "Egresos Hospitalarios")
+    
+    # Variable enriquecida (PERTENENCIA2)
+    datos_enriquecida <- datos_año %>%
+      group_by(MES, MES_NOMBRE) %>%
+      summarise(
+        pertenece = sum(PERTENENCIA2 == 1, na.rm = TRUE),
+        total = n(),
+        porcentaje = (pertenece / total) * 100,
+        .groups = "drop"
+      ) %>%
+      mutate(Variable = "Variable Enriquecida")
+    
+    # Combinar todos los datos
+    datos_combinados <- bind_rows(
+      datos_rsh,
+      datos_conadi,
+      datos_egresos,
+      datos_enriquecida
+    ) %>%
+      mutate(Variable = factor(Variable, 
+                               levels = c("RSH", "CONADI", "Egresos Hospitalarios", 
+                                        "Variable Enriquecida")))
+    
+    # Crear el gráfico
+    grafico <- ggplot(datos_combinados, aes(x = MES_NOMBRE, y = porcentaje, 
+                                            color = Variable, group = Variable)) +
+      geom_line(linewidth = 1.2) +
+      geom_point(size = 3, alpha = 0.7) +
+      scale_color_manual(
+        values = c(
+          "RSH" = "#E41A1C",              # Rojo
+          "CONADI" = "#4DAF4A",           # Verde
+          "Egresos Hospitalarios" = "#377EB8", # Azul
+          "Variable Enriquecida" = "#FF7F00"   # Naranja
+        )
+      ) +
+      scale_y_continuous(
+        labels = function(x) paste0(round(x, 1), "%"),
+        breaks = seq(0, 100, by = 5)
+      ) +
+      labs(
+        title = paste("Tendencia mensual de pertenencia a pueblos originarios -", año_actual),
+        subtitle = "Comparación entre RSH, CONADI, Egresos Hospitalarios y Variable Enriquecida",
+        x = "Mes",
+        y = "Porcentaje de pertenencia (%)",
+        color = "Fuente de datos",
+        caption = paste0(
+          "n = ", format(nrow(datos_año), big.mark = ","), " registros | ",
+          "Variable Enriquecida combina información de todas las fuentes\n",
+          "NOTA: Este gráfico muestra la variación MENSUAL dentro del año ", año_actual, ".\n",
+          "Los niveles absolutos de porcentaje varían entre años por cambios en cobertura de registros administrativos (RSH, CONADI, egresos).")
+      ) +
+      theme_minimal() +
+      theme(
+        legend.position = "bottom",
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title = element_text(size = 11, face = "bold"),
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 11),
+        plot.caption = element_text(hjust = 0, size = 9, color = "gray40"),
+        legend.text = element_text(size = 10),
+        panel.grid.major = element_line(color = "gray90"),
+        panel.border = element_rect(color = "gray70", fill = NA)
+      )
+    
+    # Agregar a la lista con nombre del año
+    lista_graficos[[as.character(año_actual)]] <- grafico
+    
+    # Guardar gráfico individual
+    ggsave(
+      filename = paste0("resultados_tesis/tendencia_mensual_", año_actual, ".jpg"),
+      plot = grafico,
+      width = 14,
+      height = 8,
+      dpi = 300,
+      bg = "white"
+    )
+  }
+  
+  return(lista_graficos)
+}
+
+# Generar todos los gráficos
+graficos_mensuales <- generar_graficos_tendencia_mensual(datos_ordenados)
+
+# Mostrar los gráficos (uno por año)
+if(!is.null(graficos_mensuales)) {
+  for(año in names(graficos_mensuales)) {
+    print(graficos_mensuales[[año]])
+  }
+  message(paste("Se han generado", length(graficos_mensuales), "gráficos de tendencia mensual"))
+} else {
+  message("No se pudieron generar los gráficos de tendencia mensual")
+}
+```
+
+```{r guardar_graficos_mensuales}
+# Guardar también un gráfico combinado con facetas por año (si hay múltiples años)
+if(!is.null(graficos_mensuales) && length(graficos_mensuales) > 1) {
+  
+  # Preparar datos combinados de todos los años
+  datos_todos_años <- datos_ordenados %>%
+    mutate(
+      FECHA_EGRESO = as.Date(FECHA_EGRESO_FMT_DEIS),
+      MES = month(FECHA_EGRESO),
+      MES_NOMBRE = factor(month.abb[MES], levels = month.abb),
+      AÑO_NUM = year(FECHA_EGRESO)
+    ) %>%
+    filter(!is.na(FECHA_EGRESO), !is.na(AÑO_NUM))
+  
+  # Calcular proporciones para todas las variables y años
+  datos_rsh_todos <- datos_todos_años %>%
+    group_by(AÑO_NUM, MES, MES_NOMBRE) %>%
+    summarise(
+      porcentaje = (sum(RSH == 1, na.rm = TRUE) / n()) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(Variable = "RSH")
+  
+  datos_conadi_todos <- datos_todos_años %>%
+    group_by(AÑO_NUM, MES, MES_NOMBRE) %>%
+    summarise(
+      porcentaje = (sum(CONADI == 1, na.rm = TRUE) / n()) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(Variable = "CONADI")
+  
+  datos_egresos_todos <- datos_todos_años %>%
+    group_by(AÑO_NUM, MES, MES_NOMBRE) %>%
+    summarise(
+      porcentaje = (sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE) / n()) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(Variable = "Egresos Hospitalarios")
+  
+  datos_enriquecida_todos <- datos_todos_años %>%
+    group_by(AÑO_NUM, MES, MES_NOMBRE) %>%
+    summarise(
+      porcentaje = (sum(PERTENENCIA2 == 1, na.rm = TRUE) / n()) * 100,
+      .groups = "drop"
+    ) %>%
+    mutate(Variable = "Variable Enriquecida")
+  
+  # Combinar
+  datos_facetado <- bind_rows(
+    datos_rsh_todos,
+    datos_conadi_todos,
+    datos_egresos_todos,
+    datos_enriquecida_todos
+  ) %>%
+    mutate(Variable = factor(Variable, 
+                             levels = c("RSH", "CONADI", "Egresos Hospitalarios", 
+                                      "Variable Enriquecida")))
+  
+  # Crear gráfico facetado con escala fija para visualizar mejor las diferencias entre años
+  grafico_facetado <- ggplot(datos_facetado, 
+                             aes(x = MES_NOMBRE, y = porcentaje, 
+                                 color = Variable, group = Variable)) +
+    geom_line(linewidth = 0.8) +
+    geom_point(size = 2, alpha = 0.6) +
+    facet_wrap(~AÑO_NUM, ncol = 2, scales = "fixed") +
+    scale_color_manual(
+      values = c(
+        "RSH" = "#E41A1C",
+        "CONADI" = "#4DAF4A",
+        "Egresos Hospitalarios" = "#377EB8",
+        "Variable Enriquecida" = "#FF7F00"
+      )
+    ) +
+    scale_y_continuous(
+      labels = function(x) paste0(round(x, 1), "%"),
+      limits = c(0, NA)
+    ) +
+    labs(
+      title = "Tendencia mensual de pertenencia a pueblos originarios por año",
+      subtitle = "Comparación entre RSH, CONADI, Egresos Hospitalarios y Variable Enriquecida",
+      x = "Mes",
+      y = "Porcentaje de pertenencia (%)",
+      color = "Fuente de datos",
+      caption = paste0("INTERPRETACIÓN: Cada panel muestra la VARIACIÓN MENSUAL dentro de un año (estacionalidad).\n",
+                      "Las DIFERENCIAS ENTRE AÑOS (niveles base) reflejan cambios REALES en cobertura de registros administrativos:\n",
+                      "• 2010-2011: Incremento por mejoras en sistemas RSH/CONADI | • 2013-2014: Caída por cambios metodológicos\n",
+                      "• 2019-2020: Disminución por pandemia COVID-19 | Las escalas fijas permiten comparar magnitudes entre años.")
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 9),
+      strip.text = element_text(size = 11, face = "bold"),
+      plot.title = element_text(size = 13, face = "bold"),
+      plot.subtitle = element_text(size = 10),
+      plot.caption = element_text(hjust = 0, size = 7.5, color = "gray20", lineheight = 1.3, margin = margin(t = 10)),
+      panel.spacing = unit(1, "lines")
+    )
+  
+  # Mostrar gráfico facetado
+  print(grafico_facetado)
+  
+  # Guardar gráfico facetado
+  ggsave(
+    filename = "resultados_tesis/tendencia_mensual_facetado_todos_años.jpg",
+    plot = grafico_facetado,
+    width = 16,
+    height = 12,
+    dpi = 300,
+    bg = "white"
+  )
+  
+  message("Gráfico facetado combinado guardado exitosamente")
+}
+```
+
+```{r exportar_tablas_datos_mensuales}
+# Crear tablas con datos mensuales por año para validación
+# Estas tablas permiten verificar los valores exactos mostrados en los gráficos
+
+# Preparar datos mensuales
+datos_mensuales_prep <- datos_ordenados %>%
+  mutate(
+    FECHA_EGRESO = as.Date(FECHA_EGRESO_FMT_DEIS),
+    MES = month(FECHA_EGRESO),
+    MES_NOMBRE = month.abb[MES],
+    AÑO_NUM = year(FECHA_EGRESO)
+  ) %>%
+  filter(!is.na(FECHA_EGRESO), !is.na(AÑO_NUM))
+
+# Obtener años disponibles
+años_disponibles <- sort(unique(datos_mensuales_prep$AÑO_NUM))
+
+# Generar tabla para cada año
+for(año_actual in años_disponibles) {
+  
+  # Filtrar datos del año
+  datos_año <- datos_mensuales_prep %>%
+    filter(AÑO_NUM == año_actual)
+  
+  # Calcular porcentajes mensuales para cada fuente
+  tabla_mensual <- datos_año %>%
+    group_by(MES, MES_NOMBRE) %>%
+    summarise(
+      N_Total = n(),
+      # RSH
+      N_RSH = sum(RSH == 1, na.rm = TRUE),
+      Pct_RSH = (N_RSH / N_Total) * 100,
+      # CONADI
+      N_CONADI = sum(CONADI == 1, na.rm = TRUE),
+      Pct_CONADI = (N_CONADI / N_Total) * 100,
+      # Egresos Hospitalarios
+      N_Egresos = sum(PUEBLO_ORIGINARIO_BIN == 1, na.rm = TRUE),
+      Pct_Egresos = (N_Egresos / N_Total) * 100,
+      # Variable Enriquecida
+      N_Enriquecida = sum(PERTENENCIA2 == 1, na.rm = TRUE),
+      Pct_Enriquecida = (N_Enriquecida / N_Total) * 100,
+      .groups = "drop"
+    ) %>%
+    arrange(MES) %>%
+    select(MES_NOMBRE, N_Total, 
+           N_RSH, Pct_RSH,
+           N_CONADI, Pct_CONADI,
+           N_Egresos, Pct_Egresos,
+           N_Enriquecida, Pct_Enriquecida)
+  
+  # Crear flextable
+  ft_mensual <- flextable(tabla_mensual) %>%
+    set_header_labels(
+      MES_NOMBRE = "Mes",
+      N_Total = "N Total",
+      N_RSH = "N",
+      Pct_RSH = "%",
+      N_CONADI = "N",
+      Pct_CONADI = "%",
+      N_Egresos = "N",
+      Pct_Egresos = "%",
+      N_Enriquecida = "N",
+      Pct_Enriquecida = "%"
+    ) %>%
+    add_header_row(
+      values = c("", "Total", "RSH", "CONADI", "Egresos Hospitalarios", "Variable Enriquecida"),
+      colwidths = c(1, 1, 2, 2, 2, 2)
+    ) %>%
+    theme_booktabs() %>%
+    align(align = "center", part = "all") %>%
+    align(j = 1, align = "left", part = "body") %>%
+    colformat_double(j = c("Pct_RSH", "Pct_CONADI", "Pct_Egresos", "Pct_Enriquecida"), 
+                     digits = 2, suffix = "%") %>%
+    colformat_int(j = c("N_Total", "N_RSH", "N_CONADI", "N_Egresos", "N_Enriquecida"),
+                  big.mark = ",") %>%
+    bg(bg = "#4472C4", part = "header") %>%
+    color(color = "white", part = "header") %>%
+    bold(part = "header") %>%
+    fontsize(size = 10, part = "all") %>%
+    autofit() %>%
+    set_caption(paste0("Tabla: Datos mensuales de pertenencia a pueblos originarios - Año ", año_actual)) %>%
+    add_footer_lines(c(
+      paste0("Fuente: Base de datos de egresos hospitalarios - Año ", año_actual),
+      "N = Número de registros; % = Porcentaje sobre total mensual",
+      "Variable Enriquecida: Combina información de RSH, CONADI y Egresos Hospitalarios"
+    )) %>%
+    fontsize(size = 9, part = "footer") %>%
+    color(color = "#666666", part = "footer")
+  
+  # Exportar en HTML, Word y JPG
+  nombre_base <- paste0("resultados_tesis/tabla_datos_mensuales_", año_actual)
+  
+  save_as_html(ft_mensual, path = paste0(nombre_base, ".html"))
+  save_as_docx(ft_mensual, path = paste0(nombre_base, ".docx"))
+  webshot2::webshot(
+    url = paste0(nombre_base, ".html"),
+    file = paste0(nombre_base, ".jpg"),
+    vwidth = 1400,
+    vheight = 600
+  )
+}
+
+message(paste("Tablas de datos mensuales exportadas para", length(años_disponibles), "años (HTML/DOCX/JPG)"))
+```
+
+## 4. Guardar Todos los Gráficos
+
+```{r guardar_todos_graficos}
+# Guardar gráficos anuales
+guardar_multiformato(graficos_rsh$anual, "rsh_anual", 10, 6)
+guardar_multiformato(graficos_conadi$anual, "conadi_anual", 10, 6)
+guardar_multiformato(graficos_egresos$anual, "egresos_anual", 10, 6)
+guardar_multiformato(graficos_pertenencia$anual, "pertenencia_anual", 10, 6)
+
+# Guardar gráficos de promedios
+guardar_multiformato(graficos_rsh$promedio, "rsh_promedio", 8, 5)
+guardar_multiformato(graficos_conadi$promedio, "conadi_promedio", 8, 5)
+guardar_multiformato(graficos_egresos$promedio, "egresos_promedio", 8, 5)
+guardar_multiformato(graficos_pertenencia$promedio, "pertenencia_promedio", 8, 5)
+
+# Guardar gráficos combinados
+guardar_multiformato(grafico_combinado_anual, "pertenencia_anual_combinado", 14, 10)
+guardar_multiformato(grafico_combinado_promedio, "pertenencia_promedio_combinado", 14, 10)
+
+# Guardar gráficos por sexo
+guardar_multiformato(graficos_rsh_sexo$anual, "rsh_sexo_anual", 12, 6)
+guardar_multiformato(graficos_conadi_sexo$anual, "conadi_sexo_anual", 12, 6)
+guardar_multiformato(graficos_egresos_sexo$anual, "egresos_sexo_anual", 12, 6)
+guardar_multiformato(graficos_pertenencia_sexo$anual, "pertenencia_sexo_anual", 12, 6)
+
+guardar_multiformato(graficos_rsh_sexo$promedio, "rsh_sexo_promedio", 10, 5)
+guardar_multiformato(graficos_conadi_sexo$promedio, "conadi_sexo_promedio", 10, 5)
+guardar_multiformato(graficos_egresos_sexo$promedio, "egresos_sexo_promedio", 10, 5)
+guardar_multiformato(graficos_pertenencia_sexo$promedio, "pertenencia_sexo_promedio", 10, 5)
+
+# Guardar gráficos de tendencia
+guardar_multiformato(tendencia_rsh, "rsh_tendencia_sinpuntos", 10, 6)
+guardar_multiformato(tendencia_conadi, "conadi_tendencia_sinpuntos", 10, 6)
+guardar_multiformato(tendencia_egresos, "egresos_tendencia_sinpuntos", 10, 6)
+guardar_multiformato(tendencia_pertenencia, "pertenencia_tendencia_sinpuntos", 10, 6)
+
+guardar_multiformato(tendencia_completa_rsh, "rsh_tendencia_completa", 10, 6)
+guardar_multiformato(tendencia_completa_conadi, "conadi_tendencia_completa", 10, 6)
+guardar_multiformato(tendencia_completa_egresos, "egresos_tendencia_completa", 10, 6)
+guardar_multiformato(tendencia_completa_pertenencia, "pertenencia_tendencia_completa", 10, 6)
+
+guardar_multiformato(tendencias_combinadas_anotadas, "pertenencia_tendencias_combinadas_sinpuntos", 14, 10)
+guardar_multiformato(tendencias_completas_anotadas, "pertenencia_tendencias_completas_combinadas", 14, 10)
+
+# Guardar gráfico comparativo de fuentes
+guardar_multiformato(resultado_comparativo$grafico, "comparacion_fuentes_pertenencia", 12, 7)
+
+# Mensaje de confirmación
+message("Se han guardado todos los gráficos en la carpeta 'resultados_tesis' en formato JPG")
+```
+

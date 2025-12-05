@@ -31,6 +31,8 @@ Meta/
 # Sensitive data
 /data/
 /Lock_sensible/
+/DATOS ABIERTOS/
+
 
 # System files
 .DS_Store
