@@ -23,16 +23,21 @@ Meta/
 *.pdf
 *.png
 *.html
+*.rmarkdown
 /E_descriptiva_files/
 /grafico_simple_files/
 /Prueba-de-grafico_files/
+/TEST_funciones_files/
 /resultados_tesis/
 
 # Sensitive data
 /data/
 /Lock_sensible/
 /DATOS ABIERTOS/
-
+/ICD_2019/
+/TEST_funciones_files/
+/.vscode/
+/_extensions/
 
 # System files
 .DS_Store

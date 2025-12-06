@@ -1,0 +1,619 @@
+---
+title: "Análisis de Pertenencia a Pueblos Originarios - Sistema Modular"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis de tendencias de pertenencia usando funciones modularizadas"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Análisis de Tendencias de Pertenencia
+
+## 1. Configuración
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ggpubr)
+  library(lubridate)
+  library(scales)
+})
+
+# Colores
+colores_analisis <- c(
+  "Pertenece a Pueblos Originarios" = "#003366",
+  "Población General" = "#808000"
+)
+
+colores_fuentes <- c(
+  "RSH" = "#E41A1C",
+  "CONADI" = "#4DAF4A",
+  "Egresos Hospitalarios" = "#377EB8",
+  "Variable Enriquecida" = "#FF7F00"
+)
+
+# Cargar funciones y datos
+source("R/cargar_funciones.R")
+load("BBDD_homologados.RData")
+
+# Preparar datos - ELIMINAR DUPLICADOS DE PERTENENCIA2
+datos_preparados <- datos_homologados %>%
+  distinct(RUN, FECHA_EGRESO_FMT_DEIS, .keep_all = TRUE)
+
+cat("✓ Registros originales:", format(nrow(datos_homologados), big.mark = ","), "\n")
+cat("✓ Registros únicos (sin duplicados):", format(nrow(datos_preparados), big.mark = ","), "\n")
+cat("✓ Duplicados eliminados:", format(nrow(datos_homologados) - nrow(datos_preparados), big.mark = ","), "\n")
+```
+
+## 2. Análisis de Tendencias (Solo Líneas)
+
+```{r tendencias_lineas}
+cat("═══ GRÁFICOS DE TENDENCIA ═══\n")
+
+# RSH
+tend_rsh <- grafico_tendencia_pertenencia(datos_preparados, "RSH", "RSH")
+print(tend_rsh)
+guardar_multiformato(tend_rsh, "tendencia_rsh", 10, 6, 300)
+
+# CONADI
+tend_conadi <- grafico_tendencia_pertenencia(datos_preparados, "CONADI", "CONADI")
+print(tend_conadi)
+guardar_multiformato(tend_conadi, "tendencia_conadi", 10, 6, 300)
+
+# Egresos Hospitalarios
+tend_egresos <- grafico_tendencia_pertenencia(datos_preparados, "PUEBLO_ORIGINARIO_BIN", "Egresos Hospitalarios")
+print(tend_egresos)
+guardar_multiformato(tend_egresos, "tendencia_egresos", 10, 6, 300)
+
+# Variable Enriquecida (sin duplicados)
+tend_pertenencia <- grafico_tendencia_pertenencia(datos_preparados, "PERTENENCIA2", "Variable Enriquecida")
+print(tend_pertenencia)
+guardar_multiformato(tend_pertenencia, "tendencia_pertenencia2_sindup", 10, 6, 300)
+```
+
+## 3. Tendencias Completas (Pertenece + No Pertenece)
+
+```{r tendencias_completas}
+cat("═══ GRÁFICOS DE TENDENCIA COMPLETA ═══\n")
+
+# RSH completo
+tend_comp_rsh <- grafico_tendencia_completa(datos_preparados, "RSH", "RSH")
+print(tend_comp_rsh)
+guardar_multiformato(tend_comp_rsh, "tendencia_completa_rsh", 10, 6, 300)
+
+# CONADI completo
+tend_comp_conadi <- grafico_tendencia_completa(datos_preparados, "CONADI", "CONADI")
+print(tend_comp_conadi)
+guardar_multiformato(tend_comp_conadi, "tendencia_completa_conadi", 10, 6, 300)
+
+# Egresos completo
+tend_comp_egresos <- grafico_tendencia_completa(datos_preparados, "PUEBLO_ORIGINARIO_BIN", "Egresos Hospitalarios")
+print(tend_comp_egresos)
+guardar_multiformato(tend_comp_egresos, "tendencia_completa_egresos", 10, 6, 300)
+
+# Variable Enriquecida completa
+tend_comp_pertenencia <- grafico_tendencia_completa(datos_preparados, "PERTENENCIA2", "Variable Enriquecida")
+print(tend_comp_pertenencia)
+guardar_multiformato(tend_comp_pertenencia, "tendencia_completa_pertenencia2_sindup", 10, 6, 300)
+```
+
+## 4. Comparación de Fuentes (con duplicados originales)
+
+```{r comparacion_fuentes}
+cat("═══ COMPARACIÓN ENTRE FUENTES (Base Original) ═══\n")
+
+# Gráfico comparativo con base original
+resultado_comp <- grafico_comparativo_fuentes(datos_homologados)
+print(resultado_comp$grafico)
+guardar_multiformato(resultado_comp$grafico, "comparacion_fuentes_pertenencia", 12, 7, 300)
+```
+
+## 4b. Comparación de Fuentes (sin duplicados - PERTENENCIA2_TEMPORAL)
+
+```{r comparacion_fuentes_sindup}
+cat("═══ COMPARACIÓN ENTRE FUENTES (Sin Duplicados) ═══\n")
+
+# Crear variable temporal PERTENENCIA2_TEMPORAL en datos sin duplicados
+datos_preparados_temp <- datos_preparados %>%
+  rename(PERTENENCIA2_TEMPORAL = PERTENENCIA2)
+
+# Calcular estadísticas para cada fuente SIN DUPLICADOS
+comparacion_sindup <- datos_preparados_temp %>%
+  summarise(
+    across(
+      c(RSH, CONADI, PUEBLO_ORIGINARIO_BIN, PERTENENCIA2_TEMPORAL),
+      list(
+        pertenece = ~sum(.x == 1, na.rm = TRUE),
+        total = ~sum(!is.na(.x)),
+        porcentaje = ~(sum(.x == 1, na.rm = TRUE) / sum(!is.na(.x)) * 100)
+      ),
+      .names = "{.col}_{.fn}"
+    )
+  ) %>%
+  pivot_longer(
+    everything(),
+    names_to = c("fuente", ".value"),
+    names_pattern = "(.+)_(pertenece|total|porcentaje)"
+  ) %>%
+  mutate(
+    fuente_etiqueta = case_when(
+      fuente == "RSH" ~ "RSH",
+      fuente == "CONADI" ~ "CONADI",
+      fuente == "PUEBLO_ORIGINARIO_BIN" ~ "Egresos Hospitalarios",
+      fuente == "PERTENENCIA2_TEMPORAL" ~ "Variable Enriquecida (sin dup)"
+    )
+  )
+
+# Gráfico comparativo sin duplicados
+graf_comp_sindup <- ggplot(comparacion_sindup, 
+                           aes(x = reorder(fuente_etiqueta, porcentaje), 
+                               y = porcentaje, 
+                               fill = fuente_etiqueta)) +
+  geom_col(width = 0.7) +
+  geom_text(aes(label = sprintf("%.2f%%\n(n=%s)", 
+                                porcentaje, 
+                                format(pertenece, big.mark = ","))),
+            hjust = -0.1, size = 4) +
+  scale_fill_manual(values = c(
+    "RSH" = "#E41A1C",
+    "CONADI" = "#4DAF4A",
+    "Egresos Hospitalarios" = "#377EB8",
+    "Variable Enriquecida (sin dup)" = "#FF7F00"
+  )) +
+  coord_flip() +
+  scale_y_continuous(
+    labels = function(x) paste0(x, "%"),
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  labs(
+    title = "Comparación de fuentes de pertenencia a pueblos originarios",
+    subtitle = "Base de datos SIN DUPLICADOS (eliminados por RUN + FECHA_EGRESO)",
+    x = NULL,
+    y = "Porcentaje de pertenencia (%)",
+    fill = "Fuente",
+    caption = paste0(
+      "n total (sin duplicados) = ", format(nrow(datos_preparados_temp), big.mark = ","), " registros únicos\n",
+      "Variable Enriquecida: Combina información de Censo 2017, RSH, CONADI y Egresos Hospitalarios"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11, color = "gray30"),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray40", lineheight = 1.2)
+  )
+
+print(graf_comp_sindup)
+guardar_multiformato(graf_comp_sindup, "comparacion_fuentes_sindup", 10, 6, 300)
+
+# Tabla resumen
+cat("\n═══ RESUMEN COMPARATIVO ═══\n")
+print(comparacion_sindup %>% 
+        select(fuente_etiqueta, pertenece, total, porcentaje) %>%
+        arrange(desc(porcentaje)))
+```
+
+## 5. Tendencia Anual Consolidada (con Variable Enriquecida sin duplicados)
+
+```{r tendencia_anual_consolidada, fig.width=14, fig.height=8}
+cat("═══ TENDENCIA ANUAL CONSOLIDADA (CON VARIABLE ENRIQUECIDA SIN DUPLICADOS) ═══\n")
+
+# Preparar datos anuales
+preparar_datos_anuales <- function(data, var, etiqueta) {
+  data %>%
+    filter(AÑO != "No reportado") %>%
+    group_by(AÑO, .data[[var]]) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    group_by(AÑO) %>%
+    mutate(
+      total = sum(n),
+      porcentaje = n / total * 100
+    ) %>%
+    ungroup() %>%
+    filter(.data[[var]] == 1) %>%
+    select(AÑO, porcentaje) %>%
+    mutate(Variable = etiqueta)
+}
+
+# Datos con duplicados (RSH, CONADI, Egresos)
+datos_rsh_anual <- preparar_datos_anuales(datos_homologados, "RSH", "RSH")
+datos_conadi_anual <- preparar_datos_anuales(datos_homologados, "CONADI", "CONADI")
+datos_egresos_anual <- preparar_datos_anuales(datos_homologados, "PUEBLO_ORIGINARIO_BIN", "Egresos Hospitalarios")
+
+# Variable Enriquecida SIN DUPLICADOS
+datos_enriquecida_anual <- preparar_datos_anuales(datos_preparados, "PERTENENCIA2", "Variable Enriquecida (sin dup)")
+
+# Combinar todos
+datos_anuales_combined <- bind_rows(
+  datos_rsh_anual,
+  datos_conadi_anual,
+  datos_egresos_anual,
+  datos_enriquecida_anual
+) %>%
+  mutate(Variable = factor(Variable, 
+                           levels = c("RSH", "CONADI", "Egresos Hospitalarios", "Variable Enriquecida (sin dup)")))
+
+# Colores extendidos
+colores_todas <- c(
+  "RSH" = "#E41A1C",
+  "CONADI" = "#4DAF4A",
+  "Egresos Hospitalarios" = "#377EB8",
+  "Variable Enriquecida (sin dup)" = "#FF7F00"
+)
+
+# Gráfico consolidado anual
+grafico_anual_consolidado <- ggplot(datos_anuales_combined, 
+                                    aes(x = AÑO, y = porcentaje, 
+                                        color = Variable, group = Variable)) +
+  geom_line(linewidth = 1.2, alpha = 0.9) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  scale_color_manual(values = colores_todas) +
+  scale_y_continuous(
+    labels = function(x) paste0(round(x, 1), "%"),
+    breaks = seq(0, 100, by = 5)
+  ) +
+  labs(
+    title = "Tendencia anual de pertenencia a pueblos originarios (2010-2022)",
+    subtitle = "Comparación de fuentes: Variable Enriquecida sin duplicados vs otras fuentes con duplicados",
+    x = "Año",
+    y = "Porcentaje de pertenencia (%)",
+    color = "Fuente de datos",
+    caption = paste0(
+      "Variable Enriquecida: n = ", format(nrow(datos_preparados), big.mark = ","), " registros únicos (sin duplicados)\n",
+      "Otras fuentes: n = ", format(nrow(datos_homologados), big.mark = ","), " registros (con duplicados)\n",
+      "Variable Enriquecida combina información de Censo 2017, RSH, CONADI y Egresos Hospitalarios"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 10),
+    panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
+  )
+
+print(grafico_anual_consolidado)
+guardar_multiformato(grafico_anual_consolidado, "tendencia_anual_consolidada_mixta", 14, 8, 300)
+```
+
+## 6. Tendencia Anual - TODAS las variables sin duplicados
+
+```{r tendencia_anual_todas_sindup, fig.width=14, fig.height=8}
+cat("═══ TENDENCIA ANUAL - TODAS SIN DUPLICADOS ═══\n")
+
+# Todas las fuentes SIN DUPLICADOS
+datos_rsh_sindup <- preparar_datos_anuales(datos_preparados, "RSH", "RSH (sin dup)")
+datos_conadi_sindup <- preparar_datos_anuales(datos_preparados, "CONADI", "CONADI (sin dup)")
+datos_egresos_sindup <- preparar_datos_anuales(datos_preparados, "PUEBLO_ORIGINARIO_BIN", "Egresos (sin dup)")
+datos_enriq_sindup <- preparar_datos_anuales(datos_preparados, "PERTENENCIA2", "Variable Enriquecida (sin dup)")
+
+# Combinar
+datos_todas_sindup <- bind_rows(
+  datos_rsh_sindup,
+  datos_conadi_sindup,
+  datos_egresos_sindup,
+  datos_enriq_sindup
+) %>%
+  mutate(Variable = factor(Variable, 
+                           levels = c("RSH (sin dup)", "CONADI (sin dup)", 
+                                      "Egresos (sin dup)", "Variable Enriquecida (sin dup)")))
+
+colores_sindup <- c(
+  "RSH (sin dup)" = "#E41A1C",
+  "CONADI (sin dup)" = "#4DAF4A",
+  "Egresos (sin dup)" = "#377EB8",
+  "Variable Enriquecida (sin dup)" = "#FF7F00"
+)
+
+grafico_todas_sindup <- ggplot(datos_todas_sindup, 
+                               aes(x = AÑO, y = porcentaje, 
+                                   color = Variable, group = Variable)) +
+  geom_line(linewidth = 1.2, alpha = 0.9) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  scale_color_manual(values = colores_sindup) +
+  scale_y_continuous(
+    labels = function(x) paste0(round(x, 1), "%"),
+    breaks = seq(0, 100, by = 5)
+  ) +
+  labs(
+    title = "Tendencia anual - TODAS las fuentes sin duplicados (2010-2022)",
+    subtitle = "Base depurada: eliminados duplicados por N° de identificación + FECHA_EGRESO en todas las variables",
+    x = "Año",
+    y = "Porcentaje de pertenencia (%)",
+    color = "Fuente de datos",
+    caption = paste0(
+      "n = ", format(nrow(datos_preparados), big.mark = ","), " registros únicos (sin duplicados)\n",
+      "Variable Enriquecida combina información de Censo 2017, RSH, CONADI y Egresos Hospitalarios"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 10),
+    panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
+  )
+
+print(grafico_todas_sindup)
+guardar_multiformato(grafico_todas_sindup, "tendencia_anual_todas_sindup", 14, 8, 300)
+```
+
+## 7. Tendencia Mensual Consolidada (2010-2022) - Variable Enriquecida sin duplicados
+
+```{r tendencia_mensual_consolidada, fig.width=16, fig.height=10}
+cat("═══ TENDENCIA MENSUAL CONSOLIDADA (2010-2022) ═══\n")
+
+# Preparar datos mensuales para todo el período
+datos_mensuales <- datos_preparados %>%
+  mutate(
+    FECHA_EGRESO = as.Date(FECHA_EGRESO_FMT_DEIS),
+    MES = month(FECHA_EGRESO),
+    AÑO_NUM = year(FECHA_EGRESO),
+    PERIODO = as.Date(paste0(AÑO_NUM, "-", sprintf("%02d", MES), "-01"))
+  ) %>%
+  filter(!is.na(FECHA_EGRESO), !is.na(AÑO_NUM), AÑO_NUM >= 2010, AÑO_NUM <= 2022)
+
+# Calcular porcentajes mensuales para cada fuente
+calc_mensual <- function(data, var) {
+  data %>%
+    group_by(PERIODO) %>%
+    summarise(
+      pertenece = sum(.data[[var]] == 1, na.rm = TRUE),
+      total = n(),
+      porcentaje = (pertenece / total) * 100,
+      .groups = "drop"
+    )
+}
+
+# RSH
+datos_rsh_mes <- calc_mensual(datos_mensuales, "RSH") %>%
+  mutate(Variable = "RSH")
+
+# CONADI
+datos_conadi_mes <- calc_mensual(datos_mensuales, "CONADI") %>%
+  mutate(Variable = "CONADI")
+
+# Egresos
+datos_egresos_mes <- calc_mensual(datos_mensuales, "PUEBLO_ORIGINARIO_BIN") %>%
+  mutate(Variable = "Egresos Hospitalarios")
+
+# Variable Enriquecida
+datos_enriquecida_mes <- calc_mensual(datos_mensuales, "PERTENENCIA2") %>%
+  mutate(Variable = "Variable Enriquecida")
+
+# Combinar todos los datos
+datos_mensuales_combined <- bind_rows(
+  datos_rsh_mes,
+  datos_conadi_mes,
+  datos_egresos_mes,
+  datos_enriquecida_mes
+) %>%
+  mutate(Variable = factor(Variable, 
+                           levels = c("RSH", "CONADI", "Egresos Hospitalarios", "Variable Enriquecida")))
+
+# Crear gráfico consolidado
+grafico_mensual_consolidado <- ggplot(datos_mensuales_combined, 
+                                      aes(x = PERIODO, y = porcentaje, 
+                                          color = Variable, group = Variable)) +
+  geom_line(linewidth = 0.8, alpha = 0.9) +
+  scale_color_manual(values = colores_fuentes) +
+  scale_x_date(
+    date_breaks = "1 year",
+    date_labels = "%Y",
+    expand = c(0.01, 0)
+  ) +
+  scale_y_continuous(
+    labels = function(x) paste0(round(x, 1), "%"),
+    breaks = seq(0, 100, by = 5)
+  ) +
+  labs(
+    title = "Tendencia mensual de pertenencia a pueblos originarios (2010-2022)",
+    subtitle = "Serie temporal completa comparando RSH, CONADI, Egresos Hospitalarios y Variable Enriquecida",
+    x = "Período (Año-Mes)",
+    y = "Porcentaje de pertenencia (%)",
+    color = "Fuente de datos",
+    caption = paste0(
+      "n = ", format(nrow(datos_mensuales), big.mark = ","), " registros únicos (eliminados duplicados por RUN y fecha) | ",
+      "Período: Enero 2010 - Diciembre 2022 | ",
+      format(length(unique(datos_mensuales_combined$PERIODO)), big.mark = ","), " meses analizados\n",
+      "Variable Enriquecida: Combina información de Censo 2017, RSH, CONADI y Egresos Hospitalarios\n",
+      "NOTA: Variaciones mensuales reflejan estacionalidad. Cambios entre años reflejan evolución en cobertura de registros."
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "gray90", linewidth = 0.3),
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.3),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 10),
+    panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
+  )
+
+print(grafico_mensual_consolidado)
+
+# Guardar gráfico
+guardar_multiformato(grafico_mensual_consolidado, 
+                     "tendencia_mensual_consolidada_2010_2022", 
+                     16, 10, 300)
+
+cat("✓ Gráfico mensual consolidado (todas sin duplicados) generado y guardado\n")
+```
+
+## 8. Tendencia Mensual - Variable Enriquecida vs Otras Fuentes
+
+```{r tendencia_mensual_mixta, fig.width=16, fig.height=10}
+cat("═══ TENDENCIA MENSUAL MIXTA (Variable Enriquecida sin dup vs otras con dup) ═══\n")
+
+# Datos mensuales con duplicados (base original)
+datos_mensuales_dup <- datos_homologados %>%
+  mutate(
+    FECHA_EGRESO = as.Date(FECHA_EGRESO_FMT_DEIS),
+    MES = month(FECHA_EGRESO),
+    AÑO_NUM = year(FECHA_EGRESO),
+    PERIODO = as.Date(paste0(AÑO_NUM, "-", sprintf("%02d", MES), "-01"))
+  ) %>%
+  filter(!is.na(FECHA_EGRESO), !is.na(AÑO_NUM), AÑO_NUM >= 2010, AÑO_NUM <= 2022)
+
+# RSH, CONADI, Egresos con duplicados
+datos_rsh_dup_mes <- calc_mensual(datos_mensuales_dup, "RSH") %>%
+  mutate(Variable = "RSH (con dup)")
+
+datos_conadi_dup_mes <- calc_mensual(datos_mensuales_dup, "CONADI") %>%
+  mutate(Variable = "CONADI (con dup)")
+
+datos_egresos_dup_mes <- calc_mensual(datos_mensuales_dup, "PUEBLO_ORIGINARIO_BIN") %>%
+  mutate(Variable = "Egresos (con dup)")
+
+# Variable Enriquecida SIN duplicados
+datos_enriq_sindup_mes <- calc_mensual(datos_mensuales, "PERTENENCIA2") %>%
+  mutate(Variable = "Variable Enriquecida (sin dup)")
+
+# Combinar mixto
+datos_mensuales_mixto <- bind_rows(
+  datos_rsh_dup_mes,
+  datos_conadi_dup_mes,
+  datos_egresos_dup_mes,
+  datos_enriq_sindup_mes
+) %>%
+  mutate(Variable = factor(Variable, 
+                           levels = c("RSH (con dup)", "CONADI (con dup)", 
+                                      "Egresos (con dup)", "Variable Enriquecida (sin dup)")))
+
+colores_mixto <- c(
+  "RSH (con dup)" = "#E41A1C",
+  "CONADI (con dup)" = "#4DAF4A",
+  "Egresos (con dup)" = "#377EB8",
+  "Variable Enriquecida (sin dup)" = "#FF7F00"
+)
+
+grafico_mensual_mixto <- ggplot(datos_mensuales_mixto, 
+                                aes(x = PERIODO, y = porcentaje, 
+                                    color = Variable, group = Variable)) +
+  geom_line(linewidth = 0.8, alpha = 0.9) +
+  scale_color_manual(values = colores_mixto) +
+  scale_x_date(
+    date_breaks = "1 year",
+    date_labels = "%Y",
+    expand = c(0.01, 0)
+  ) +
+  scale_y_continuous(
+    labels = function(x) paste0(round(x, 1), "%"),
+    breaks = seq(0, 100, by = 5)
+  ) +
+  labs(
+    title = "Tendencia mensual mixta (2010-2022)",
+    subtitle = "Variable Enriquecida sin duplicados vs otras fuentes con duplicados",
+    x = "Período (Año-Mes)",
+    y = "Porcentaje de pertenencia (%)",
+    color = "Fuente de datos",
+    caption = paste0(
+      "Variable Enriquecida: n = ", format(nrow(datos_mensuales), big.mark = ","), " registros únicos (sin duplicados)\n",
+      "Otras fuentes: n = ", format(nrow(datos_mensuales_dup), big.mark = ","), " registros (con duplicados)\n",
+      "Variable Enriquecida combina Censo 2017, RSH, CONADI y Egresos Hospitalarios"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "gray90", linewidth = 0.3),
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.3),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 10),
+    panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
+  )
+
+print(grafico_mensual_mixto)
+guardar_multiformato(grafico_mensual_mixto, "tendencia_mensual_mixta", 16, 10, 300)
+
+cat("✓ Gráfico mensual mixto generado y guardado\n")
+```
+
+## 9. Estadísticas Descriptivas
+
+```{r estadisticas_descriptivas}
+cat("\n═══ ESTADÍSTICAS DESCRIPTIVAS ═══\n\n")
+
+# Resumen por fuente
+for (var in c("RSH", "CONADI", "PUEBLO_ORIGINARIO_BIN", "PERTENENCIA2")) {
+  nombre <- case_when(
+    var == "RSH" ~ "RSH",
+    var == "CONADI" ~ "CONADI",
+    var == "PUEBLO_ORIGINARIO_BIN" ~ "Egresos Hospitalarios",
+    var == "PERTENENCIA2" ~ "Variable Enriquecida (sin duplicados)"
+  )
+  
+  total <- sum(!is.na(datos_preparados[[var]]))
+  pertenece <- sum(datos_preparados[[var]] == 1, na.rm = TRUE)
+  pct <- (pertenece / total) * 100
+  
+  cat(sprintf("%-40s: %s pertenecen de %s registros (%.2f%%)\n", 
+              nombre, 
+              format(pertenece, big.mark = ","),
+              format(total, big.mark = ","),
+              pct))
+}
+
+cat("\n✓ Análisis completado\n")
+```
+
+## 7. Resumen
+
+```{r resumen}
+cat("\n═══════════════════════════════════════════════════\n")
+cat("  ANÁLISIS COMPLETADO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("✓ Base de datos: BBDD_homologados.RData (sin duplicados)\n")
+cat("✓ Eliminados duplicados por RUN + FECHA_EGRESO\n")
+cat("✓ Gráficos generados:\n")
+cat("  • Tendencias individuales (4 fuentes)\n")
+cat("  • Tendencias completas con ambas categorías\n")
+cat("  • Comparación entre fuentes\n")
+cat("  • Serie temporal mensual consolidada 2010-2022\n\n")
+
+cat("✓ Funciones utilizadas:\n")
+cat("  • grafico_tendencia_pertenencia()\n")
+cat("  • grafico_tendencia_completa()\n")
+cat("  • grafico_comparativo_fuentes()\n")
+cat("  • guardar_multiformato()\n\n")
+
+cat("✓ Resultados: resultados_tesis/\n")
+```
+
+---
+**Generado**: `r Sys.Date()` | **Sistema**: Funciones modularizadas v1.0 | **Autor**: Rodolfo Tasso

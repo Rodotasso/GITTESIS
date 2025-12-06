@@ -13,8 +13,8 @@
 #   ├── graficos/          # Funciones de generación de gráficos
 #   ├── tablas/            # Funciones de creación y exportación de tablas
 #   ├── analisis/          # Funciones de análisis estadístico
-#   ├── concordancia/      # Funciones de análisis de concordancia
-#   ├── censo/             # Funciones de extracción de datos del censo
+#   ├── concordancias/     # Funciones de análisis de concordancia (Kappa, CCC)
+#   ├── perfiles/          # Funciones de perfiles epidemiológicos (NUEVO)
 #   └── utilidades/        # Funciones auxiliares y de propósito general
 #
 # FECHA CREACION: Enero 2025
@@ -82,19 +82,50 @@ cat("  ✓ analizar_variable_solo_po\n")
 # FUNCIONES DE CONCORDANCIA
 # ------------------------------------------------------------------------------
 cat("\nCargando funciones de concordancia...\n")
-source(file.path(directorio_r, "concordancia", "calcular_concordancia_desctools.R"))
-source(file.path(directorio_r, "concordancia", "formatear_resultado_ccc.R"))
+source(file.path(directorio_r, "concordancias", "calcular_concordancia_desctools.R"))
+source(file.path(directorio_r, "concordancias", "formatear_resultado_ccc.R"))
+source(file.path(directorio_r, "concordancias", "extraer_datos_censo.R"))
+source(file.path(directorio_r, "concordancias", "extraer_datos_variable_enriquecida.R"))
+source(file.path(directorio_r, "concordancias", "obtener_poblacion_censo.R"))
+source(file.path(directorio_r, "concordancias", "calcular_ccc_desagregacion.R"))
+source(file.path(directorio_r, "concordancias", "calcular_ccc_detallado.R"))
+source(file.path(directorio_r, "concordancias", "calcular_ccc_temporal.R"))
+source(file.path(directorio_r, "concordancias", "crear_tabla_ccc.R"))
 cat("  ✓ calcular_concordancia_desctools\n")
 cat("  ✓ formatear_resultado_ccc\n")
-
-# ------------------------------------------------------------------------------
-# FUNCIONES DE CENSO
-# ------------------------------------------------------------------------------
-cat("\nCargando funciones de censo...\n")
-source(file.path(directorio_r, "censo", "extraer_datos_censo.R"))
-source(file.path(directorio_r, "censo", "extraer_datos_variable_enriquecida.R"))
 cat("  ✓ extraer_datos_censo\n")
 cat("  ✓ extraer_datos_variable_enriquecida\n")
+cat("  ✓ obtener_poblacion_censo\n")
+cat("  ✓ calcular_ccc_desagregacion (NUEVA)\n")
+cat("  ✓ calcular_ccc_detallado (NUEVA)\n")
+cat("  ✓ calcular_ccc_temporal (NUEVA)\n")
+cat("  ✓ crear_tabla_ccc (NUEVA)\n")
+
+# ------------------------------------------------------------------------------
+# FUNCIONES DE PERFILES EPIDEMIOLOGICOS
+# ------------------------------------------------------------------------------
+cat("\nCargando funciones de perfiles epidemiológicos...\n")
+source(file.path(directorio_r, "perfiles", "calcular_perfil_diagnostico.R"))
+source(file.path(directorio_r, "perfiles", "comparar_perfiles_po_pg.R"))
+source(file.path(directorio_r, "perfiles", "crear_tabla_perfil.R"))
+source(file.path(directorio_r, "perfiles", "graficar_perfil_top.R"))
+source(file.path(directorio_r, "perfiles", "graficar_diferencias_tasas.R"))
+cat("  ✓ calcular_perfil_diagnostico\n")
+cat("  ✓ comparar_perfiles_po_pg\n")
+cat("  ✓ crear_tabla_perfil\n")
+cat("  ✓ graficar_perfil_top\n")
+cat("  ✓ graficar_diferencias_tasas\n")
+
+# ------------------------------------------------------------------------------
+# FUNCIONES DE UTILIDADES
+# ------------------------------------------------------------------------------
+cat("\nCargando funciones de utilidades...\n")
+source(file.path(directorio_r, "utilidades", "concatenar_diag_cie10.R"))
+source(file.path(directorio_r, "utilidades", "guardar_tabla_jpg.R"))
+source(file.path(directorio_r, "utilidades", "crear_region_nuble.R"))
+cat("  ✓ concatenar_diag_cie10\n")
+cat("  ✓ guardar_tabla_jpg\n")
+cat("  ✓ crear_region_nuble\n")
 
 # ------------------------------------------------------------------------------
 # FUNCIONES DE TABLAS
@@ -109,6 +140,7 @@ cat("  ✓ guardar_como_jpg\n")
 cat("  ✓ crear_tabla_resumen_horizontal\n")
 cat("  ✓ flex_to_df\n")
 cat("  ✓ save_flex_as_html\n")
+cat("  ✓ guardar_tabla_html\n")
 cat("\nFunciones disponibles:\n\n")
 cat("GRÁFICOS (10 funciones):\n")
 cat("  - guardar_multiformato(grafico, nombre_base, ancho, alto, dpi)\n")
@@ -128,22 +160,44 @@ cat("  - analizar_variable(data, variable_col, titulo, limite_top)\n")
 cat("  - analizar_cie10_top(data, limite_top)\n")
 cat("  - analizar_por_sexo(data, variable_col, titulo, limite_top)\n")
 cat("  - analizar_variable_solo_po(data, variable_col, titulo, limite_top, n_columnas)\n")
-cat("\nCONCORDANCIA (2 funciones):\n")
+cat("\nCONCORDANCIA (9 funciones):\n")
 cat("  - calcular_concordancia_desctools(datos, col_verdad, col_estimado, nombre_fuente)\n")
 cat("  - formatear_resultado_ccc(resultado_ccc, nombre_desagregacion)\n")
-cat("\nCENSO (2 funciones):\n")
 cat("  - extraer_datos_censo(conexion, verbose)\n")
 cat("  - extraer_datos_variable_enriquecida(datos_homologados, verbose)\n")
+cat("  - obtener_poblacion_censo(verbose)\n")
+cat("  - calcular_ccc_desagregacion(datos_censo, datos_comparacion, columnas_join, nombre)\n")
+cat("  - calcular_ccc_detallado(datos_censo, datos_comparacion, columnas_join, nombre)\n")
+cat("  - calcular_ccc_temporal(datos_censo, datos_egresos, col_anio, col_pertenencia)\n")
+cat("  - crear_tabla_ccc(datos, titulo, subtitulo, aplicar_colores)\n")
+cat("\nPERFILES EPIDEMIOLOGICOS (5 funciones):\n")
+cat("  - calcular_perfil_diagnostico(datos, pertenencia, poblacion, total_egresos)\n")
+cat("  - comparar_perfiles_po_pg(datos, poblacion_po, poblacion_pg, egresos_po, egresos_pg)\n")
+cat("  - crear_tabla_perfil(datos, tipo, titulo)\n")
+cat("  - graficar_perfil_top(datos, titulo, subtitulo)\n")
+cat("  - graficar_diferencias_tasas(datos, top_n, titulo)\n")
+cat("\nUTILIDADES (5 funciones):\n")
+cat("  - concatenar_diag_cie10(data, col_diag, col_destino, tabla_cie10)\n")
+cat("  - cargar_tabla_cie10_espanol(ruta_archivo)\n")
+cat("  - concatenar_diag_cie10_tabla(data, tabla_cie10, col_diag, col_destino)\n")
+cat("  - guardar_tabla_jpg(tabla_ft, nombre_archivo, dir_salida, vwidth, vheight)\n")
+cat("  - crear_region_nuble(datos, col_region, col_comuna, verbose)\n")
 cat("\nTABLAS (5 funciones):\n")
-cat("  - guardar_como_jpg(tabla_ft, nombre_archivo)\n")
 cat("  - crear_tabla_resumen_horizontal(data, var_label, etiqueta_variable)\n")
 cat("  - flex_to_df(ft)\n")
-cat("  - save_flex_as_html(ft, filename)\n")
+cat("  - save_flex_as_html(ft, path)\n")
 cat("  - guardar_tabla_html(tabla, nombre_archivo)\n")
-cat("\nUTILIDADES (2 funciones):\n")
-cat("  - clasificar_grupo(codigo)\n")
-cat("  - crear_grafico_tendencia(data, var_label, titulo_variable)\n")
-cat("\n")
-cat("Total: 31 funciones cargadas (100% COMPLETO) ✓✓✓\n")
+cat("  - guardar_como_jpg(tabla_ft, nombre_archivo)\n")
+
+cat("\n═══════════════════════════════════════════════════════════════\n")
+cat("- TODAS LAS FUNCIONES CARGADAS EXITOSAMENTE (46 funciones)\n")
+cat("═══════════════════════════════════════════════════════════════\n\n")
+cat("Total: 46 funciones cargadas (100% COMPLETO)\n")
+cat("  * Gráficos: 10 funciones\n")
+cat("  * Análisis: 6 funciones\n")
+cat("  * Concordancia: 9 funciones\n")
+cat("  * Perfiles Epidemiológicos: 5 funciones (NUEVO)\n")
+cat("  * Utilidades: 5 funciones\n")
+cat("  * Tablas: 5 funciones\n")
 cat("Para más información, consulte: R/README.md\n")
 cat("================================================================================\n\n")

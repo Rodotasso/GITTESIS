@@ -4,7 +4,7 @@ Esta guía te ayudará a continuar extrayendo las 28 funciones restantes de form
 
 ---
 
-## 📋 PREPARACIÓN
+## PREPARACIÓN
 
 ### Antes de comenzar:
 
@@ -16,9 +16,9 @@ Esta guía te ayudará a continuar extrayendo las 28 funciones restantes de form
    ```
 
 2. **Verificar funciones ya completadas**
-   - ✅ guardar_multiformato
-   - ✅ grafico_comparativo_fuentes
-   - ✅ analizar_pertenencia
+   - guardar_multiformato
+   - grafico_comparativo_fuentes
+   - analizar_pertenencia
 
 3. **Tener abierto para consulta**
    - `R/README.md` (lista completa de funciones)
@@ -27,7 +27,7 @@ Esta guía te ayudará a continuar extrayendo las 28 funciones restantes de form
 
 ---
 
-## 🔄 PROCESO DE EXTRACCIÓN (REPETIR PARA CADA FUNCIÓN)
+## PROCESO DE EXTRACCIÓN (REPETIR PARA CADA FUNCIÓN)
 
 ### Paso 1: Seleccionar Función
 
@@ -189,7 +189,7 @@ Si hay errores: 🔧 Depurar y corregir
 
 ---
 
-## 📊 PLANTILLA DE TRABAJO RÁPIDO
+## PLANTILLA DE TRABAJO RÁPIDO
 
 Para trabajar más rápido, usa este checklist:
 

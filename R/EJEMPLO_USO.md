@@ -163,7 +163,7 @@ pipeline_analisis <- function(archivo_datos, variable, etiqueta, directorio_sali
     row.names = FALSE
   )
   
-  cat("✓ Análisis completado para:", etiqueta, "\n\n")
+  cat("- Análisis completado para:", etiqueta, "\n\n")
   
   return(resultado)
 }
@@ -217,7 +217,7 @@ crear_reporte_pertenencia <- function() {
   }
   guardar_multiformato(comparacion$grafico, "comparacion_fuentes")
   
-  cat("✓ Reporte completado\n")
+  cat("- Reporte completado\n")
   
   return(list(
     analisis_individuales = resultados,

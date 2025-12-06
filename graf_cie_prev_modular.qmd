@@ -1,0 +1,347 @@
+---
+title: "Análisis de CIE-10 y Previsión - Sistema Modular"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis de variables CIE-10 y Previsión usando funciones modularizadas"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Análisis de CIE-10 y Previsión
+
+## 1. Configuración
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ggpubr)
+  library(flextable)
+  library(scales)
+})
+
+# Colores consistentes
+colores_analisis <- c(
+  "Pertenece a Pueblos Originarios" = "#0A2351",
+  "Población General" = "#6B8E23"
+)
+
+# Cargar funciones y datos
+source("R/cargar_funciones.R")
+load("BBDD_homologados.RData")
+
+cat("✓ Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+cat("✓ Variables clave:\n")
+cat("  - PERTENENCIA2: Variable Enriquecida\n")
+cat("  - PUEBLO_ORIGINARIO_BIN: Egresos Hospitalarios\n")
+```
+
+## 2. Análisis por Pertenencia y Año
+
+### 2.1. Establecimientos
+
+```{r analisis_establecimientos}
+cat("═══ ANÁLISIS DE ESTABLECIMIENTOS ═══\n")
+
+analisis_estab <- analizar_variable(
+  datos_homologados, 
+  "DEPENDENCIA", 
+  "Establecimientos", 
+  limite_top = 10
+)
+
+print(analisis_estab$tabla_anual)
+print(analisis_estab$promedio_anual)
+print(analisis_estab$grafico)
+
+# Guardar
+guardar_tabla_html(analisis_estab$tabla_anual, "tabla_establecimientos_anual.html")
+guardar_tabla_html(analisis_estab$promedio_anual, "tabla_establecimientos_promedio.html")
+guardar_multiformato(analisis_estab$grafico, "grafico_establecimientos", 12, 8, 300)
+```
+
+### 2.2. Diagnósticos
+
+```{r analisis_diagnosticos}
+cat("═══ ANÁLISIS DE DIAGNÓSTICOS ═══\n")
+
+analisis_diag <- analizar_variable(
+  datos_homologados, 
+  "DIAG1", 
+  "Diagnósticos", 
+  limite_top = 10
+)
+
+print(analisis_diag$tabla_anual)
+print(analisis_diag$promedio_anual)
+print(analisis_diag$grafico)
+
+# Guardar
+guardar_tabla_html(analisis_diag$tabla_anual, "tabla_diagnosticos_anual.html")
+guardar_tabla_html(analisis_diag$promedio_anual, "tabla_diagnosticos_promedio.html")
+guardar_multiformato(analisis_diag$grafico, "grafico_diagnosticos", 12, 8, 300)
+```
+
+### 2.3. Grupos CIE-10
+
+```{r analisis_cie10}
+cat("═══ ANÁLISIS DE GRUPOS CIE-10 ═══\n")
+
+analisis_cie <- analizar_variable(
+  datos_homologados, 
+  "Grupo_CIE10", 
+  "Grupos CIE-10", 
+  limite_top = 10
+)
+
+print(analisis_cie$tabla_anual)
+print(analisis_cie$promedio_anual)
+print(analisis_cie$grafico)
+
+# Guardar
+guardar_tabla_html(analisis_cie$tabla_anual, "tabla_cie10_anual.html")
+guardar_tabla_html(analisis_cie$promedio_anual, "tabla_cie10_promedio.html")
+guardar_multiformato(analisis_cie$grafico, "grafico_cie10", 12, 8, 300)
+```
+
+### 2.4. Previsión
+
+```{r analisis_prevision}
+cat("═══ ANÁLISIS DE PREVISIÓN ═══\n")
+
+analisis_prev <- analizar_variable(
+  datos_homologados, 
+  "GLOSA_PREVISION", 
+  "Previsión", 
+  limite_top = 10
+)
+
+print(analisis_prev$tabla_anual)
+print(analisis_prev$promedio_anual)
+print(analisis_prev$grafico)
+
+# Guardar
+guardar_tabla_html(analisis_prev$tabla_anual, "tabla_prevision_anual.html")
+guardar_tabla_html(analisis_prev$promedio_anual, "tabla_prevision_promedio.html")
+guardar_multiformato(analisis_prev$grafico, "grafico_prevision", 12, 8, 300)
+```
+
+## 3. Previsión - Tendencia Consolidada con Colores Específicos
+
+```{r prevision_tendencia_consolidada}
+cat("═══ TENDENCIA CONSOLIDADA DE PREVISIÓN - PUEBLOS ORIGINARIOS ═══\n")
+
+# Colores específicos según imagen
+colores_prevision_especificos <- c(
+  "FONASA A" = "#FF9999",  # Rosa salmón
+  "FONASA B" = "#9ACD32",  # Verde oliva/amarillento
+  "FONASA C" = "#48D1CC",  # Turquesa
+  "FONASA D" = "#4169E1",  # Azul real
+  "ISAPRE" = "#DA70D6"     # Orquídea/magenta
+)
+
+# Preparar datos de tendencia
+datos_prevision_tendencia <- datos_homologados %>%
+  filter(AÑO != "No reportado", PERTENENCIA2 == 1) %>%
+  group_by(AÑO, GLOSA_PREVISION) %>%
+  summarise(n_casos = n(), .groups = "drop") %>%
+  group_by(AÑO) %>%
+  mutate(
+    total_año = sum(n_casos),
+    porcentaje = (n_casos / total_año) * 100
+  ) %>%
+  ungroup() %>%
+  filter(GLOSA_PREVISION %in% c("FONASA A", "FONASA B", "FONASA C", "FONASA D", "ISAPRE"))
+
+# Gráfico de barras apiladas con porcentajes
+graf_prevision_consolidado <- ggplot(datos_prevision_tendencia, 
+                                     aes(x = AÑO, y = porcentaje, fill = GLOSA_PREVISION)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.8) +
+  geom_text(aes(label = sprintf("%.1f%%", porcentaje)), 
+            position = position_stack(vjust = 0.5),
+            size = 3.5, color = "white", fontface = "bold") +
+  scale_fill_manual(values = colores_prevision_especificos) +
+  scale_y_continuous(
+    labels = function(x) paste0(x, "%"),
+    breaks = seq(0, 100, by = 25),
+    expand = c(0, 0)
+  ) +
+  labs(
+    title = "Distribución de previsión por año - Pueblos Originarios",
+    subtitle = "Porcentajes sobre el total de población perteneciente a pueblos originarios",
+    x = "Año",
+    y = "Porcentaje (%)",
+    fill = "Previsión",
+    caption = paste0(
+      "Nota: El gráfico muestra solo la distribución entre personas pertenecientes a pueblos originarios (n=",
+      format(sum(datos_prevision_tendencia$n_casos), big.mark = ","), ").\n",
+      "Se muestran las 5 previsiones más frecuentes. Otras previsiones están excluidas del gráfico.\n",
+      "Los porcentajes suman 100% de la población perteneciente a pueblos originarios para cada año."
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11),
+    plot.caption = element_text(hjust = 0, size = 8, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 10)
+  )
+
+print(graf_prevision_consolidado)
+guardar_multiformato(graf_prevision_consolidado, "prevision_tendencia_consolidada_po", 14, 10, 300)
+```
+
+## 4. CIE-10 - Evolución Temporal por Capítulos
+
+### 4.1. Representación de Pueblos Originarios en cada Grupo CIE-10
+
+```{r cie10_tendencia_po}
+cat("═══ EVOLUCIÓN TEMPORAL CIE-10 - PUEBLOS ORIGINARIOS ═══\n")
+
+# Identificar top 7 grupos CIE-10 más frecuentes en PO
+top_cie10_grupos <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(Grupo_CIE10), PERTENENCIA2 == 1) %>%
+  group_by(Grupo_CIE10) %>%
+  summarise(total = n()) %>%
+  arrange(desc(total)) %>%
+  head(7) %>%
+  pull(Grupo_CIE10)
+
+# Calcular porcentaje de PO dentro de cada grupo por año
+datos_cie10_tendencia_po <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(Grupo_CIE10), Grupo_CIE10 %in% top_cie10_grupos) %>%
+  group_by(AÑO, Grupo_CIE10, PERTENENCIA2) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(AÑO, Grupo_CIE10) %>%
+  mutate(
+    total_grupo = sum(n),
+    porcentaje = (n / total_grupo) * 100
+  ) %>%
+  ungroup() %>%
+  filter(PERTENENCIA2 == 1)
+
+# Colores para los grupos (según imagen)
+colores_cie10 <- c(
+  "#E74C3C",  # Rojo
+  "#E67E22",  # Naranja
+  "#3498DB",  # Azul
+  "#E91E63",  # Rosa/Magenta
+  "#27AE60",  # Verde
+  "#8B4513",  # Marrón
+  "#9B59B6"   # Púrpura
+)
+
+# Asignar colores a grupos específicos
+nombres_grupos <- sort(unique(datos_cie10_tendencia_po$Grupo_CIE10))
+colores_asignados <- setNames(colores_cie10[1:length(nombres_grupos)], nombres_grupos)
+
+# Gráfico de líneas
+graf_cie10_tendencia_po <- ggplot(datos_cie10_tendencia_po, 
+                                   aes(x = AÑO, y = porcentaje, 
+                                       color = Grupo_CIE10, group = Grupo_CIE10)) +
+  geom_line(linewidth = 1.2, alpha = 0.9) +
+  geom_point(size = 2, alpha = 0.8) +
+  scale_color_manual(values = colores_asignados) +
+  scale_y_continuous(
+    labels = function(x) paste0(x, "%"),
+    breaks = seq(0, 35, by = 5)
+  ) +
+  labs(
+    title = "Evolución temporal de la representación de Pueblos Originarios en grupos CIE-10",
+    subtitle = "Porcentaje de personas pertenecientes a pueblos originarios dentro de cada grupo diagnóstico",
+    x = "Año",
+    y = "Porcentaje dentro de cada grupo CIE-10 (%)",
+    color = "Grupo CIE-10",
+    caption = paste0(
+      "Nota: El gráfico muestra la evolución temporal de los 7 grupos CIE-10 más frecuentes en personas pertenecientes a pueblos originarios.\n",
+      "Los datos provienen del mismo análisis comparativo con población general, pero se visualizan solo los correspondientes a pueblos originarios (n=2320176).\n",
+      "Para cada año, los porcentajes representan la proporción de cada grupo CIE-10 dentro del total de ese grupo para ese año."
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 8),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 13, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    plot.caption = element_text(hjust = 0, size = 8, color = "gray40", lineheight = 1.2)
+  ) +
+  guides(color = guide_legend(nrow = 2))
+
+print(graf_cie10_tendencia_po)
+guardar_multiformato(graf_cie10_tendencia_po, "cie10_evolucion_temporal_po", 14, 10, 300)
+```
+
+### 4.2. Representación de Población General en cada Grupo CIE-10
+
+```{r cie10_tendencia_pg}
+cat("═══ EVOLUCIÓN TEMPORAL CIE-10 - POBLACIÓN GENERAL ═══\n")
+
+# Usar los mismos grupos para comparabilidad
+datos_cie10_tendencia_pg <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(Grupo_CIE10), Grupo_CIE10 %in% top_cie10_grupos) %>%
+  group_by(AÑO, Grupo_CIE10, PERTENENCIA2) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(AÑO, Grupo_CIE10) %>%
+  mutate(
+    total_grupo = sum(n),
+    porcentaje = (n / total_grupo) * 100
+  ) %>%
+  ungroup() %>%
+  filter(PERTENENCIA2 == 0)
+
+# Gráfico de líneas para PG
+graf_cie10_tendencia_pg <- ggplot(datos_cie10_tendencia_pg, 
+                                   aes(x = AÑO, y = porcentaje, 
+                                       color = Grupo_CIE10, group = Grupo_CIE10)) +
+  geom_line(linewidth = 1.2, alpha = 0.9) +
+  geom_point(size = 2, alpha = 0.8) +
+  scale_color_manual(values = colores_asignados) +
+  scale_y_continuous(
+    labels = function(x) paste0(x, "%"),
+    breaks = seq(0, 100, by = 10)
+  ) +
+  labs(
+    title = "Evolución temporal de la representación de Población General en grupos CIE-10",
+    subtitle = "Porcentaje de personas de población general dentro de cada grupo diagnóstico",
+    x = "Año",
+    y = "Porcentaje dentro de cada grupo CIE-10 (%)",
+    color = "Grupo CIE-10",
+    caption = paste0(
+      "Nota: Complemento del gráfico anterior. Muestra la evolución de los mismos 7 grupos CIE-10 para población general.\n",
+      "Para cada año, los porcentajes representan la proporción de cada grupo CIE-10 dentro del total de ese grupo para ese año."
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 8),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 13, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    plot.caption = element_text(hjust = 0, size = 8, color = "gray40", lineheight = 1.2)
+  ) +
+  guides(color = guide_legend(nrow = 2))
+
+print(graf_cie10_tendencia_pg)
+guardar_multiformato(graf_cie10_tendencia_pg, "cie10_evolucion_temporal_pg", 14, 10, 300)
+```
+
+---
+**Generado**: `r Sys.Date()` | **Sistema**: Funciones modularizadas v1.0 | **Autor**: Rodolfo Tasso

@@ -1,0 +1,29 @@
+---
+title: "Test - Carga de Funciones de Concordancia"
+format: html
+---
+
+```{r test_carga}
+# Test de carga de funciones
+source("R/cargar_funciones.R")
+
+cat("\n═══ TEST DE FUNCIONES ═══\n")
+cat("✓ Funciones cargadas correctamente\n")
+
+# Verificar que las funciones existen
+funciones_requeridas <- c(
+  "calcular_concordancia_desctools",
+  "extraer_datos_censo",
+  "extraer_datos_variable_enriquecida",
+  "formatear_resultado_ccc",
+  "guardar_tabla_jpg"
+)
+
+cat("\nVerificando funciones:\n")
+for(func in funciones_requeridas) {
+  existe <- exists(func, mode = "function")
+  cat(sprintf("  %s %s\n", ifelse(existe, "✓", "✗"), func))
+}
+
+cat("\n═══ TEST COMPLETADO ═══\n")
+```

@@ -1,0 +1,236 @@
+---
+title: "Análisis Estadístico Descriptivo - Sistema Modular"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis descriptivo usando funciones modularizadas y base de datos homologada"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Sistema de Análisis Modular
+
+**Variables:** PERTENENCIA2 (enriquecida) | PUEBLO_ORIGINARIO_BIN (egresos hospitalarios)  
+**Base de datos:** BBDD_homologados.RData
+
+## 1. Configuración
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse); library(flextable); library(scales)
+  library(gtsummary); library(ggpubr); library(lubridate); library(stringr)
+})
+
+# Colores
+colores_analisis <- c("Pertenece a Pueblos Originarios" = "#E69F00", "Población General" = "#56B4E9")
+colores_fuentes <- c("RSH" = "#E41A1C", "CONADI" = "#4DAF4A", 
+                     "Egresos Hospitalarios" = "#377EB8", "Variable Enriquecida" = "#FF7F00")
+
+# Cargar funciones y datos
+source("R/cargar_funciones.R")
+load("BBDD_homologados.RData")
+datos_preparados <- datos_homologados
+
+cat("✓", format(nrow(datos_preparados), big.mark = ","), "registros |",
+    "Años:", paste(range(sort(unique(datos_preparados$AÑO[datos_preparados$AÑO != "No reportado"]))), collapse = "-"), "\n")
+```
+
+## 2. Exploración Inicial
+
+```{r exploracion}
+glimpse(datos_preparados)
+
+## 3. Completitud
+
+```{r completitud}
+# Crear labels
+datos_analisis <- datos_preparados %>%
+  mutate(
+    RSH_label = case_when(RSH == 1 ~ "Pertenece", RSH == 0 ~ "No pertenece", TRUE ~ "No reportado"),
+    CONADI_label = case_when(CONADI == 1 ~ "Pertenece", CONADI == 0 ~ "No pertenece", TRUE ~ "No reportado"),
+    EGRESO_label = case_when(PUEBLO_ORIGINARIO_BIN == 1 ~ "Pertenece", PUEBLO_ORIGINARIO_BIN == 0 ~ "No pertenece", TRUE ~ "No reportado"),
+    PERTENENCIA2_label = case_when(PERTENENCIA2 == 1 ~ "Pertenece", PERTENENCIA2 == 0 ~ "No pertenece", TRUE ~ "No reportado")
+  )
+
+# Tabla completitud
+datos_analisis %>%
+  summarise(Total = n(), Año = sum(!is.na(AÑO)),
+            RSH = sum(RSH_label != "No reportado", na.rm = TRUE),
+            CONADI = sum(CONADI_label != "No reportado", na.rm = TRUE),
+            Egresos = sum(EGRESO_label != "No reportado", na.rm = TRUE),
+            PERTENENCIA2 = sum(PERTENENCIA2_label != "No reportado", na.rm = TRUE)) %>%
+  pivot_longer(-Total, names_to = "Variable", values_to = "Completitud") %>%
+  mutate(`% Completitud` = percent(Completitud / Total, accuracy = 0.01)) %>%
+  flextable() %>% autofit() %>% 
+  set_caption("Completitud de variables principales") %>% theme_vanilla()
+```
+
+## 4. Distribución por Fuentes y Año
+
+```{r distribucion_fuentes}
+# Función auxiliar para crear tabla con footer
+crear_tabla_fuente <- function(data, var, etiqueta, descripcion) {
+  tabla <- crear_tabla_resumen_horizontal(data, var, etiqueta)
+  flextable(tabla) %>% autofit() %>%
+    set_caption(paste("Distribución según", etiqueta, "por año")) %>%
+    add_footer_lines(descripcion) %>% theme_vanilla()
+}
+
+# RSH
+crear_tabla_fuente(datos_analisis, "RSH_label", "RSH", 
+                   "RSH: Registro Social de Hogares")
+
+# CONADI
+crear_tabla_fuente(datos_analisis, "CONADI_label", "CONADI",
+                   "CONADI: Corporación Nacional de Desarrollo Indígena")
+
+# Egresos Hospitalarios
+crear_tabla_fuente(datos_analisis, "EGRESO_label", "Egresos Hospitalarios",
+                   "Variable PUEBLO_ORIGINARIO_BIN")
+
+# Variable Enriquecida
+crear_tabla_fuente(datos_analisis, "PERTENENCIA2_label", "Variable Enriquecida",
+                   "PERTENENCIA2: Integra Censo 2017, RSH, CONADI y Egresos")
+```
+
+## 5. Análisis de Variables Principales
+
+```{r analisis_variables}
+# Función auxiliar para análisis y guardado
+analizar_y_guardar <- function(var, titulo, top = 10) {
+  r <- analizar_variable(datos_preparados, var, titulo, top)
+  if (!is.null(r$tabla_anual)) {
+    print(r$tabla_anual)
+    guardar_tabla_html(r$tabla_anual, 
+                       sprintf("tabla_%s_anual.html", tolower(gsub(" ", "_", titulo))))
+  }
+  if (!is.null(r$grafico)) print(r$grafico)
+  if (!is.null(r$promedio_anual)) {
+    print(r$promedio_anual)
+    guardar_tabla_html(r$promedio_anual,
+                       sprintf("tabla_%s_promedio.html", tolower(gsub(" ", "_", titulo))))
+  }
+}
+
+# Establecimientos
+cat("═══ ESTABLECIMIENTOS ═══\n")
+analizar_y_guardar("DEPENDENCIA", "Establecimientos", 10)
+
+# Previsión
+cat("\n═══ PREVISIÓN ═══\n")
+analizar_y_guardar("GLOSA_PREVISION", "Prevision", 10)
+
+# Diagnósticos CIE-10
+cat("\n═══ GRUPOS CIE-10 ═══\n")
+analizar_y_guardar("Grupo_CIE10", "CIE10", 15)
+```
+
+## 6. Análisis por Sexo
+
+```{r analisis_sexo}
+# Función auxiliar para análisis por sexo
+analizar_sexo_guardar <- function(var, titulo, top = 10) {
+  r <- analizar_por_sexo(datos_preparados, var, titulo, top)
+  
+  for (sexo in c("hombre", "mujer")) {
+    if (!is.null(r[[sexo]]$promedio_anual)) {
+      cat(sprintf("\n═══ %s ═══\n", toupper(sexo)))
+      print(r[[sexo]]$promedio_anual)
+      guardar_tabla_html(r[[sexo]]$promedio_anual,
+                         sprintf("tabla_%s_%s_promedio.html", 
+                                 tolower(gsub(" ", "_", titulo)), sexo))
+    }
+    if (!is.null(r[[sexo]]$tabla_anual)) {
+      guardar_tabla_html(r[[sexo]]$tabla_anual,
+                         sprintf("tabla_%s_%s_anual.html",
+                                 tolower(gsub(" ", "_", titulo)), sexo))
+    }
+  }
+}
+
+# Previsión por sexo
+cat("═══ PREVISIÓN POR SEXO ═══\n")
+analizar_sexo_guardar("GLOSA_PREVISION", "Prevision", 10)
+
+# CIE-10 por sexo
+cat("\n═══ CIE-10 POR SEXO ═══\n")
+analizar_sexo_guardar("Grupo_CIE10", "CIE10", 15)
+```
+
+## 7. Gráficos Pueblos Originarios
+
+```{r graficos_po}
+cat("═══ GRÁFICOS PUEBLOS ORIGINARIOS ═══\n")
+
+# Función auxiliar
+graficar_guardar <- function(func, nombre, w = 12, h = 8) {
+  g <- func(datos_preparados)
+  print(g)
+  guardar_multiformato(g, nombre, w, h, 300)
+}
+
+# Generar y guardar gráficos
+graficar_guardar(grafico_prevision_po, "grafico_prevision_po")
+graficar_guardar(grafico_diagnosticos_po, "grafico_diagnosticos_po", 14, 10)
+graficar_guardar(grafico_cie10_po, "grafico_cie10_po", 14, 10)
+```
+
+## 8. Top CIE-10 por Año y Pertenencia
+
+```{r top_cie10_anual}
+cat("═══ TOP CIE-10 POR AÑO Y PERTENENCIA ═══\n")
+
+# Analizar con función que devuelve todas las tablas
+resultados_cie10 <- analizar_cie10_top(datos_preparados, limite_top = 15)
+
+# Guardar tablas promedio
+if (!is.null(resultados_cie10$tablas_promedio)) {
+  for (i in seq_along(resultados_cie10$tablas_promedio)) {
+    tabla <- resultados_cie10$tablas_promedio[[i]]
+    nombre <- names(resultados_cie10$tablas_promedio)[i]
+    # Limpiar nombre para archivo
+    nombre_archivo <- tolower(gsub("[^[:alnum:]]+", "_", nombre))
+    guardar_tabla_html(tabla, sprintf("top_cie10_promedio_%s.html", nombre_archivo))
+    cat(sprintf("✓ Guardada tabla promedio: %s\n", nombre))
+  }
+}
+
+# Guardar tablas anuales para años seleccionados
+anos_interes <- c("2010", "2015", "2020", "2021", "2022")
+if (!is.null(resultados_cie10$tablas_anuales)) {
+  for (nombre_tabla in names(resultados_cie10$tablas_anuales)) {
+    # Extraer año del nombre (formato: "2020.Pertenece a Pueblos Originarios")
+    partes <- strsplit(nombre_tabla, "\\.")[[1]]
+    ano <- partes[1]
+    
+    if (ano %in% anos_interes) {
+      tabla <- resultados_cie10$tablas_anuales[[nombre_tabla]]
+      # Crear nombre de archivo limpio
+      nombre_archivo <- tolower(gsub("[^[:alnum:]]+", "_", nombre_tabla))
+      guardar_tabla_html(tabla, sprintf("top_cie10_%s.html", nombre_archivo))
+      cat(sprintf("✓ Guardada tabla: %s\n", nombre_tabla))
+    }
+  }
+}
+
+cat("\n✓ Análisis Top CIE-10 completado\n")
+```
+
+## 9. Resumen
+
+```{r resumen}
+cat("\n═══════════════════════════════════════════════════\n")
+cat("  ANÁLISIS COMPLETADO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("✓ BBDD_homologados.RData |", format(nrow(datos_preparados), big.mark = ","), "registros\n")
+cat("✓ Funciones: crear_tabla_resumen_horizontal, analizar_variable, analizar_por_sexo,\n")
+cat("  analizar_cie10_top, grafico_*_po, guardar_tabla_html, guardar_multiformato\n")
+cat("✓ Resultados: resultados_tesis/\n")
+```
+
+---
+**Generado**: `r Sys.Date()` | **Sistema**: Funciones modularizadas v1.0 | **Autor**: Rodolfo Tasso

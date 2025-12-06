@@ -25,7 +25,7 @@ source("R/cargar_funciones.R")
 
 ## Funciones por Categoría
 
-### 📊 GRÁFICOS (`graficos/`)
+### GRÁFICOS (`graficos/`)
 
 #### `guardar_multiformato()`
 - **Archivo**: `graficos/guardar_multiformato.R`
@@ -203,7 +203,7 @@ source("R/cargar_funciones.R")
 
 ---
 
-### 📊 CENSO (`censo/`)
+### CENSO (`censo/`)
 
 #### `extraer_datos_censo()` (PENDIENTE)
 - **Archivo**: TBD
@@ -288,7 +288,7 @@ colores_fuentes <- c(
 
 ## Estado del Proyecto
 
-### ✅ COMPLETADO (3 funciones)
+### COMPLETADO (3 funciones)
 - `guardar_multiformato`
 - `grafico_comparativo_fuentes`
 - `analizar_pertenencia`
