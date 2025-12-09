@@ -14,9 +14,9 @@
 
 ## ✅ Respuesta Directa
 
-Los valores de **Cohen's Kappa** entre las versiones modular y no modular **PODRÍAN ser ligeramente diferentes** debido a un **filtro adicional de NA** en la versión modular, aunque ambas versiones usan los mismos datos base y el mismo método de cálculo.
+Los valores de **Cohen's Kappa** entre las versiones modular y no modular **podrían ser ligeramente diferentes** debido a un **filtro adicional de NA** en la versión modular, aunque ambas versiones usan los mismos datos base y el mismo método de cálculo.
 
-Los valores de **Lin's CCC** son **DEFINITIVAMENTE diferentes** porque:
+Los valores de **Lin's CCC** son **definitivamente diferentes** porque:
 1. La **versión modular** usa datos **sin duplicados** (un registro por paciente)
 2. La **versión no modular** usa datos **con duplicados** (todos los egresos)
 

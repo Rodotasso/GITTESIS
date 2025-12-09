@@ -92,7 +92,7 @@ calcular_concordancia_desctools <- function(datos, col_verdad, col_estimado, nom
     stop("La columna '", col_estimado, "' no existe en los datos")
   }
   
-  # ⚠️ DIFERENCIA CLAVE: Verificar que no hay NAs
+  # ⚠️ DIFERENCIA CLAVE: Filtrar NAs si existen
   if (any(is.na(datos[[col_verdad]])) || any(is.na(datos[[col_estimado]]))) {
     warning("Hay valores NA en las columnas. Se filtrarán automáticamente.")
     datos <- datos %>% 

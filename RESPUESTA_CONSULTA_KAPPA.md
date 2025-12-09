@@ -11,7 +11,7 @@
 He revisado ambas versiones y te puedo confirmar:
 
 ### Cohen's Kappa:
-Los valores de **Kappa DEBERÍAN SER IDÉNTICOS** o casi idénticos entre ambas versiones, porque:
+Los valores de **Kappa deberían ser idénticos** o casi idénticos entre ambas versiones, porque:
 - ✅ Usan los mismos datos base (`datos_homologados`)
 - ✅ Aplican la misma preparación (convierten NA → 0)
 - ✅ Usan la misma función (DescTools::CohenKappa)
@@ -19,7 +19,7 @@ Los valores de **Kappa DEBERÍAN SER IDÉNTICOS** o casi idénticos entre ambas 
 **Si los valores de kappa son diferentes**, la razón es un **filtro adicional de valores NA** en la versión modular que podría estar eliminando algunos registros que la versión no modular conserva.
 
 ### Lin's CCC:
-Los valores de **CCC SÍ SON DIFERENTES** y esto es **CORRECTO y ESPERADO**, porque:
+Los valores de **CCC sí son diferentes** y esto es **correcto y esperado**, porque:
 - ❌ Usan **datos diferentes**:
   - **Modular**: Sin duplicados (~2.5M registros)
   - **No Modular**: Con duplicados (~3.2M registros)
@@ -345,9 +345,9 @@ He creado dos nuevos documentos para complementar la documentación existente:
 
 **Respuesta**:
 
-1. **Cohen's Kappa**: Los valores **DEBERÍAN SER CASI IDÉNTICOS**. Si difieren, es por un filtro adicional de NA en la versión modular que elimina registros que la versión no modular conserva. Verifica si hay NA residuales después de convertir `NA → 0`.
+1. **Cohen's Kappa**: Los valores **deberían ser casi idénticos**. Si difieren, es por un filtro adicional de NA en la versión modular que elimina registros que la versión no modular conserva. Verifica si hay NA residuales después de convertir `NA → 0`.
 
-2. **Lin's CCC**: Los valores **SON DIFERENTES Y ES CORRECTO** porque:
+2. **Lin's CCC**: Los valores **son diferentes y es correcto** porque:
    - Usan datos diferentes (con/sin duplicados)
    - La versión modular calcula un CCC Global adicional
    - El CCC Global captura variación entre regiones
