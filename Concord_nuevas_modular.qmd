@@ -117,6 +117,7 @@ for(i in 1:nrow(resultados_kappa)) {
 
 print(tabla_kappa)
 guardar_tabla_html(tabla_kappa, "concordancias/01_kappa_desctools.html")
+guardar_como_jpg(tabla_kappa, "concordancias/01_kappa_desctools.jpg")
 ```
 
 ## 3. Extracción de Datos para Lin's CCC
@@ -336,6 +337,7 @@ for(i in 1:nrow(tabla_region_data)) {
 
 print(tabla_region)
 guardar_tabla_html(tabla_region, "concordancias/04_ccc_region.html")
+guardar_como_jpg(tabla_region, "concordancias/04_ccc_region.jpg")
 ```
 
 ### 4.2. Concordancia por sexo
@@ -391,6 +393,7 @@ for(i in 1:nrow(resultado_sexo_detalle$tabla_detalle)) {
 
 print(tabla_sexo)
 guardar_tabla_html(tabla_sexo, "concordancias/05_ccc_sexo.html")
+guardar_como_jpg(tabla_sexo, "concordancias/05_ccc_sexo.jpg")
 ```
 
 ### 4.3. Concordancia por grupo etario
@@ -446,6 +449,7 @@ for(i in 1:nrow(resultado_edad_detalle$tabla_detalle)) {
 
 print(tabla_edad)
 guardar_tabla_html(tabla_edad, "concordancias/06_ccc_edad.html")
+guardar_como_jpg(tabla_edad, "concordancias/06_ccc_edad.jpg")
 ```
 
 ### 4.4. Cálculo de concordancias para desagregaciones combinadas
@@ -526,6 +530,7 @@ tabla_ccc <- crear_tabla_ccc(
 
 print(tabla_ccc)
 guardar_tabla_html(tabla_ccc, "concordancias/02_ccc_resumen.html")
+guardar_como_jpg(tabla_ccc, "concordancias/02_ccc_resumen.jpg")
 ```
 
 ### 4.9. Análisis de Lin's CCC temporal (2010-2022)
@@ -618,6 +623,7 @@ tabla_estadisticas <- tibble::tibble(
 
 print(tabla_estadisticas)
 guardar_tabla_html(tabla_estadisticas, "concordancias/03_ccc_temporal_estadisticas.html")
+guardar_como_jpg(tabla_estadisticas, "concordancias/03_ccc_temporal_estadisticas.jpg")
 ```
 
 ## 5. Resumen Final

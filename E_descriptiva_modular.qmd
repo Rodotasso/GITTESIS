@@ -22,6 +22,7 @@ format:
 suppressPackageStartupMessages({
   library(tidyverse); library(flextable); library(scales)
   library(gtsummary); library(ggpubr); library(lubridate); library(stringr)
+  library(webshot2)
 })
 
 # Colores
@@ -34,6 +35,9 @@ source("R/cargar_funciones.R")
 load("BBDD_homologados.RData")
 datos_preparados <- datos_homologados
 
+# Directorio de salida para JPG
+dir_salida <- "resultados_tesis"
+
 cat("✓", format(nrow(datos_preparados), big.mark = ","), "registros |",
     "Años:", paste(range(sort(unique(datos_preparados$AÑO[datos_preparados$AÑO != "No reportado"]))), collapse = "-"), "\n")
 ```
@@ -45,7 +49,9 @@ glimpse(datos_preparados)
 
 ## 3. Completitud
 
-```{r completitud}
+### 3.1. Completitud global de variables
+
+```{r completitud_global}
 # Crear labels
 datos_analisis <- datos_preparados %>%
   mutate(
@@ -55,17 +61,78 @@ datos_analisis <- datos_preparados %>%
     PERTENENCIA2_label = case_when(PERTENENCIA2 == 1 ~ "Pertenece", PERTENENCIA2 == 0 ~ "No pertenece", TRUE ~ "No reportado")
   )
 
-# Tabla completitud
-datos_analisis %>%
-  summarise(Total = n(), Año = sum(!is.na(AÑO)),
-            RSH = sum(RSH_label != "No reportado", na.rm = TRUE),
-            CONADI = sum(CONADI_label != "No reportado", na.rm = TRUE),
-            Egresos = sum(EGRESO_label != "No reportado", na.rm = TRUE),
-            PERTENENCIA2 = sum(PERTENENCIA2_label != "No reportado", na.rm = TRUE)) %>%
-  pivot_longer(-Total, names_to = "Variable", values_to = "Completitud") %>%
-  mutate(`% Completitud` = percent(Completitud / Total, accuracy = 0.01)) %>%
-  flextable() %>% autofit() %>% 
-  set_caption("Completitud de variables principales") %>% theme_vanilla()
+# Tabla completitud global
+tabla_completitud_global <- datos_analisis %>%
+  summarise(
+    Total = n(),
+    RSH = sum(RSH_label != "No reportado", na.rm = TRUE),
+    CONADI = sum(CONADI_label != "No reportado", na.rm = TRUE),
+    'Egresos Hosp.' = sum(EGRESO_label != "No reportado", na.rm = TRUE),
+    Variable_Enriquecida = sum(PERTENENCIA2_label != "No reportado", na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = -Total, names_to = "Variable", values_to = "Completitud") %>%
+  mutate(
+    `% Completitud` = percent(Completitud / Total, accuracy = 0.01),
+    `Tipo de Completitud` = case_when(
+            Variable %in% c("RSH", "CONADI", "Egresos Hosp.", "Variable_Enriquecida") ~ "Valores != 'No reportado'",
+      TRUE ~ "Otro"
+    )
+  ) %>%
+  select(Variable, `Tipo de Completitud`, Completitud, Total, `% Completitud`)
+
+ft_completitud_global <- tabla_completitud_global %>%
+  flextable() %>%
+  autofit() %>%
+  set_caption("Porcentaje de completitud por variable (N = 9.486.780 egresos). Variables demográficas: completas si no tienen NA, vacíos o 'No reportado'. Variables de pertenencia: completas si tienen clasificación Pertenece/No pertenece (excluye 'No reportado').") %>%
+  theme_vanilla() %>%
+  bold(j = c("Variable", "% Completitud")) %>%
+  add_footer_lines("Fuente: Elaboración propia. DEIS 2010-2016. Variable Enriquecida integra Censo 2017, RSH, CONADI y autodeclaración hospitalaria.")
+
+print(ft_completitud_global)
+guardar_tabla_html(ft_completitud_global, "tabla_completitud_global.html")
+guardar_como_jpg(ft_completitud_global, "tabla_completitud_global")
+```
+
+### 3.2. Distribución de categorías por año
+
+```{r distribucion_categorias}
+# Tabla de distribución usando tbl_summary
+tabla_distribucion <- datos_analisis %>%
+  select(RSH_label, CONADI_label, EGRESO_label, AÑO) %>%
+  tbl_summary(
+    by = AÑO,
+    missing = "no",
+    type = list(
+      RSH_label = "categorical",
+      CONADI_label = "categorical",
+      EGRESO_label = "categorical"
+    ),
+    statistic = list(
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    label = list(
+      RSH_label ~ "RSH",
+      CONADI_label ~ "CONADI",
+      EGRESO_label ~ "Egresos Hospitalarios"
+    )
+  ) %>%
+  add_overall() %>%
+  modify_header(label = "**Fuente de pertenencia**") %>%
+  modify_spanning_header(everything() ~ "**Año**") %>%
+  bold_labels() %>%
+  modify_caption("**Distribución anual de categorías de pertenencia a pueblos originarios según fuente: RSH, CONADI y Egresos Hospitalarios**") %>%
+  modify_footnote(
+    all_stat_cols() ~ "n (%): frecuencia y porcentaje. Pertenece: identificado como miembro de pueblo originario. No pertenece: identificado como no perteneciente. No reportado: sin información en la fuente. RSH: Registro Social de Hogares. CONADI: Corporación Nacional de Desarrollo Indígena. Egresos: autodeclaración al ingreso hospitalario."
+  )
+
+ft_distribucion <- as_flex_table(tabla_distribucion) %>%
+  set_caption("Distribución de categorías de pertenencia por fuente y año (N total = 9.486.780 egresos)") %>%
+  add_footer_lines("Fuente: Elaboración propia a partir de DEIS 2010-2016, RSH y CONADI. Las proporciones se calculan sobre el total de egresos por año.") %>%
+  theme_vanilla()
+
+print(ft_distribucion)
+guardar_tabla_html(ft_distribucion, "tabla_distribucion_categorias.html")
+guardar_como_jpg(ft_distribucion, "tabla_distribucion_categorias")
 ```
 
 ## 4. Distribución por Fuentes y Año
@@ -104,14 +171,16 @@ analizar_y_guardar <- function(var, titulo, top = 10) {
   r <- analizar_variable(datos_preparados, var, titulo, top)
   if (!is.null(r$tabla_anual)) {
     print(r$tabla_anual)
-    guardar_tabla_html(r$tabla_anual, 
-                       sprintf("tabla_%s_anual.html", tolower(gsub(" ", "_", titulo))))
+    nombre_base <- tolower(gsub(" ", "_", titulo))
+    guardar_tabla_html(r$tabla_anual, sprintf("tabla_%s_anual.html", nombre_base))
+    guardar_como_jpg(r$tabla_anual, sprintf("tabla_%s_anual", nombre_base))
   }
   if (!is.null(r$grafico)) print(r$grafico)
   if (!is.null(r$promedio_anual)) {
     print(r$promedio_anual)
-    guardar_tabla_html(r$promedio_anual,
-                       sprintf("tabla_%s_promedio.html", tolower(gsub(" ", "_", titulo))))
+    nombre_base <- tolower(gsub(" ", "_", titulo))
+    guardar_tabla_html(r$promedio_anual, sprintf("tabla_%s_promedio.html", nombre_base))
+    guardar_como_jpg(r$promedio_anual, sprintf("tabla_%s_promedio", nombre_base))
   }
 }
 
@@ -139,14 +208,14 @@ analizar_sexo_guardar <- function(var, titulo, top = 10) {
     if (!is.null(r[[sexo]]$promedio_anual)) {
       cat(sprintf("\n═══ %s ═══\n", toupper(sexo)))
       print(r[[sexo]]$promedio_anual)
-      guardar_tabla_html(r[[sexo]]$promedio_anual,
-                         sprintf("tabla_%s_%s_promedio.html", 
-                                 tolower(gsub(" ", "_", titulo)), sexo))
+      nombre_base <- sprintf("%s_%s", tolower(gsub(" ", "_", titulo)), sexo)
+      guardar_tabla_html(r[[sexo]]$promedio_anual, sprintf("tabla_%s_promedio.html", nombre_base))
+      guardar_como_jpg(r[[sexo]]$promedio_anual, sprintf("tabla_%s_promedio", nombre_base))
     }
     if (!is.null(r[[sexo]]$tabla_anual)) {
-      guardar_tabla_html(r[[sexo]]$tabla_anual,
-                         sprintf("tabla_%s_%s_anual.html",
-                                 tolower(gsub(" ", "_", titulo)), sexo))
+      nombre_base <- sprintf("%s_%s", tolower(gsub(" ", "_", titulo)), sexo)
+      guardar_tabla_html(r[[sexo]]$tabla_anual, sprintf("tabla_%s_anual.html", nombre_base))
+      guardar_como_jpg(r[[sexo]]$tabla_anual, sprintf("tabla_%s_anual", nombre_base))
     }
   }
 }
@@ -194,6 +263,7 @@ if (!is.null(resultados_cie10$tablas_promedio)) {
     # Limpiar nombre para archivo
     nombre_archivo <- tolower(gsub("[^[:alnum:]]+", "_", nombre))
     guardar_tabla_html(tabla, sprintf("top_cie10_promedio_%s.html", nombre_archivo))
+    guardar_como_jpg(tabla, sprintf("top_cie10_promedio_%s", nombre_archivo))
     cat(sprintf("✓ Guardada tabla promedio: %s\n", nombre))
   }
 }
@@ -211,6 +281,7 @@ if (!is.null(resultados_cie10$tablas_anuales)) {
       # Crear nombre de archivo limpio
       nombre_archivo <- tolower(gsub("[^[:alnum:]]+", "_", nombre_tabla))
       guardar_tabla_html(tabla, sprintf("top_cie10_%s.html", nombre_archivo))
+      guardar_como_jpg(tabla, sprintf("top_cie10_%s", nombre_archivo))
       cat(sprintf("✓ Guardada tabla: %s\n", nombre_tabla))
     }
   }
