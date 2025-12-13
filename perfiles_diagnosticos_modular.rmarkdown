@@ -1,0 +1,412 @@
+---
+title: "Perfiles Epidemiológicos - Pueblos Originarios"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis de perfiles diagnósticos con tasas y proporciones (Protocolo Tesis RTS)"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+
+
+# Perfiles Epidemiológicos - Egresos Hospitalarios
+
+## 1. Configuración
+
+
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(scales)
+  library(censo2017)
+})
+
+# Cargar funciones y datos
+source("R/cargar_funciones.R")
+load("BBDD_homologados.RData")
+
+cat("- Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+```
+
+
+
+## 2. Preparación y Denominadores
+
+### 2.1. Procesar diagnósticos con descripciones CIE-10
+
+
+
+```{r preparar_datos}
+cat("═══ PREPARANDO DATOS Y DENOMINADORES ═══\n\n")
+
+# Concatenar códigos CIE-10 con descripciones en español (FONASA)
+datos_diag_preparados <- datos_homologados %>%
+  filter(!is.na(DIAG1), AÑO != "No reportado") %>%
+  concatenar_diag_cie10("DIAG1", "DIAG_COMPLETO")
+
+cat("\n")
+
+# Obtener códigos únicos
+n_codigos <- length(unique(datos_diag_preparados$DIAG1))
+cat("- Total códigos diagnósticos únicos:", format(n_codigos, big.mark = ","), "\n\n")
+```
+
+
+
+### 2.2. Denominadores poblacionales (Censo 2017)
+
+
+
+```{r denominadores}
+cat("═══ CARGANDO DENOMINADORES POBLACIONALES ═══\n")
+
+# Obtener población del Censo 2017 usando función modularizada
+poblacion_censo <- obtener_poblacion_censo(verbose = TRUE)
+
+# Extraer valores
+pob_po <- poblacion_censo$pob_po
+pob_pg <- poblacion_censo$pob_pg
+
+pob_total <- pob_po + pob_pg
+
+# Período de estudio
+anos_estudio <- 13  # 2010-2022
+persona_anos_po <- pob_po * anos_estudio
+persona_anos_pg <- pob_pg * anos_estudio
+
+# Total egresos por grupo (2010-2022)
+total_egresos_po <- sum(datos_diag_preparados$PERTENENCIA2 == 1, na.rm = TRUE)
+total_egresos_pg <- sum(datos_diag_preparados$PERTENENCIA2 == 0, na.rm = TRUE)
+total_egresos <- nrow(datos_diag_preparados)
+
+cat("\nPOBLACIÓN (Censo 2017):\n")
+cat("  • Pueblos Originarios:", format(pob_po, big.mark = ","), "habitantes\n")
+cat("  • Población General:", format(pob_pg, big.mark = ","), "habitantes\n")
+cat("  • Total:", format(pob_total, big.mark = ","), "habitantes\n\n")
+
+cat("EGRESOS HOSPITALARIOS (2010-2022):\n")
+cat("  • Pueblos Originarios:", format(total_egresos_po, big.mark = ","), "egresos\n")
+cat("  • Población General:", format(total_egresos_pg, big.mark = ","), "egresos\n")
+cat("  • Total:", format(total_egresos, big.mark = ","), "egresos\n\n")
+
+# Calcular tasas de egresos
+# Tasa acumulada del período
+tasa_acumulada_po <- (total_egresos_po / pob_po) * 1000
+tasa_acumulada_pg <- (total_egresos_pg / pob_pg) * 1000
+
+# Tasa anual promedio (metodológicamente correcta)
+tasa_anual_po <- (total_egresos_po / persona_anos_po) * 1000
+tasa_anual_pg <- (total_egresos_pg / persona_anos_pg) * 1000
+
+cat("TASA ACUMULADA DE EGRESOS 2010-2022 (x1000 hab, Censo 2017):\n")
+cat("  • Pueblos Originarios:", sprintf("%.2f", tasa_acumulada_po), "x1000\n")
+cat("  • Población General:", sprintf("%.2f", tasa_acumulada_pg), "x1000\n")
+cat("  • Diferencia (PO - PG):", sprintf("%.2f", tasa_acumulada_po - tasa_acumulada_pg), "x1000\n\n")
+
+cat("TASA ANUAL PROMEDIO DE EGRESOS (x1000 persona-años):\n")
+cat("  • Pueblos Originarios:", sprintf("%.2f", tasa_anual_po), "x1000\n")
+cat("  • Población General:", sprintf("%.2f", tasa_anual_pg), "x1000\n")
+cat("  • Diferencia (PO - PG):", sprintf("%.2f", tasa_anual_po - tasa_anual_pg), "x1000\n")
+```
+
+
+
+## 3. Estandarización por Edad
+
+::: {.callout-warning}
+### Sección pendiente de implementación
+
+Esta sección requiere crear una función adicional para extraer estructura etaria del censo2017:
+
+- **Función necesaria**: `extraer_poblacion_censo_edad()` que retorne distribución por grupos etarios (0-14, 15-29, 30-44, 45-59, 60-74, 75+)
+- **Cruce requerido**: Variable `EDAD` de egresos hospitalarios con estructura etaria del censo
+- **Método**: Estandarización directa por edad
+
+**Nota metodológica**: Las tasas y razones de riesgo (RR) presentadas en las secciones siguientes NO están ajustadas por edad y pueden estar confundidas por diferencias en estructura etaria entre poblaciones.
+:::
+
+
+
+```{r estandarizacion_pendiente, eval=FALSE}
+# CÓDIGO PENDIENTE - No ejecutar hasta implementar función de censo por edad
+
+# cat("\n═══ ESTANDARIZACIÓN POR EDAD (Método Directo) ═══\n")
+# 
+# # 1. Extraer distribución etaria del censo
+# poblacion_edad <- extraer_poblacion_censo_edad(verbose = TRUE)
+# 
+# # 2. Preparar datos de egresos con grupos etarios
+# datos_con_edad <- datos_diag_preparados %>%
+#   mutate(
+#     grupo_edad = case_when(
+#       EDAD < 15 ~ "0-14",
+#       EDAD < 30 ~ "15-29",
+#       EDAD < 45 ~ "30-44",
+#       EDAD < 60 ~ "45-59",
+#       EDAD < 75 ~ "60-74",
+#       TRUE ~ "75+"
+#     )
+#   )
+# 
+# # 3. Calcular casos por grupo edad y pertenencia
+# casos_edad <- datos_con_edad %>%
+#   group_by(PERTENENCIA2, grupo_edad) %>%
+#   summarise(casos = n(), .groups = "drop")
+# 
+# # 4. Calcular tasas específicas por edad
+# tasas_especificas <- casos_edad %>%
+#   left_join(poblacion_edad, by = c("PERTENENCIA2" = "pertenencia", "grupo_edad")) %>%
+#   mutate(
+#     persona_anos = poblacion * anos_estudio,
+#     tasa_especifica = (casos / persona_anos) * 1000
+#   )
+# 
+# # 5. Población estándar (total Chile)
+# poblacion_estandar <- poblacion_edad %>%
+#   group_by(grupo_edad) %>%
+#   summarise(pob_std = sum(poblacion), .groups = "drop") %>%
+#   mutate(prop_std = pob_std / sum(pob_std))
+# 
+# # 6. Calcular tasas estandarizadas
+# tasas_estandarizadas <- tasas_especificas %>%
+#   left_join(poblacion_estandar, by = "grupo_edad") %>%
+#   group_by(PERTENENCIA2) %>%
+#   summarise(
+#     tasa_cruda = sum(casos) / sum(persona_anos) * 1000,
+#     tasa_estandarizada = sum(tasa_especifica * prop_std),
+#     .groups = "drop"
+#   )
+# 
+# # 7. Reportar resultados
+# cat("\nTASAS ESTANDARIZADAS POR EDAD (x1000 persona-años):\n")
+# cat("  Pueblos Originarios:\n")
+# cat("    - Tasa cruda:", sprintf("%.2f", filter(tasas_estandarizadas, PERTENENCIA2 == 1)$tasa_cruda), "x1000\n")
+# cat("    - Tasa estandarizada:", sprintf("%.2f", filter(tasas_estandarizadas, PERTENENCIA2 == 1)$tasa_estandarizada), "x1000\n\n")
+# cat("  Población General:\n")
+# cat("    - Tasa cruda:", sprintf("%.2f", filter(tasas_estandarizadas, PERTENENCIA2 == 0)$tasa_cruda), "x1000\n")
+# cat("    - Tasa estandarizada:", sprintf("%.2f", filter(tasas_estandarizadas, PERTENENCIA2 == 0)$tasa_estandarizada), "x1000\n\n")
+# 
+# # 8. RR ajustado
+# tasa_std_po <- filter(tasas_estandarizadas, PERTENENCIA2 == 1)$tasa_estandarizada
+# tasa_std_pg <- filter(tasas_estandarizadas, PERTENENCIA2 == 0)$tasa_estandarizada
+# rr_ajustado <- tasa_std_po / tasa_std_pg
+# 
+# cat("RAZÓN DE TASAS ESTANDARIZADAS (RR ajustado por edad):", sprintf("%.2f", rr_ajustado), "\n")
+# cat("Diferencia absoluta de tasas:", sprintf("%.2f", tasa_std_po - tasa_std_pg), "x1000\n")
+```
+
+
+
+## 4. Top 20 Diagnósticos - Pueblos Originarios
+
+### 4.1. Tabla con tasas y proporciones
+
+
+
+```{r perfil_po_tabla}
+cat("\n═══ TOP 20 DIAGNÓSTICOS - PUEBLOS ORIGINARIOS ═══\n")
+
+# Calcular perfil usando función modularizada
+perfil_po <- calcular_perfil_diagnostico(
+  datos = datos_diag_preparados,
+  pertenencia = 1,
+  poblacion = pob_po,
+  total_egresos = total_egresos_po,
+  anos_estudio = anos_estudio,
+  top_n = 20,
+  min_casos = 1,
+  verbose = TRUE
+)
+
+# Crear tabla formateada
+tabla_perfil_po <- crear_tabla_perfil(
+  datos = perfil_po,
+  tipo = "perfil",
+  titulo = "Top 20 Diagnósticos - Pueblos Originarios (Tasas y Proporciones)",
+  resaltar_umbral = 5,
+  col_umbral = "pct_total",
+  color_resaltado = "#E8F4F8",
+  tamano_fuente = 8
+)
+
+print(tabla_perfil_po)
+guardar_tabla_html(tabla_perfil_po, "perfiles/perfil_po_top20_tasas.html")
+
+cat("\n- Top 20 diagnósticos representan:", 
+    sprintf("%.1f%%", sum(perfil_po$pct_total)), 
+    "del total de egresos PO\n")
+```
+
+
+
+### 4.2. Gráfico - Top 20 PO
+
+
+
+```{r perfil_po_grafico}
+cat("═══ GRÁFICO TOP 20 - PUEBLOS ORIGINARIOS ═══\n")
+
+# Generar gráfico usando función modularizada
+graf_perfil_po <- graficar_perfil_top(
+  datos = perfil_po,
+  titulo = "Top 20 Diagnósticos - Pueblos Originarios",
+  subtitulo = "Egresos hospitalarios ordenados por frecuencia (2010-2022)",
+  color_barras = "#0A2351",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas = 2.5
+)
+
+print(graf_perfil_po)
+guardar_multiformato(graf_perfil_po, "perfiles/perfil_po_top20", 12, 9, 300)
+
+cat("- Gráfico guardado en: resultados_tesis/perfiles/\n")
+```
+
+
+
+## 5. Comparación PO vs PG
+
+### 5.1. Diagnósticos con mayor diferencia de tasas
+
+
+
+```{r comparacion_tasas}
+cat("\n═══ COMPARACIÓN DE TASAS PO vs PG ═══\n")
+
+# Calcular comparación usando función modularizada
+comparacion_diag <- comparar_perfiles_po_pg(
+  datos = datos_diag_preparados,
+  poblacion_po = pob_po,
+  poblacion_pg = pob_pg,
+  total_egresos_po = total_egresos_po,
+  total_egresos_pg = total_egresos_pg,
+  anos_estudio = anos_estudio,
+  min_casos_po = 100,
+  top_n = 20,
+  ordenar_por = "dif_tasa",
+  verbose = TRUE
+)
+
+cat("\n- Top", nrow(comparacion_diag), "diagnósticos con mayor diferencia identificados\n")
+```
+
+
+
+### 5.2. Tabla de comparación
+
+
+
+```{r tabla_comparacion}
+# Crear tabla de comparación usando función modularizada
+tabla_comparacion <- crear_tabla_perfil(
+  datos = comparacion_diag,
+  tipo = "comparacion",
+  titulo = "Comparación de Tasas PO vs PG - Top 20 Diferencias",
+  tamano_fuente = 8
+)
+
+print(tabla_comparacion)
+guardar_tabla_html(tabla_comparacion, "perfiles/comparacion_tasas_po_pg.html")
+
+cat("- Tabla guardada en: resultados_tesis/perfiles/comparacion_tasas_po_pg.html\n")
+```
+
+
+
+### 5.3. Gráfico de diferencias de tasas
+
+
+
+```{r grafico_diferencias}
+cat("═══ GRÁFICO DE DIFERENCIAS ═══\n")
+
+# Generar gráfico de diferencias usando función modularizada
+graf_diferencias <- graficar_diferencias_tasas(
+  datos = comparacion_diag,
+  top_n = 15,
+  ordenar_por = "abs",
+  titulo = "Top 15 Diagnósticos con mayor diferencia de tasas anuales",
+  subtitulo = "Diferencia en tasas anuales promedio por 1000 persona-años (2010-2022)",
+  color_po = "#C62828",
+  color_pg = "#1565C0",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas = 2.3
+)
+
+print(graf_diferencias)
+guardar_multiformato(graf_diferencias, "perfiles/diferencias_tasas_po_pg", 13, 9, 300)
+
+cat("- Gráfico guardado en: resultados_tesis/perfiles/\n")
+```
+
+
+
+## 6. Resumen
+
+
+
+```{r resumen}
+cat("\n═══════════════════════════════════════════════════\n")
+cat("  ANÁLISIS DE PERFILES EPIDEMIOLÓGICOS\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("DENOMINADORES:\n")
+cat("  • Población PO (Censo 2017):", format(pob_po, big.mark = ","), "hab\n")
+cat("  • Población PG (Censo 2017):", format(pob_pg, big.mark = ","), "hab\n")
+cat("  • Egresos PO (2010-2022):", format(total_egresos_po, big.mark = ","), "\n")
+cat("  • Egresos PG (2010-2022):", format(total_egresos_pg, big.mark = ","), "\n\n")
+
+cat("INDICADORES CALCULADOS (según Tabla 3 - Protocolo):\n")
+cat("  - Tasa acumulada 2010-2022 (x1000 hab, Censo 2017)\n")
+cat("  - Tasa anual promedio (x1000 persona-años)\n")
+cat("  - Proporción de egresos por causa (x1000 egresos)\n")
+cat("  - Diferencia de tasas anuales (PO - PG)\n")
+cat("  - RR crudo (sin ajuste por edad)\n")
+cat("  PENDIENTE: Tasas específicas por edad\n")
+cat("  PENDIENTE: Tasas estandarizadas por edad\n")
+cat("  PENDIENTE: RR ajustado por edad\n\n")
+
+cat("ANÁLISIS GENERADOS:\n")
+cat("  • Top 20 diagnósticos en PO con tasas anuales\n")
+cat("  • Comparación PO vs PG con RR crudos (sin ajuste)\n")
+cat("  • Identificación de diagnósticos sobre-representados (RR ≥ 1.5)\n")
+cat("  • Identificación de diagnósticos sub-representados (RR ≤ 0.67)\n")
+cat("  PENDIENTE: Estandarización por edad\n\n")
+
+cat("FUNCIONES MODULARIZADAS UTILIZADAS:\n")
+cat("  • obtener_poblacion_censo() - Denominadores desde censo2017\n")
+cat("  • concatenar_diag_cie10() - Descripciones CIE-10 FONASA (español)\n")
+cat("  • calcular_perfil_diagnostico() - Tasas y proporciones por diagnóstico\n")
+cat("  • comparar_perfiles_po_pg() - Comparación con RR crudo\n")
+cat("  • crear_tabla_perfil() - Tablas formateadas estandarizadas\n")
+cat("  • graficar_perfil_top() - Gráfico de barras horizontales\n")
+cat("  • graficar_diferencias_tasas() - Gráfico divergente de diferencias\n")
+cat("  • guardar_tabla_html() - Exportación HTML\n")
+cat("  • guardar_multiformato() - Exportación gráficos (PNG, JPG, PDF)\n\n")
+
+cat("- Todos los resultados guardados en: resultados_tesis/perfiles/\n")
+cat("- Denominadores: persona-años (población Censo 2017 × 13 años)\n")
+cat("- Fórmulas según protocolo (Bonita, 2006)\n\n")
+
+cat("LIMITACIONES METODOLÓGICAS:\n")
+cat("  • RR crudos SIN ajuste por edad (ver Sección 3 - pendiente)\n")
+cat("  • Población Censo 2017 fija (no hay proyecciones anuales por pertenencia)\n")
+cat("  • No se ajusta por otros confusores (región, acceso a salud)\n")
+cat("  • Estandarización directa requiere extraer estructura etaria del censo\n\n")
+
+cat("CÓDIGO REDUCIDO:\n")
+cat("  Versión original: 471 líneas\n")
+cat("  Versión modular: ~330 líneas\n")
+cat("  Reducción: ~30% (141 líneas menos)\n")
+cat("  Funciones creadas: 5 nuevas funciones en R/perfiles/\n")
+```
+
+---
+**Generado**: `r Sys.Date()` | **Análisis**: Perfiles epidemiológicos por pertenencia | **Autor**: Rodolfo Tasso
+

@@ -45,9 +45,19 @@
 
 guardar_como_jpg <- function(tabla_ft, nombre_archivo) {
   tryCatch({
+    # Verificar que dir_salida existe
+    if (!exists("dir_salida")) {
+      stop("La variable 'dir_salida' no está definida. Defínela antes de usar esta función.")
+    }
+    
+    # Crear directorio si no existe
+    if (!dir.exists(dir_salida)) {
+      dir.create(dir_salida, recursive = TRUE)
+    }
+    
     # Crear archivo temporal HTML
     temp_html <- tempfile(fileext = ".html")
-    save_as_html(tabla_ft, path = temp_html)
+    flextable::save_as_html(tabla_ft, path = temp_html)
     
     # Convertir a JPG
     ruta_jpg <- file.path(dir_salida, paste0(nombre_archivo, ".jpg"))
@@ -56,8 +66,8 @@ guardar_como_jpg <- function(tabla_ft, nombre_archivo) {
     # Limpiar archivo temporal
     unlink(temp_html)
     
-    cat(sprintf("  ✓ %s.jpg\n", nombre_archivo))
+    cat(sprintf("  ✓ %s.jpg guardado en %s\n", nombre_archivo, dir_salida))
   }, error = function(e) {
-    cat(sprintf("  ✗ Error en %s: %s\n", nombre_archivo, e$message))
+    cat(sprintf("  ✗ Error al guardar %s.jpg: %s\n", nombre_archivo, e$message))
   })
 }

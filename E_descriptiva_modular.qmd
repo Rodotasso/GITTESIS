@@ -25,6 +25,10 @@ suppressPackageStartupMessages({
   library(webshot2)
 })
 
+# Limpiar ambiente y liberar memoria
+rm(list = ls())
+gc()
+
 # Colores
 colores_analisis <- c("Pertenece a Pueblos Originarios" = "#E69F00", "Población General" = "#56B4E9")
 colores_fuentes <- c("RSH" = "#E41A1C", "CONADI" = "#4DAF4A", 
@@ -72,18 +76,14 @@ tabla_completitud_global <- datos_analisis %>%
   ) %>%
   pivot_longer(cols = -Total, names_to = "Variable", values_to = "Completitud") %>%
   mutate(
-    `% Completitud` = percent(Completitud / Total, accuracy = 0.01),
-    `Tipo de Completitud` = case_when(
-            Variable %in% c("RSH", "CONADI", "Egresos Hosp.", "Variable_Enriquecida") ~ "Valores != 'No reportado'",
-      TRUE ~ "Otro"
-    )
+    `% Completitud` = percent(Completitud / Total, accuracy = 0.01)
   ) %>%
-  select(Variable, `Tipo de Completitud`, Completitud, Total, `% Completitud`)
+  select(Variable, Completitud, Total, `% Completitud`)
 
 ft_completitud_global <- tabla_completitud_global %>%
   flextable() %>%
   autofit() %>%
-  set_caption("Porcentaje de completitud por variable (N = 9.486.780 egresos). Variables demográficas: completas si no tienen NA, vacíos o 'No reportado'. Variables de pertenencia: completas si tienen clasificación Pertenece/No pertenece (excluye 'No reportado').") %>%
+  set_caption("Porcentaje de completitud por variable (N = 9.486.780 egresos).") %>%
   theme_vanilla() %>%
   bold(j = c("Variable", "% Completitud")) %>%
   add_footer_lines("Fuente: Elaboración propia. DEIS 2010-2016. Variable Enriquecida integra Censo 2017, RSH, CONADI y autodeclaración hospitalaria.")

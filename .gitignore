@@ -18,17 +18,9 @@ Meta/
 *.RData
 
 # Generated output
-*.jpg
-*.jpeg
-*.pdf
-*.png
-*.html
-*.rmarkdown
-/E_descriptiva_files/
-/grafico_simple_files/
-/Prueba-de-grafico_files/
-/TEST_funciones_files/
+/output_qmd/
 /resultados_tesis/
+/grafico_pertenencia_modular_files/
 
 # Sensitive data
 /data/

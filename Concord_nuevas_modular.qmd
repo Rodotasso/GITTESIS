@@ -41,6 +41,13 @@ suppressPackageStartupMessages({
 # Cargar funciones personalizadas
 source("R/cargar_funciones.R")
 
+# Configurar directorio de salida para guardar resultados
+dir_salida <- "resultados_tesis/concordancias"
+if (!dir.exists(dir_salida)) {
+  dir.create(dir_salida, recursive = TRUE)
+  cat("✓ Directorio de salida creado:", dir_salida, "\n")
+}
+
 # Cargar datos
 load("BBDD_homologados.RData")
 
@@ -117,7 +124,7 @@ for(i in 1:nrow(resultados_kappa)) {
 
 print(tabla_kappa)
 guardar_tabla_html(tabla_kappa, "concordancias/01_kappa_desctools.html")
-guardar_como_jpg(tabla_kappa, "concordancias/01_kappa_desctools.jpg")
+guardar_como_jpg(tabla_kappa, "01_kappa_desctools")
 ```
 
 ## 3. Extracción de Datos para Lin's CCC
@@ -267,7 +274,24 @@ cat("\n⚠ NOTA: Para Lin's CCC se usa base sin duplicados (un registro por paci
 cat("   Para Cohen's Kappa se usó base completa (todos los egresos)\n")
 ```
 
+### 3.3. Datos de Egresos Hospitalarios (sin duplicados)
+
+```{r extraer_egresos_hospitalarios}
+cat("\n═══ EXTRAYENDO DATOS DE EGRESOS HOSPITALARIOS (SIN DUPLICADOS) ═══\n\n")
+
+# Extraer datos de Egresos Hospitalarios sin duplicados (usando PUEBLO_ORIGINARIO_BIN)
+datos_egresos <- extraer_datos_egresos_hospitalarios(datos_prep, verbose = TRUE)
+
+cat("\nRESUMEN EGRESOS HOSPITALARIOS (SIN DUPLICADOS):\n")
+cat("- Total:", format(datos_egresos$nacional$total, big.mark = ","), "pacientes únicos\n")
+cat("- Pertenece:", round(datos_egresos$nacional$porcentaje_egresos, 2), "%\n")
+cat("- Regiones:", nrow(datos_egresos$por_region), "\n")
+cat("- Grupos etarios:", nrow(datos_egresos$por_grupo_etario), "\n")
+```
+
 ## 4. Análisis de Concordancia con Lin's CCC
+
+### Comparación 1: Censo 2017 vs Variable Enriquecida (PERTENENCIA2)
 
 ### 4.1. Concordancia por región
 
@@ -337,7 +361,7 @@ for(i in 1:nrow(tabla_region_data)) {
 
 print(tabla_region)
 guardar_tabla_html(tabla_region, "concordancias/04_ccc_region.html")
-guardar_como_jpg(tabla_region, "concordancias/04_ccc_region.jpg")
+guardar_como_jpg(tabla_region, "04_ccc_region")
 ```
 
 ### 4.2. Concordancia por sexo
@@ -393,7 +417,7 @@ for(i in 1:nrow(resultado_sexo_detalle$tabla_detalle)) {
 
 print(tabla_sexo)
 guardar_tabla_html(tabla_sexo, "concordancias/05_ccc_sexo.html")
-guardar_como_jpg(tabla_sexo, "concordancias/05_ccc_sexo.jpg")
+guardar_como_jpg(tabla_sexo, "05_ccc_sexo")
 ```
 
 ### 4.3. Concordancia por grupo etario
@@ -449,7 +473,7 @@ for(i in 1:nrow(resultado_edad_detalle$tabla_detalle)) {
 
 print(tabla_edad)
 guardar_tabla_html(tabla_edad, "concordancias/06_ccc_edad.html")
-guardar_como_jpg(tabla_edad, "concordancias/06_ccc_edad.jpg")
+guardar_como_jpg(tabla_edad, "06_ccc_edad")
 ```
 
 ### 4.4. Cálculo de concordancias para desagregaciones combinadas
@@ -530,7 +554,341 @@ tabla_ccc <- crear_tabla_ccc(
 
 print(tabla_ccc)
 guardar_tabla_html(tabla_ccc, "concordancias/02_ccc_resumen.html")
-guardar_como_jpg(tabla_ccc, "concordancias/02_ccc_resumen.jpg")
+guardar_como_jpg(tabla_ccc, "02_ccc_resumen")
+```
+
+## 5. Análisis de Concordancia con Lin's CCC (Censo vs Egresos Hospitalarios)
+
+### Comparación 2: Censo 2017 vs Egresos Hospitalarios (PUEBLO_ORIGINARIO_BIN)
+
+Este análisis compara el Censo 2017 directamente con la variable de autodeclaración en egresos hospitalarios, sin enriquecimiento con otras fuentes.
+
+### 5.1. Concordancia por región (Censo vs Egresos)
+
+```{r ccc_region_egresos}
+resultado_region_egresos_detalle <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad,
+  datos_egresos$region_sexo_edad,
+  columnas_categoria = "region",
+  columnas_subcategoria = c("sexo", "grupo_etario"),
+  nombre_desagregacion = "Por Región (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+resultado_region_egresos <- resultado_region_egresos_detalle$ccc_valor
+
+# Crear tabla detallada por región con Lin's CCC, manteniendo orden geográfico
+tabla_region_egresos_data <- resultado_region_egresos_detalle$tabla_detalle %>%
+  left_join(nombres_regiones, by = "region") %>%
+  select(region, Región, `Lin's CCC`, `IC 95% Inferior`, `IC 95% Superior`, Interpretacion)
+
+# Ordenar según nombres_regiones para mantener orden geográfico (norte a sur)
+tabla_region_egresos_data <- nombres_regiones %>%
+  left_join(tabla_region_egresos_data, by = c("region", "Región")) %>%
+  select(-region)
+
+tabla_region_egresos <- tabla_region_egresos_data %>%
+  flextable() %>%
+  set_caption(sprintf("Lin's CCC por Región - Censo vs Egresos Hospitalarios | CCC Global = %.4f [%.4f - %.4f]",
+                     resultado_region_egresos$`Lin's CCC`,
+                     resultado_region_egresos$`IC 95% Inferior`,
+                     resultado_region_egresos$`IC 95% Superior`)) %>%
+  colformat_double(j = c("Lin's CCC", "IC 95% Inferior", "IC 95% Superior"), digits = 4) %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(j = 2:5, align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  bold(j = "Lin's CCC") %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  add_footer_lines("CCC calculado usando todas las combinaciones región×sexo×grupo etario dentro de cada región")
+
+# Aplicar colores al TEXTO según valor de Lin's CCC
+for(i in 1:nrow(tabla_region_egresos_data)) {
+  valor <- tabla_region_egresos_data$`Lin's CCC`[i]
+  if (!is.na(valor)) {
+    color_texto <- dplyr::case_when(
+      valor > 0.80 ~ "#198754",  # Verde oscuro (Casi perfecta)
+      valor > 0.61 ~ "#0d6efd",  # Azul (Sustancial)
+      valor > 0.41 ~ "#ffc107",  # Amarillo/Naranja (Moderada)
+      valor > 0.21 ~ "#fd7e14",  # Naranja (Aceptable)
+      TRUE ~ "#dc3545"           # Rojo (Leve)
+    )
+    tabla_region_egresos <- tabla_region_egresos %>%
+      flextable::color(i = i, j = "Lin's CCC", color = color_texto)
+  }
+}
+
+print(tabla_region_egresos)
+guardar_tabla_html(tabla_region_egresos, "concordancias/10_ccc_region_egresos.html")
+guardar_como_jpg(tabla_region_egresos, "10_ccc_region_egresos")
+```
+
+### 5.2. Concordancia por sexo (Censo vs Egresos)
+
+```{r ccc_sexo_egresos}
+resultado_sexo_egresos_detalle <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad,
+  datos_egresos$region_sexo_edad,
+  columnas_categoria = "sexo",
+  columnas_subcategoria = c("region", "grupo_etario"),
+  nombre_desagregacion = "Por Sexo (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+resultado_sexo_egresos <- resultado_sexo_egresos_detalle$ccc_valor
+
+tabla_sexo_egresos <- resultado_sexo_egresos_detalle$tabla_detalle %>%
+  flextable() %>%
+  set_caption(sprintf("Concordancia detallada por Sexo - Censo vs Egresos | CCC Global = %.4f [%.4f - %.4f]",
+                     resultado_sexo_egresos$`Lin's CCC`,
+                     resultado_sexo_egresos$`IC 95% Inferior`,
+                     resultado_sexo_egresos$`IC 95% Superior`)) %>%
+  colformat_double(j = c("Lin's CCC", "IC 95% Inferior", "IC 95% Superior"), digits = 4) %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(j = 2:5, align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  bold(j = "Lin's CCC") %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  add_footer_lines("CCC calculado usando todas las combinaciones región×sexo×grupo etario dentro de cada sexo")
+
+# Aplicar colores
+for(i in 1:nrow(resultado_sexo_egresos_detalle$tabla_detalle)) {
+  valor <- resultado_sexo_egresos_detalle$tabla_detalle$`Lin's CCC`[i]
+  if (!is.na(valor)) {
+    color_texto <- dplyr::case_when(
+      valor > 0.80 ~ "#198754",
+      valor > 0.61 ~ "#0d6efd",
+      valor > 0.41 ~ "#ffc107",
+      valor > 0.21 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_sexo_egresos <- tabla_sexo_egresos %>%
+      flextable::color(i = i, j = "Lin's CCC", color = color_texto)
+  }
+}
+
+print(tabla_sexo_egresos)
+guardar_tabla_html(tabla_sexo_egresos, "concordancias/11_ccc_sexo_egresos.html")
+guardar_como_jpg(tabla_sexo_egresos, "11_ccc_sexo_egresos")
+```
+
+### 5.3. Concordancia por grupo etario (Censo vs Egresos)
+
+```{r ccc_edad_egresos}
+resultado_edad_egresos_detalle <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad,
+  datos_egresos$region_sexo_edad,
+  columnas_categoria = "grupo_etario",
+  columnas_subcategoria = c("region", "sexo"),
+  nombre_desagregacion = "Por Grupo Etario (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+resultado_edad_egresos <- resultado_edad_egresos_detalle$ccc_valor
+
+tabla_edad_egresos <- resultado_edad_egresos_detalle$tabla_detalle %>%
+  flextable() %>%
+  set_caption(sprintf("Concordancia detallada por Grupo Etario - Censo vs Egresos | CCC Global = %.4f [%.4f - %.4f]",
+                     resultado_edad_egresos$`Lin's CCC`,
+                     resultado_edad_egresos$`IC 95% Inferior`,
+                     resultado_edad_egresos$`IC 95% Superior`)) %>%
+  colformat_double(j = c("Lin's CCC", "IC 95% Inferior", "IC 95% Superior"), digits = 4) %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(j = 2:5, align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  bold(j = "Lin's CCC") %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  add_footer_lines("CCC calculado usando todas las combinaciones región×sexo×grupo etario dentro de cada grupo etario")
+
+# Aplicar colores
+for(i in 1:nrow(resultado_edad_egresos_detalle$tabla_detalle)) {
+  valor <- resultado_edad_egresos_detalle$tabla_detalle$`Lin's CCC`[i]
+  if (!is.na(valor)) {
+    color_texto <- dplyr::case_when(
+      valor > 0.80 ~ "#198754",
+      valor > 0.61 ~ "#0d6efd",
+      valor > 0.41 ~ "#ffc107",
+      valor > 0.21 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_edad_egresos <- tabla_edad_egresos %>%
+      flextable::color(i = i, j = "Lin's CCC", color = color_texto)
+  }
+}
+
+print(tabla_edad_egresos)
+guardar_tabla_html(tabla_edad_egresos, "concordancias/12_ccc_edad_egresos.html")
+guardar_como_jpg(tabla_edad_egresos, "12_ccc_edad_egresos")
+```
+
+### 5.4. Desagregaciones combinadas (Censo vs Egresos)
+
+```{r ccc_desagregaciones_combinadas_egresos}
+cat("\n═══ CALCULANDO CONCORDANCIAS COMBINADAS (CENSO VS EGRESOS) ═══\n\n")
+
+# Región × Sexo
+cat("Calculando Región × Sexo (Egresos)...\n")
+resultado_region_sexo_egresos <- calcular_ccc_desagregacion(
+  datos_censo$region_sexo,
+  datos_egresos$region_sexo,
+  columnas_join = c("region", "sexo"),
+  nombre_desagregacion = "Región × Sexo (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+# Región × Grupo Etario
+cat("\nCalculando Región × Grupo Etario (Egresos)...\n")
+resultado_region_edad_egresos <- calcular_ccc_desagregacion(
+  datos_censo$region_edad,
+  datos_egresos$region_edad,
+  columnas_join = c("region", "grupo_etario"),
+  nombre_desagregacion = "Región × Grupo Etario (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+# Sexo × Grupo Etario
+cat("\nCalculando Sexo × Grupo Etario (Egresos)...\n")
+resultado_sexo_edad_egresos <- calcular_ccc_desagregacion(
+  datos_censo$sexo_edad,
+  datos_egresos$sexo_edad,
+  columnas_join = c("sexo", "grupo_etario"),
+  nombre_desagregacion = "Sexo × Grupo Etario (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+# Región × Sexo × Grupo Etario
+cat("\nCalculando Región × Sexo × Grupo Etario (Egresos)...\n")
+resultado_triple_egresos <- calcular_ccc_desagregacion(
+  datos_censo$region_sexo_edad,
+  datos_egresos$region_sexo_edad,
+  columnas_join = c("region", "sexo", "grupo_etario"),
+  nombre_desagregacion = "Región × Sexo × Grupo Etario (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+cat("\n✓ Concordancias combinadas (Egresos) calculadas\n")
+```
+
+### 5.5. Tabla resumen de concordancias (Censo vs Egresos)
+
+```{r tabla_resumen_ccc_egresos}
+cat("\n═══ RESUMEN DE CONCORDANCIAS CENSO VS EGRESOS (LIN'S CCC) ═══\n\n")
+
+# Combinar todos los resultados de Egresos
+resultados_ccc_egresos <- bind_rows(
+  resultado_region_egresos,
+  resultado_sexo_egresos,
+  resultado_edad_egresos,
+  resultado_region_sexo_egresos,
+  resultado_region_edad_egresos,
+  resultado_sexo_edad_egresos,
+  resultado_triple_egresos
+)
+
+# Crear tabla formateada
+tabla_ccc_egresos <- crear_tabla_ccc(
+  datos = resultados_ccc_egresos,
+  titulo = "Concordancia entre Censo 2017 y Egresos Hospitalarios por desagregaciones (Lin's CCC)",
+  subtitulo = "Comparación de distribución porcentual de pertenencia a pueblos originarios entre fuentes",
+  aplicar_colores = TRUE
+)
+
+print(tabla_ccc_egresos)
+guardar_tabla_html(tabla_ccc_egresos, "concordancias/09_ccc_resumen_egresos.html")
+guardar_como_jpg(tabla_ccc_egresos, "09_ccc_resumen_egresos")
+```
+
+### 5.6. Tabla comparativa: Variable Enriquecida vs Egresos Hospitalarios
+
+```{r tabla_comparativa_fuentes}
+cat("\n═══ TABLA COMPARATIVA: VARIABLE ENRIQUECIDA VS EGRESOS ═══\n\n")
+
+# Preparar datos de Variable Enriquecida (limpiar nombre de desagregación)
+datos_enriquecida <- resultados_ccc %>%
+  mutate(Desagregacion = gsub(" \\(Egresos\\)", "", Desagregacion)) %>%
+  select(
+    Desagregacion,
+    `Lin's CCC (Var. Enriquecida)` = `Lin's CCC`,
+    `IC 95% Inf (Var. Enr.)` = `IC 95% Inferior`,
+    `IC 95% Sup (Var. Enr.)` = `IC 95% Superior`,
+    `Interpretación (Var. Enr.)` = Interpretacion
+  )
+
+# Preparar datos de Egresos (limpiar nombre de desagregación)
+datos_egresos_tabla <- resultados_ccc_egresos %>%
+  mutate(Desagregacion = gsub(" \\(Egresos\\)", "", Desagregacion)) %>%
+  select(
+    Desagregacion,
+    `Lin's CCC (Egresos)` = `Lin's CCC`,
+    `IC 95% Inf (Egresos)` = `IC 95% Inferior`,
+    `IC 95% Sup (Egresos)` = `IC 95% Superior`,
+    `Interpretación (Egresos)` = Interpretacion
+  )
+
+# Combinar en una tabla con columnas lado a lado
+resultados_combinados <- datos_enriquecida %>%
+  full_join(datos_egresos_tabla, by = "Desagregacion")
+
+# Crear tabla comparativa
+tabla_comparativa <- resultados_combinados %>%
+  flextable() %>%
+  set_caption("Comparación de Concordancias: Censo vs Variable Enriquecida / Censo vs Egresos Hospitalarios") %>%
+  colformat_double(j = c("Lin's CCC (Var. Enriquecida)", "IC 95% Inf (Var. Enr.)", "IC 95% Sup (Var. Enr.)",
+                         "Lin's CCC (Egresos)", "IC 95% Inf (Egresos)", "IC 95% Sup (Egresos)"), 
+                   digits = 4) %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(j = 2:9, align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  bold(j = c("Lin's CCC (Var. Enriquecida)", "Lin's CCC (Egresos)")) %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  add_footer_lines(c(
+    "Variable Enriquecida: Integra RSH, CONADI y autodeclaración en egresos",
+    "Egresos Hospitalarios: Solo autodeclaración en egresos (PUEBLO_ORIGINARIO_BIN)"
+  ))
+
+# Aplicar colores a Lin's CCC (Var. Enriquecida)
+for(i in 1:nrow(resultados_combinados)) {
+  valor_enr <- resultados_combinados$`Lin's CCC (Var. Enriquecida)`[i]
+  if (!is.na(valor_enr)) {
+    color_texto <- dplyr::case_when(
+      valor_enr > 0.80 ~ "#198754",
+      valor_enr > 0.61 ~ "#0d6efd",
+      valor_enr > 0.41 ~ "#ffc107",
+      valor_enr > 0.21 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_comparativa <- tabla_comparativa %>%
+      flextable::color(i = i, j = "Lin's CCC (Var. Enriquecida)", color = color_texto)
+  }
+  
+  # Aplicar colores a Lin's CCC (Egresos)
+  valor_egr <- resultados_combinados$`Lin's CCC (Egresos)`[i]
+  if (!is.na(valor_egr)) {
+    color_texto <- dplyr::case_when(
+      valor_egr > 0.80 ~ "#198754",
+      valor_egr > 0.61 ~ "#0d6efd",
+      valor_egr > 0.41 ~ "#ffc107",
+      valor_egr > 0.21 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_comparativa <- tabla_comparativa %>%
+      flextable::color(i = i, j = "Lin's CCC (Egresos)", color = color_texto)
+  }
+}
+
+print(tabla_comparativa)
+guardar_tabla_html(tabla_comparativa, "concordancias/13_comparativa_fuentes.html")
+guardar_como_jpg(tabla_comparativa, "13_comparativa_fuentes")
 ```
 
 ### 4.9. Análisis de Lin's CCC temporal (2010-2022)
@@ -623,10 +981,10 @@ tabla_estadisticas <- tibble::tibble(
 
 print(tabla_estadisticas)
 guardar_tabla_html(tabla_estadisticas, "concordancias/03_ccc_temporal_estadisticas.html")
-guardar_como_jpg(tabla_estadisticas, "concordancias/03_ccc_temporal_estadisticas.jpg")
+guardar_como_jpg(tabla_estadisticas, "03_ccc_temporal_estadisticas")
 ```
 
-## 5. Resumen Final
+## 6. Resumen Final
 
 ```{r resumen}
 cat("\n═══════════════════════════════════════════════════\n")
@@ -641,7 +999,7 @@ for(i in 1:nrow(resultados_kappa)) {
               resultados_kappa$`Interpretación (Landis & Koch)`[i]))
 }
 
-cat("\nLIN'S CCC (concordancia continua):\n")
+cat("\nLIN'S CCC - CENSO VS VARIABLE ENRIQUECIDA:\n")
 for(i in 1:nrow(resultados_ccc)) {
   cat(sprintf("  • %s: %.4f (%s)\n", 
               resultados_ccc$Desagregacion[i],
@@ -649,7 +1007,16 @@ for(i in 1:nrow(resultados_ccc)) {
               resultados_ccc$Interpretacion[i]))
 }
 
+cat("\nLIN'S CCC - CENSO VS EGRESOS HOSPITALARIOS:\n")
+for(i in 1:nrow(resultados_ccc_egresos)) {
+  cat(sprintf("  • %s: %.4f (%s)\n", 
+              resultados_ccc_egresos$Desagregacion[i],
+              resultados_ccc_egresos$`Lin's CCC`[i],
+              resultados_ccc_egresos$Interpretacion[i]))
+}
+
 cat("\n✓ Resultados guardados en: resultados_tesis/concordancias/\n")
+cat("  \nCenso vs Variable Enriquecida:\n")
 cat("  - 01_kappa_desctools.html\n")
 cat("  - 02_ccc_resumen.html\n")
 cat("  - 03_ccc_temporal.html (CCC por año)\n")
@@ -657,8 +1024,12 @@ cat("  - 03_ccc_temporal_estadisticas.html (análisis estadístico)\n")
 cat("  - 04_ccc_region.html\n")
 cat("  - 05_ccc_sexo.html\n")
 cat("  - 06_ccc_edad.html\n")
-cat("  - 07_ccc_region_sexo.html\n")
-cat("  - 08_ccc_region_edad.html\n")
+cat("  \nCenso vs Egresos Hospitalarios:\n")
+cat("  - 09_ccc_resumen_egresos.html\n")
+cat("  - 10_ccc_region_egresos.html\n")
+cat("  - 11_ccc_sexo_egresos.html\n")
+cat("  - 12_ccc_edad_egresos.html\n")
+cat("  - 13_comparativa_fuentes.html (tabla comparativa)\n")
 cat("  - 09_ccc_sexo_edad.html\n")
 cat("  - 10_ccc_triple.html\n\n")
 
