@@ -500,7 +500,149 @@ guardar_multiformato(grafico_mensual_condup,
 cat("✓ Gráfico mensual CON DUPLICADOS generado y guardado\n")
 ```
 
-## 9. Estadísticas Descriptivas
+## 9. Análisis de Solapamiento entre Fuentes
+
+```{r analisis_solapamiento}
+cat("\n═══ ANÁLISIS DE SOLAPAMIENTO ENTRE FUENTES ═══\n\n")
+
+# Analizar cuántas personas pertenecen según cada combinación de fuentes
+solapamiento <- datos_preparados %>%
+  filter(PERTENENCIA2 == 1) %>%  # Solo los que pertenecen según Variable Enriquecida
+  mutate(
+    solo_rsh = (RSH == 1 & CONADI == 0 & PUEBLO_ORIGINARIO_BIN == 0),
+    solo_conadi = (RSH == 0 & CONADI == 1 & PUEBLO_ORIGINARIO_BIN == 0),
+    solo_egresos = (RSH == 0 & CONADI == 0 & PUEBLO_ORIGINARIO_BIN == 1),
+    rsh_conadi = (RSH == 1 & CONADI == 1 & PUEBLO_ORIGINARIO_BIN == 0),
+    rsh_egresos = (RSH == 1 & CONADI == 0 & PUEBLO_ORIGINARIO_BIN == 1),
+    conadi_egresos = (RSH == 0 & CONADI == 1 & PUEBLO_ORIGINARIO_BIN == 1),
+    tres_fuentes = (RSH == 1 & CONADI == 1 & PUEBLO_ORIGINARIO_BIN == 1)
+  ) %>%
+  summarise(
+    `Solo en RSH\n(Registro Social)` = sum(solo_rsh, na.rm = TRUE),
+    `Solo en CONADI\n(Certificado indígena)` = sum(solo_conadi, na.rm = TRUE),
+    `Solo en Egresos\n(Autodeclaración hospital)` = sum(solo_egresos, na.rm = TRUE),
+    `RSH + CONADI\n(sin egresos)` = sum(rsh_conadi, na.rm = TRUE),
+    `RSH + Egresos\n(sin CONADI)` = sum(rsh_egresos, na.rm = TRUE),
+    `CONADI + Egresos\n(sin RSH)` = sum(conadi_egresos, na.rm = TRUE),
+    `Tres fuentes\n(RSH + CONADI + Egresos)` = sum(tres_fuentes, na.rm = TRUE)
+  ) %>%
+  pivot_longer(everything(), names_to = "Combinación", values_to = "n") %>%
+  mutate(
+    porcentaje = (n / sum(n)) * 100,
+    porcentaje_acumulado = cumsum(porcentaje),
+    # Crear etiqueta corta para el eje X
+    etiqueta_corta = case_when(
+      grepl("Solo en RSH", Combinación) ~ "Solo RSH",
+      grepl("Solo en CONADI", Combinación) ~ "Solo CONADI",
+      grepl("Solo en Egresos", Combinación) ~ "Solo Egresos",
+      grepl("RSH \\+ CONADI", Combinación) ~ "RSH+CONADI",
+      grepl("RSH \\+ Egresos", Combinación) ~ "RSH+Egresos",
+      grepl("CONADI \\+ Egresos", Combinación) ~ "CONADI+Egresos",
+      grepl("Tres fuentes", Combinación) ~ "Tres fuentes",
+      TRUE ~ Combinación
+    ),
+    # Tipo de combinación para colores
+    tipo = case_when(
+      grepl("Solo", etiqueta_corta) ~ "Una fuente",
+      grepl("Tres", etiqueta_corta) ~ "Tres fuentes",
+      TRUE ~ "Dos fuentes"
+    )
+  )
+
+# Total de personas que pertenecen
+total_pertenecen <- sum(datos_preparados$PERTENENCIA2 == 1, na.rm = TRUE)
+
+# Calcular complementariedad
+solo_rsh_conadi <- sum(solapamiento$n[grepl("RSH|CONADI", solapamiento$etiqueta_corta) & 
+                                       !grepl("Egresos", solapamiento$etiqueta_corta)])
+pertenecen_sin_rsh_conadi <- solapamiento$n[solapamiento$etiqueta_corta == "Solo Egresos"]
+
+cat("RESUMEN DE SOLAPAMIENTO:\n")
+cat(sprintf("Total que pertenecen (Variable Enriquecida): %s\n\n", format(total_pertenecen, big.mark = ",")))
+
+cat("DISTRIBUCIÓN POR COMBINACIÓN DE FUENTES:\n")
+for(i in 1:nrow(solapamiento)) {
+  cat(sprintf("  • %-40s: %8s (%5.2f%%)\n", 
+              solapamiento$etiqueta_corta[i],
+              format(solapamiento$n[i], big.mark = ","),
+              solapamiento$porcentaje[i]))
+}
+
+cat("\n✓ COMPLEMENTARIEDAD DE LAS FUENTES:\n")
+cat(sprintf("  • Personas identificadas SOLO por Egresos hospitalarios: %s (%.2f%%)\n", 
+            format(pertenecen_sin_rsh_conadi, big.mark = ","),
+            (pertenecen_sin_rsh_conadi / total_pertenecen) * 100))
+cat("  → Estas personas se perderían si solo usáramos RSH y CONADI\n\n")
+
+# Crear gráfico mejorado con anotaciones
+graf_solapamiento <- ggplot(solapamiento, aes(x = reorder(etiqueta_corta, -n), y = n, fill = tipo)) +
+  geom_col(width = 0.7, color = "white", linewidth = 0.5) +
+  geom_text(aes(label = sprintf("%s\n%.1f%%", format(n, big.mark = ","), porcentaje)),
+            vjust = -0.3, size = 3.5, fontface = "bold") +
+  scale_fill_manual(
+    values = c(
+      "Una fuente" = "#E74C3C",      # Rojo - solo una fuente
+      "Dos fuentes" = "#F39C12",     # Naranja - dos fuentes
+      "Tres fuentes" = "#27AE60"     # Verde - tres fuentes (mejor cobertura)
+    ),
+    name = "Cobertura"
+  ) +
+  scale_y_continuous(
+    labels = function(x) format(x, big.mark = ","),
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  labs(
+    title = "¿Cuántas personas se identifican en cada combinación de fuentes?",
+    subtitle = paste0(
+      "De ", format(total_pertenecen, big.mark = ","), 
+      " personas que pertenecen a pueblos originarios, ",
+      format(pertenecen_sin_rsh_conadi, big.mark = ","),
+      " (", sprintf("%.1f%%", (pertenecen_sin_rsh_conadi / total_pertenecen) * 100),
+      ") SOLO aparecen en Egresos Hospitalarios"
+    ),
+    x = "Combinación de fuentes",
+    y = "Número de personas",
+    caption = paste0(
+      "Análisis sobre ", format(total_pertenecen, big.mark = ","), " pacientes únicos (sin duplicados por RUN)\n",
+      "RSH = Registro Social de Hogares | CONADI = Certificado indígena | Egresos = Autodeclaración hospitalaria\n",
+      "Conclusión: Las tres fuentes son complementarias y necesarias para capturar la población indígena completa"
+    )
+  ) +
+  annotate("text", x = 7, y = max(solapamiento$n) * 0.8, 
+           label = "⚠ Solo con RSH+CONADI\nse perdería esta población",
+           color = "#E74C3C", fontface = "bold", size = 3.5,
+           hjust = 0) +
+  geom_curve(
+    aes(x = 6.5, y = max(solapamiento$n) * 0.75, 
+        xend = which(solapamiento$etiqueta_corta == "Solo Egresos"), 
+        yend = solapamiento$n[solapamiento$etiqueta_corta == "Solo Egresos"] + 50000),
+    arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
+    color = "#E74C3C", curvature = -0.3, linewidth = 1
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    plot.subtitle = element_text(size = 11, color = "gray30", hjust = 0),
+    plot.caption = element_text(hjust = 0, size = 9, color = "gray40", lineheight = 1.3),
+    panel.grid.major.y = element_line(color = "gray90"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+print(graf_solapamiento)
+guardar_multiformato(graf_solapamiento, "solapamiento_fuentes", 14, 8, 300)
+
+cat("\n✓ Gráfico de solapamiento guardado\n")
+```
+
+## 10. Estadísticas Descriptivas
 
 ```{r estadisticas_descriptivas}
 cat("\n═══ ESTADÍSTICAS DESCRIPTIVAS ═══\n\n")
@@ -517,8 +659,7 @@ tabla_estadisticas <- tibble(
     `No Pertenece` = sum(datos_preparados[[Variable]] == 0, na.rm = TRUE),
     `No Reportado` = Total - Pertenece - `No Pertenece`,
     `% Pertenece` = (Pertenece / Total) * 100,
-    `% Completitud` = ((Pertenece + `No Pertenece`) / Total) * 100
-  ) %>%
+    ) %>%
   ungroup() %>%
   select(-Variable)
 
@@ -527,9 +668,9 @@ ft_estadisticas <- tabla_estadisticas %>%
   flextable::flextable() %>%
   flextable::set_caption(sprintf("Estadísticas descriptivas de pertenencia a pueblos originarios (n = %s pacientes únicos)", 
                       format(nrow(datos_preparados), big.mark = ","))) %>%
-  flextable::colformat_double(j = c("% Pertenece", "% Completitud"), digits = 2) %>%
+  flextable::colformat_double(j = "% Pertenece", digits = 2) %>%
   flextable::align(j = 1, align = "left", part = "all") %>%
-  flextable::align(j = 2:7, align = "center", part = "all") %>%
+  flextable::align(j = 2:5, align = "center", part = "all") %>%
   flextable::bold(part = "header") %>%
   flextable::bold(j = "Fuente") %>%
   flextable::autofit()
@@ -538,7 +679,7 @@ print(ft_estadisticas)
 
 # Guardar tabla
 guardar_tabla_html(ft_estadisticas, "tabla_estadisticas_pertenencia.html")
-guardar_como_jpg(ft_estadisticas, "tabla_estadisticas_pertenencia")
+guardar_tabla_png(ft_estadisticas, "tabla_estadisticas_pertenencia", zoom = 3)
 
 # Imprimir resumen en consola también
 cat("\nRESUMEN:\n")
@@ -552,10 +693,10 @@ for (i in 1:nrow(tabla_estadisticas)) {
               tabla_estadisticas$`% Pertenece`[i]))
 }
 
-cat("\n✓ Tabla de estadísticas guardada en HTML y JPG\n")
+cat("\n✓ Tabla de estadísticas guardada en HTML y PNG\n")
 ```
 
-## 7. Resumen
+## 11. Resumen
 
 ```{r resumen}
 cat("\n═══════════════════════════════════════════════════\n")
@@ -568,6 +709,7 @@ cat("✓ Gráficos generados:\n")
 cat("  • Tendencias individuales (4 fuentes)\n")
 cat("  • Tendencias completas con ambas categorías\n")
 cat("  • Comparación entre fuentes\n")
+cat("  • Análisis de solapamiento entre fuentes\n")
 cat("  • Serie temporal mensual consolidada 2010-2022\n\n")
 
 cat("✓ Funciones utilizadas:\n")

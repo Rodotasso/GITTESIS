@@ -71,9 +71,11 @@ crear_tabla_perfil <- function(datos,
     
     # Resaltar si se especifica umbral
     if (!is.null(resaltar_umbral) && !is.null(col_umbral)) {
+      # Crear expresión con valor del umbral
+      expr_filtro <- paste0(col_umbral, " > ", resaltar_umbral)
       tabla <- tabla %>%
         flextable::bg(
-          i = ~ get(col_umbral) > resaltar_umbral, 
+          i = as.formula(paste("~", expr_filtro)),
           bg = color_resaltado, 
           part = "body"
         )

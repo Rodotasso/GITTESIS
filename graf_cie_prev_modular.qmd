@@ -229,6 +229,27 @@ datos_cie10_tendencia_po <- datos_homologados %>%
   ungroup() %>%
   filter(PERTENENCIA2 == 1)
 
+# Calcular % esperado según Censo 2017 (prevalencia poblacional)
+pct_esperado <- (2185792 / (2185792 + 15175260)) * 100  # ~12.6%
+
+# Calcular % observado en Variable Enriquecida (PERSONAS ÚNICAS, sin duplicados por RUN)
+datos_unicos_run <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(RUN)) %>%
+  arrange(RUN, desc(AÑO)) %>%
+  distinct(RUN, .keep_all = TRUE)
+
+pct_variable_enriquecida <- datos_unicos_run %>%
+  summarise(
+    total = n(),
+    po = sum(PERTENENCIA2 == 1, na.rm = TRUE),
+    pct = (po / total) * 100
+  ) %>%
+  pull(pct)
+
+cat("- Prevalencia Censo 2017:", sprintf("%.2f%%", pct_esperado), "\n")
+cat("- Representación Variable Enriquecida (sin duplicados RUN):", sprintf("%.2f%%", pct_variable_enriquecida), "\n")
+cat("- N personas únicas:", format(nrow(datos_unicos_run), big.mark = ","), "\n")
+
 # Colores para los grupos (según imagen)
 colores_cie10 <- c(
   "#E74C3C",  # Rojo
@@ -244,10 +265,69 @@ colores_cie10 <- c(
 nombres_grupos <- sort(unique(datos_cie10_tendencia_po$Grupo_CIE10))
 colores_asignados <- setNames(colores_cie10[1:length(nombres_grupos)], nombres_grupos)
 
-# Gráfico de líneas
+# Gráfico de líneas CON LÍNEAS DE REFERENCIA
 graf_cie10_tendencia_po <- ggplot(datos_cie10_tendencia_po, 
                                    aes(x = AÑO, y = porcentaje, 
                                        color = Grupo_CIE10, group = Grupo_CIE10)) +
+  # Línea de referencia 1: Prevalencia esperada (Censo)
+  geom_hline(yintercept = pct_esperado, 
+             linetype = "dashed", 
+             color = "black", 
+             linewidth = 0.8,
+             alpha = 0.7) +
+  # Línea de referencia 2: Variable Enriquecida
+  geom_hline(yintercept = pct_variable_enriquecida, 
+             linetype = "solid", 
+             color = "#2C3E50", 
+             linewidth = 1,
+             alpha = 0.8) +
+  # Anotación Censo
+  annotate("text", 
+           x = "2016", 
+           y = pct_esperado - 1.2, 
+           label = sprintf("Censo 2017: %.1f%%", pct_esperado),
+           hjust = 0.5,
+           size = 3,
+           color = "black",
+           alpha = 0.8) +
+  # Anotación Variable Enriquecida
+  annotate("text", 
+           x = "2016", 
+           y = pct_variable_enriquecida + 1.2, 
+           label = sprintf("Variable Enriquecida: %.1f%%", pct_variable_enriquecida),
+           hjust = 0.5,
+           size = 3.5,
+           fontface = "bold",
+           color = "#2C3E50") +
+  # Zona de sobrerrepresentación
+  annotate("rect",
+           xmin = -Inf, xmax = Inf,
+           ymin = pct_variable_enriquecida, ymax = Inf,
+           fill = "red", alpha = 0.05) +
+  annotate("text", 
+           x = "2010", 
+           y = 32, 
+           label = "SOBRERREPRESENTACIÓN",
+           hjust = 0,
+           size = 3,
+           color = "red4",
+           alpha = 0.7,
+           fontface = "bold") +
+  # Zona de subrepresentación
+  annotate("rect",
+           xmin = -Inf, xmax = Inf,
+           ymin = -Inf, ymax = pct_variable_enriquecida,
+           fill = "blue", alpha = 0.03) +
+  annotate("text", 
+           x = "2022", 
+           y = 3, 
+           label = "SUBREPRESENTACIÓN",
+           hjust = 1,
+           size = 3,
+           color = "blue4",
+           alpha = 0.7,
+           fontface = "bold") +
+  # Líneas de datos
   geom_line(linewidth = 1.2, alpha = 0.9) +
   geom_point(size = 2, alpha = 0.8) +
   scale_color_manual(values = colores_asignados) +
@@ -256,15 +336,15 @@ graf_cie10_tendencia_po <- ggplot(datos_cie10_tendencia_po,
     breaks = seq(0, 35, by = 5)
   ) +
   labs(
-    title = "Evolución temporal de la representación de Pueblos Originarios en grupos CIE-10",
-    subtitle = "Porcentaje de personas pertenecientes a pueblos originarios dentro de cada grupo diagnóstico",
+    title = "Representación de Pueblos Originarios por grupo CIE-10 vs prevalencia esperada",
+    subtitle = "% de PO dentro de cada grupo diagnóstico comparado con Censo 2017 y Variable Enriquecida",
     x = "Año",
     y = "Porcentaje dentro de cada grupo CIE-10 (%)",
     color = "Grupo CIE-10",
     caption = paste0(
-      "Nota: El gráfico muestra la evolución temporal de los 7 grupos CIE-10 más frecuentes en personas pertenecientes a pueblos originarios.\n",
-      "Los datos provienen del mismo análisis comparativo con población general, pero se visualizan solo los correspondientes a pueblos originarios (n=2320176).\n",
-      "Para cada año, los porcentajes representan la proporción de cada grupo CIE-10 dentro del total de ese grupo para ese año."
+      "Nota: Línea negra punteada = prevalencia Censo 2017 (~12.6%). Línea gris sólida = representación en Variable Enriquecida.\n",
+      "ARRIBA de Variable Enriquecida = sobrerrepresentación (mayor riesgo). ABAJO = subrepresentación (menor riesgo o acceso).\n",
+      "Zona sombreada roja/azul indica sobre/subrepresentación. Datos: 7 grupos CIE-10 más frecuentes en PO."
     )
   ) +
   theme_minimal() +
@@ -285,7 +365,428 @@ print(graf_cie10_tendencia_po)
 guardar_multiformato(graf_cie10_tendencia_po, "cie10_evolucion_temporal_po", 14, 10, 300)
 ```
 
-### 4.2. Representación de Población General en cada Grupo CIE-10
+### 4.2. Evolución Temporal Destacando Sobre y Subrepresentación
+
+```{r cie10_evolucion_dinamica, fig.width=15, fig.height=11}
+cat("═══ EVOLUCIÓN TEMPORAL CON ÉNFASIS EN DISPARIDADES ═══\n")
+
+# DIAGNÓSTICO: Ver qué grupos CIE10 existen en los datos
+cat("\n--- DIAGNÓSTICO: Grupos CIE10 disponibles ---\n")
+grupos_disponibles <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(Grupo_CIE10)) %>%
+  count(Grupo_CIE10, sort = TRUE) %>%
+  head(15)
+print(grupos_disponibles)
+
+# Buscar los grupos de interés con coincidencia parcial
+cat("\n--- Buscando grupos de interés ---\n")
+todos_grupos <- unique(datos_homologados$Grupo_CIE10)
+todos_grupos <- todos_grupos[!is.na(todos_grupos)]
+
+embarazo <- todos_grupos[grepl("Embarazo|embarazo|parto|puerperio|XV", todos_grupos)]
+neoplasias <- todos_grupos[grepl("Neoplasia|neoplasia|tumor|II\\.", todos_grupos)]
+circulatorias <- todos_grupos[grepl("circulatorio|circulatoria|IX\\.", todos_grupos)]
+
+cat("Embarazo encontrado:", if(length(embarazo) > 0) embarazo[1] else "NINGUNO", "\n")
+cat("Neoplasias encontrado:", if(length(neoplasias) > 0) neoplasias[1] else "NINGUNO", "\n")
+cat("Circulatorias encontrado:", if(length(circulatorias) > 0) circulatorias[1] else "NINGUNO", "\n")
+
+# Usar los nombres exactos encontrados
+grupos_interes <- c()
+if(length(embarazo) > 0) grupos_interes <- c(grupos_interes, embarazo[1])
+if(length(neoplasias) > 0) grupos_interes <- c(grupos_interes, neoplasias[1])
+if(length(circulatorias) > 0) grupos_interes <- c(grupos_interes, circulatorias[1])
+
+cat("\nGrupos seleccionados:", paste(grupos_interes, collapse = ", "), "\n\n")
+
+# PASO 1: Calcular la tendencia temporal de PERTENENCIA2 (línea de referencia dinámica)
+cat("--- Calculando tendencia de PERTENENCIA2 por año ---\n")
+tendencia_pertenencia2 <- datos_homologados %>%
+  filter(AÑO != "No reportado") %>%
+  group_by(AÑO) %>%
+  summarise(
+    total = n(),
+    po = sum(PERTENENCIA2 == 1, na.rm = TRUE),
+    pct_po = (po / total) * 100,
+    .groups = "drop"
+  )
+
+print(tendencia_pertenencia2)
+
+# PASO 2: Calcular % PO en cada grupo CIE-10 por año (TODOS los grupos primero)
+datos_todos_grupos <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(Grupo_CIE10)) %>%
+  group_by(AÑO, Grupo_CIE10, PERTENENCIA2) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(AÑO, Grupo_CIE10) %>%
+  mutate(
+    total_grupo = sum(n),
+    porcentaje = (n / total_grupo) * 100
+  ) %>%
+  ungroup() %>%
+  filter(PERTENENCIA2 == 1)
+
+# PASO 3: Identificar grupos con sobre o subrepresentación clara
+cat("\n--- Identificando grupos con sobre/subrepresentación ---\n")
+
+# Calcular diferencia promedio vs tendencia de PERTENENCIA2
+diferencias_grupos <- datos_todos_grupos %>%
+  left_join(tendencia_pertenencia2 %>% select(AÑO, pct_po), by = "AÑO") %>%
+  mutate(diferencia = porcentaje - pct_po) %>%
+  group_by(Grupo_CIE10) %>%
+  summarise(
+    diferencia_promedio = mean(diferencia),
+    diferencia_absoluta = mean(abs(diferencia)),
+    pct_promedio = mean(porcentaje),
+    n_años = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(diferencia_promedio))  # Ordenar por diferencia (no absoluta)
+
+cat("\n=== TOP 15 GRUPOS MÁS SOBRERREPRESENTADOS ===\n")
+print(diferencias_grupos %>% 
+        head(15) %>% 
+        select(Grupo_CIE10, diferencia_promedio, pct_promedio))
+
+cat("\n=== TOP 15 GRUPOS MÁS SUBREPRESENTADOS ===\n")
+print(diferencias_grupos %>% 
+        tail(15) %>% 
+        arrange(diferencia_promedio) %>%
+        select(Grupo_CIE10, diferencia_promedio, pct_promedio))
+
+# Buscar específicamente los grupos de interés
+cat("\n=== BÚSQUEDA ESPECÍFICA ===\n")
+grupos_buscar <- c("Embarazo", "embarazo", "parto", "Neoplasia", "neoplasia", "circulatorio", "circulatoria")
+for(patron in grupos_buscar) {
+  encontrado <- diferencias_grupos %>%
+    filter(grepl(patron, Grupo_CIE10, ignore.case = TRUE))
+  if(nrow(encontrado) > 0) {
+    cat(sprintf("\n'%s' encontrado:\n", patron))
+    print(encontrado %>% select(Grupo_CIE10, diferencia_promedio, pct_promedio))
+  }
+}
+
+# Filtrar: UMBRAL REDUCIDO a 1.5pp o incluir top sobrerrepresentados y subrepresentados
+umbral <- 1.5  # Reducido de 3pp a 1.5pp
+
+grupos_relevantes <- diferencias_grupos %>%
+  filter(abs(diferencia_promedio) >= umbral) %>%
+  pull(Grupo_CIE10)
+
+# Asegurar que embarazo, neoplasias y circulatorias estén incluidos si existen
+grupos_forzar <- diferencias_grupos %>%
+  filter(grepl("Embarazo|embarazo|parto|Neoplasia|neoplasia|circulatorio|circulatoria", Grupo_CIE10, ignore.case = TRUE)) %>%
+  pull(Grupo_CIE10)
+
+grupos_relevantes <- unique(c(grupos_relevantes, grupos_forzar))
+
+cat(sprintf("\n✓ Grupos seleccionados (|dif| >= %.1fpp + grupos clave): %d\n", umbral, length(grupos_relevantes)))
+cat("Grupos incluidos:\n")
+print(diferencias_grupos %>% 
+        filter(Grupo_CIE10 %in% grupos_relevantes) %>% 
+        select(Grupo_CIE10, diferencia_promedio) %>%
+        arrange(desc(diferencia_promedio)))
+
+# PASO 4: Filtrar datos para el gráfico
+datos_evolucion_disparidades <- datos_todos_grupos %>%
+  filter(Grupo_CIE10 %in% grupos_relevantes)
+
+cat("\nGrupos seleccionados para graficar:", length(grupos_relevantes), "\n")
+cat("Filas en datos_evolucion_disparidades:", nrow(datos_evolucion_disparidades), "\n")
+cat("Rango de porcentajes:", range(datos_evolucion_disparidades$porcentaje), "\n")
+
+# Si no hay datos, mostrar mensaje y salir
+if(nrow(datos_evolucion_disparidades) == 0) {
+  cat("\n⚠ ERROR: No hay datos para los grupos seleccionados. Verifica los nombres.\n")
+  print("Chunk terminado sin gráfico")
+} else {
+  
+  # Categorizar grupos según tipo de representación
+  clasificacion_grupos <- diferencias_grupos %>%
+    filter(Grupo_CIE10 %in% grupos_relevantes) %>%
+    mutate(
+      tipo_representacion = case_when(
+        diferencia_promedio >= umbral ~ "Sobrerrepresentación",
+        diferencia_promedio <= -umbral ~ "Subrepresentación",
+        TRUE ~ "Límite"
+      )
+    ) %>%
+    select(Grupo_CIE10, tipo_representacion, diferencia_promedio)
+  
+  datos_evolucion_disparidades <- datos_evolucion_disparidades %>%
+    left_join(clasificacion_grupos, by = "Grupo_CIE10")
+  
+  # Crear paleta de colores: rojos para sobrerrepresentación, azules/verdes para subrepresentación
+  grupos_sobre <- clasificacion_grupos %>% 
+    filter(tipo_representacion == "Sobrerrepresentación") %>% 
+    arrange(desc(diferencia_promedio)) %>%
+    pull(Grupo_CIE10)
+    
+  grupos_sub <- clasificacion_grupos %>% 
+    filter(tipo_representacion == "Subrepresentación") %>% 
+    arrange(diferencia_promedio) %>%
+    pull(Grupo_CIE10)
+    
+  grupos_limite <- clasificacion_grupos %>% 
+    filter(tipo_representacion == "Límite") %>% 
+    pull(Grupo_CIE10)
+  
+  colores_disparidad <- c()
+  
+  # Asignar rojos a sobrerrepresentados (del más intenso al más claro según magnitud)
+  if(length(grupos_sobre) > 0) {
+    paleta_rojos <- colorRampPalette(c("#B71C1C", "#E74C3C", "#FF6B6B"))(max(3, length(grupos_sobre)))
+    colores_disparidad <- c(colores_disparidad, setNames(paleta_rojos[1:length(grupos_sobre)], grupos_sobre))
+  }
+  
+  # Asignar azules/verdes a subrepresentados (del más intenso al más claro)
+  if(length(grupos_sub) > 0) {
+    paleta_frios <- colorRampPalette(c("#0D47A1", "#1976D2", "#42A5F5", "#26A69A"))(max(4, length(grupos_sub)))
+    colores_disparidad <- c(colores_disparidad, setNames(paleta_frios[1:length(grupos_sub)], grupos_sub))
+  }
+  
+  # Asignar gris a grupos límite
+  if(length(grupos_limite) > 0) {
+    colores_disparidad <- c(colores_disparidad, setNames(rep("#757575", length(grupos_limite)), grupos_limite))
+  }
+  
+  # Tamaños de línea según magnitud de la diferencia
+  tamanios_linea <- clasificacion_grupos %>%
+    mutate(
+      tamanio = case_when(
+        abs(diferencia_promedio) >= 8 ~ 2.2,
+        abs(diferencia_promedio) >= 5 ~ 1.8,
+        abs(diferencia_promedio) >= 3 ~ 1.5,
+        TRUE ~ 1.2
+      )
+    ) %>%
+    {setNames(.$tamanio, .$Grupo_CIE10)}
+  
+  # Calcular límite superior del eje Y
+  max_porcentaje <- max(datos_evolucion_disparidades$porcentaje, na.rm = TRUE)
+  limite_y <- max(40, ceiling(max_porcentaje / 5) * 5 + 5)
+  
+  cat("\nCreando gráfico...\n")
+  cat("Límite Y:", limite_y, "\n")
+  cat("Max porcentaje:", max_porcentaje, "\n")
+  
+  # Gráfico dinámico con énfasis visual
+  graf_evolucion_disparidades <- ggplot(datos_evolucion_disparidades, 
+                                         aes(x = AÑO, y = porcentaje, 
+                                             color = Grupo_CIE10, 
+                                             group = Grupo_CIE10,
+                                             size = Grupo_CIE10)) +
+    # FONDO: Franja de referencia Variable Enriquecida estática
+    annotate(
+      "rect",
+      xmin = -Inf, xmax = Inf,
+      ymin = pct_variable_enriquecida - 0.5,
+      ymax = pct_variable_enriquecida + 0.5,
+      fill = "#95A5A6",
+      alpha = 0.15
+    ) +
+    
+    # Línea de referencia estática (Variable Enriquecida promedio general)
+    geom_hline(
+      yintercept = pct_variable_enriquecida, 
+      linetype = "dotted", 
+      color = "#95A5A6", 
+      linewidth = 0.8,
+      alpha = 0.7
+    ) +
+    
+    # LÍNEA PRINCIPAL: Tendencia temporal de PERTENENCIA2 (año a año)
+    geom_line(
+      data = tendencia_pertenencia2,
+      aes(x = AÑO, y = pct_po, group = 1),
+      color = "#2C3E50",
+      linewidth = 1.8,
+      linetype = "solid",
+      alpha = 0.9,
+      inherit.aes = FALSE
+    ) +
+    geom_point(
+      data = tendencia_pertenencia2,
+      aes(x = AÑO, y = pct_po),
+      color = "#2C3E50",
+      size = 3,
+      alpha = 0.9,
+      inherit.aes = FALSE
+    ) +
+    
+    # Zona de sobrerrepresentación (arriba de tendencia PERTENENCIA2)
+    # Usar el promedio de la tendencia como referencia visual
+    annotate(
+      "rect",
+      xmin = -Inf, xmax = Inf,
+      ymin = mean(tendencia_pertenencia2$pct_po), ymax = Inf,
+      fill = "#E74C3C", alpha = 0.06
+    ) +
+    
+    # Zona de subrepresentación (abajo de tendencia PERTENENCIA2)
+    annotate(
+      "rect",
+      xmin = -Inf, xmax = Inf,
+      ymin = -Inf, ymax = mean(tendencia_pertenencia2$pct_po),
+      fill = "#3498DB", alpha = 0.04
+    ) +
+    
+    # Etiquetas de zonas
+    annotate(
+      "text", 
+      x = 2, 
+      y = limite_y * 0.92, 
+      label = "ZONA DE\nSOBRERREPRESENTACIÓN",
+      hjust = 0,
+      size = 4,
+      color = "#C62828",
+      alpha = 0.8,
+      fontface = "bold",
+      lineheight = 0.9
+    ) +
+    annotate(
+      "text", 
+      x = length(unique(datos_evolucion_disparidades$AÑO)) - 1, 
+      y = mean(tendencia_pertenencia2$pct_po) * 0.4, 
+      label = "ZONA DE\nSUBREPRESENTACIÓN",
+      hjust = 1,
+      size = 4,
+      color = "#1565C0",
+      alpha = 0.8,
+      fontface = "bold",
+      lineheight = 0.9
+    ) +
+    
+    # Anotación de línea de tendencia PERTENENCIA2
+    annotate(
+      "text", 
+      x = length(unique(tendencia_pertenencia2$AÑO)) / 2, 
+      y = max(tendencia_pertenencia2$pct_po) + 1.5, 
+      label = "Tendencia Var_Enriquecida\n(Variable Enriquecida año a año)",
+      hjust = 0.5,
+      size = 3.5,
+      fontface = "bold",
+      color = "#2C3E50",
+      lineheight = 0.9
+    ) +
+    
+    # Líneas de evolución temporal (DATOS PRINCIPALES)
+    geom_line(alpha = 0.9) +
+    geom_point(size = 3, alpha = 0.9) +
+    
+    # Etiquetas finales en el extremo derecho
+    geom_text(
+      data = datos_evolucion_disparidades %>% 
+        filter(AÑO == max(AÑO)),
+      aes(
+        label = sprintf("%.1f%%", porcentaje),
+        x = AÑO,
+        y = porcentaje
+      ),
+      hjust = -0.3,
+      size = 3.5,
+      fontface = "bold",
+      show.legend = FALSE
+    ) +
+    
+    # Escalas
+    scale_color_manual(
+      values = colores_disparidad,
+      name = NULL,
+      labels = function(x) str_wrap(x, width = 35)
+    ) +
+    scale_size_manual(
+      values = tamanios_linea,
+      guide = "none"
+    ) +
+    scale_y_continuous(
+      labels = function(x) paste0(x, "%"),
+      breaks = seq(0, limite_y, by = 5),
+      limits = c(0, limite_y),
+      expand = c(0.02, 0)
+    ) +
+    scale_x_discrete(expand = expansion(add = c(0.5, 1.5))) +
+    
+    # Etiquetas
+    labs(
+      title = "Evolución temporal: Grupos CIE-10 con sobre/subrepresentación de Pueblos Originarios",
+      subtitle = paste0(
+        "Comparación con tendencia anual de Variable Enriquecida. ",
+        "Grupos con diferencia ≥ ", sprintf("%.1f", umbral), " puntos porcentuales + grupos clave"
+      ),
+      x = "Año",
+      y = "% de Pueblos Originarios dentro de cada grupo CIE-10",
+      caption = paste0(
+        "Nota: La línea GRIS OSCURO GRUESA muestra la evolución del % de PO en TODOS los egresos (tendencia PERTENENCIA2).\n",
+        "Las LÍNEAS DE COLORES muestran el % de PO dentro de cada grupo CIE-10 específico.\n",
+        "ROJOS = Sobrerrepresentación (arriba de tendencia). AZULES/VERDES = Subrepresentación (abajo de tendencia).\n",
+        "Umbral: ≥", sprintf("%.1f", umbral), "pp. Datos: egresos 2010-2023. N grupos: ", length(grupos_relevantes), " | ",
+        "Variable Enriquecida promedio: ", sprintf("%.1f%%", pct_variable_enriquecida)
+      )
+    ) +
+    
+    # Tema
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",
+      legend.text = element_text(size = 10),
+      legend.box = "vertical",
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 11),
+      axis.text.y = element_text(size = 11),
+      axis.title = element_text(size = 12, face = "bold"),
+      plot.title = element_text(size = 14, face = "bold", margin = margin(b = 5)),
+      plot.subtitle = element_text(size = 11, margin = margin(b = 15)),
+      plot.caption = element_text(
+        hjust = 0, 
+        size = 8.5, 
+        color = "gray40", 
+        lineheight = 1.3,
+        margin = margin(t = 10)
+      ),
+      plot.margin = margin(15, 20, 15, 15)
+    ) +
+    guides(
+      color = guide_legend(
+        nrow = 3,
+        override.aes = list(size = 3, linewidth = 1.5)
+      )
+    )
+  
+  print(graf_evolucion_disparidades)
+  guardar_multiformato(graf_evolucion_disparidades, "cie10_evolucion_disparidades_dinamica", 15, 11, 300)
+  
+  # Resumen cuantitativo
+  cat("\n═══ RESUMEN DE DISPARIDADES ═══\n")
+  resumen_disparidades <- datos_evolucion_disparidades %>%
+    group_by(Grupo_CIE10, tipo_representacion) %>%
+    summarise(
+      pct_promedio = mean(porcentaje),
+      pct_min = min(porcentaje),
+      pct_max = max(porcentaje),
+      diferencia_vs_enriquecida = pct_promedio - pct_variable_enriquecida,
+      .groups = "drop"
+    ) %>%
+    arrange(desc(abs(diferencia_vs_enriquecida)))
+  
+  for(i in 1:nrow(resumen_disparidades)) {
+    cat(sprintf(
+      "\n%s (%s):\n  - Promedio: %.1f%% | Rango: [%.1f%%, %.1f%%]\n  - Diferencia vs Variable Enriquecida: %+.1f pp\n",
+      resumen_disparidades$Grupo_CIE10[i],
+      resumen_disparidades$tipo_representacion[i],
+      resumen_disparidades$pct_promedio[i],
+      resumen_disparidades$pct_min[i],
+      resumen_disparidades$pct_max[i],
+      resumen_disparidades$diferencia_vs_enriquecida[i]
+    ))
+  }
+  
+  cat("\n✓ Gráfico guardado en: resultados_tesis/cie10_evolucion_disparidades_dinamica.*\n")
+}
+```
+
+### 4.3. Representación de Población General en cada Grupo CIE-10
 
 ```{r cie10_tendencia_pg}
 cat("═══ EVOLUCIÓN TEMPORAL CIE-10 - POBLACIÓN GENERAL ═══\n")
@@ -341,6 +842,232 @@ graf_cie10_tendencia_pg <- ggplot(datos_cie10_tendencia_pg,
 
 print(graf_cie10_tendencia_pg)
 guardar_multiformato(graf_cie10_tendencia_pg, "cie10_evolucion_temporal_pg", 14, 10, 300)
+```
+
+## 5. Distribución Interna de Hospitalizaciones por Capítulo CIE-10
+
+### 5.1. Cálculo de distribución interna (% dentro de cada población)
+
+```{r distribucion_interna_cie10}
+cat("═══ DISTRIBUCIÓN INTERNA DE HOSPITALIZACIONES POR CIE-10 ═══\n")
+
+# Calcular distribución interna para ambas poblaciones
+distribucion_interna <- datos_homologados %>%
+  filter(AÑO != "No reportado", !is.na(Grupo_CIE10)) %>%
+  group_by(PERTENENCIA2, Grupo_CIE10) %>%
+  summarise(n_casos = n(), .groups = "drop") %>%
+  group_by(PERTENENCIA2) %>%
+  mutate(
+    total_poblacion = sum(n_casos),
+    porcentaje = (n_casos / total_poblacion) * 100
+  ) %>%
+  ungroup() %>%
+  mutate(
+    poblacion = factor(
+      PERTENENCIA2,
+      levels = c(1, 0),
+      labels = c("Pueblos Originarios", "Población General")
+    )
+  )
+
+# Calcular diferencia (PO - PG) para ordenar
+diferencias <- distribucion_interna %>%
+  select(Grupo_CIE10, poblacion, porcentaje) %>%
+  pivot_wider(names_from = poblacion, values_from = porcentaje) %>%
+  mutate(diferencia = `Pueblos Originarios` - `Población General`) %>%
+  arrange(desc(abs(diferencia)))
+
+# Top 15 capítulos con mayor diferencia absoluta
+top_capitulos <- head(diferencias, 15)$Grupo_CIE10
+
+# Filtrar datos para el gráfico
+datos_grafico <- distribucion_interna %>%
+  filter(Grupo_CIE10 %in% top_capitulos) %>%
+  left_join(
+    diferencias %>% select(Grupo_CIE10, diferencia),
+    by = "Grupo_CIE10"
+  ) %>%
+  mutate(
+    Grupo_CIE10 = factor(Grupo_CIE10, levels = diferencias$Grupo_CIE10)
+  )
+
+cat("- Total capítulos CIE-10 analizados:", n_distinct(distribucion_interna$Grupo_CIE10), "\n")
+cat("- Capítulos seleccionados para gráfico (top 15 diferencias):", length(top_capitulos), "\n\n")
+
+# Mostrar top 5 diferencias
+cat("TOP 5 CAPÍTULOS CON MAYOR DIFERENCIA (PO - PG):\n")
+top5 <- head(diferencias, 5)
+for(i in 1:5) {
+  cat(sprintf("  %d. %s: PO=%.1f%%, PG=%.1f%%, Dif=%+.1f%%\n",
+              i,
+              top5$Grupo_CIE10[i],
+              top5$`Pueblos Originarios`[i],
+              top5$`Población General`[i],
+              top5$diferencia[i]))
+}
+```
+
+### 5.2. Gráfico de barras agrupadas (comparación lado a lado)
+
+```{r grafico_distribucion_agrupada, fig.width=14, fig.height=10}
+cat("\n═══ GRÁFICO DE DISTRIBUCIÓN INTERNA - BARRAS AGRUPADAS ═══\n")
+
+# Colores para destacar diferencias
+colores_poblacion <- c(
+  "Pueblos Originarios" = "#C62828",  # Rojo
+  "Población General" = "#1565C0"      # Azul
+)
+
+graf_distribucion_agrupada <- ggplot(
+  datos_grafico,
+  aes(x = reorder(Grupo_CIE10, diferencia), y = porcentaje, fill = poblacion)
+) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.75, alpha = 0.9) +
+  geom_text(
+    aes(
+      label = sprintf("%.1f%%", porcentaje),
+      color = poblacion
+    ),
+    position = position_dodge(width = 0.8),
+    hjust = -0.15,
+    size = 3.5,
+    fontface = "bold",
+    show.legend = FALSE
+  ) +
+  scale_fill_manual(values = colores_poblacion) +
+  scale_color_manual(values = colores_poblacion) +
+  scale_y_continuous(
+    labels = function(x) paste0(x, "%"),
+    limits = c(0, max(datos_grafico$porcentaje) * 1.2),
+    expand = c(0, 0)
+  ) +
+  coord_flip() +
+  labs(
+    title = "Distribución interna de hospitalizaciones por capítulo CIE-10",
+    subtitle = "¿Qué porcentaje de las hospitalizaciones de cada población corresponde a cada capítulo?",
+    x = NULL,
+    y = "Porcentaje del total de hospitalizaciones de cada población (%)",
+    fill = "Población",
+    caption = paste0(
+      "Nota: Gráfico muestra los 15 capítulos CIE-10 con mayor diferencia absoluta entre poblaciones.\n",
+      "Pueblos Originarios: n=", format(filter(distribucion_interna, PERTENENCIA2==1)$total_poblacion[1], big.mark=","), " | ",
+      "Población General: n=", format(filter(distribucion_interna, PERTENENCIA2==0)$total_poblacion[1], big.mark=","), "\n",
+      "Ordenado por diferencia (PO - PG) en valor absoluto. Capítulos ordenados de mayor a menor diferencia."
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10, hjust = 1),
+    axis.text.x = element_text(size = 10),
+    axis.title.x = element_text(size = 11, face = "bold", margin = margin(t = 10)),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11, margin = margin(b = 10)),
+    plot.caption = element_text(hjust = 0, size = 8, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 11),
+    legend.title = element_text(size = 11, face = "bold")
+  )
+
+print(graf_distribucion_agrupada)
+guardar_multiformato(graf_distribucion_agrupada, "distribucion_interna_cie10_agrupada", 14, 10, 300)
+
+cat("- Gráfico guardado en: resultados_tesis/distribucion_interna_cie10_agrupada.*\n")
+```
+
+### 5.3. Gráfico de barras apiladas 100% (composición total)
+
+```{r grafico_distribucion_apilada, fig.width=12, fig.height=10}
+cat("\n═══ GRÁFICO DE DISTRIBUCIÓN INTERNA - BARRAS APILADAS 100% ═══\n")
+
+# Preparar datos para apilado (todos los capítulos, no solo top 15)
+datos_apilado <- distribucion_interna %>%
+  mutate(
+    # Crear categoría "Otros" para capítulos pequeños (<2%)
+    Grupo_mostrar = if_else(porcentaje >= 2, Grupo_CIE10, "Otros (< 2%)")
+  ) %>%
+  group_by(poblacion, Grupo_mostrar) %>%
+  summarise(
+    porcentaje_agrupado = sum(porcentaje),
+    .groups = "drop"
+  ) %>%
+  # Crear label solo si >=4%, vacío si no (para que position_stack funcione)
+  mutate(
+    label_texto = if_else(porcentaje_agrupado >= 4, 
+                          sprintf("%.1f%%", porcentaje_agrupado), 
+                          "")
+  ) %>%
+  # Ordenar por tamaño promedio para consistencia visual
+  group_by(Grupo_mostrar) %>%
+  mutate(prom_orden = mean(porcentaje_agrupado)) %>%
+  ungroup() %>%
+  arrange(poblacion, desc(prom_orden))
+
+# Colores para capítulos (destacar embarazo)
+grupos_unicos <- datos_apilado %>% 
+  arrange(desc(prom_orden)) %>% 
+  pull(Grupo_mostrar) %>% 
+  unique()
+
+n_grupos <- length(grupos_unicos)
+colores_capitulos <- colorRampPalette(c("#E74C3C", "#3498DB", "#27AE60", "#F39C12", "#9B59B6", "#1ABC9C"))(n_grupos)
+names(colores_capitulos) <- grupos_unicos
+
+# Resaltar embarazo en color distintivo
+if("XV. Embarazo, parto y puerperio" %in% grupos_unicos) {
+  colores_capitulos["XV. Embarazo, parto y puerperio"] <- "#FF1744"
+}
+
+graf_distribucion_apilada <- ggplot(
+  datos_apilado,
+  aes(x = poblacion, y = porcentaje_agrupado, 
+      fill = factor(Grupo_mostrar, levels = grupos_unicos))
+) +
+  geom_col(width = 0.6, color = "white", linewidth = 0.3) +
+  geom_text(
+    aes(label = label_texto),
+    position = position_stack(vjust = 0.5),
+    size = 3,
+    fontface = "bold",
+    color = "white"
+  ) +
+  scale_fill_manual(values = colores_capitulos, name = "Capítulo CIE-10") +
+  scale_y_continuous(
+    labels = function(x) paste0(x, "%"),
+    expand = c(0, 0)
+  ) +
+  labs(
+    title = "Composición de hospitalizaciones por capítulo CIE-10",
+    subtitle = "Distribución del 100% de las hospitalizaciones de cada población",
+    x = NULL,
+    y = "Porcentaje (%)",
+    fill = "Capítulo CIE-10",
+    caption = paste0(
+      "Nota: Solo se etiquetan capítulos que representan ≥3% del total.\n",
+      "Capítulos con <2% están agrupados en 'Otros'. El color rojo brillante destaca 'Embarazo, parto y puerperio'."
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    axis.title.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11, margin = margin(b = 15)),
+    plot.caption = element_text(hjust = 0, size = 8, color = "gray40", lineheight = 1.2),
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.key.size = unit(0.4, "cm")
+  ) +
+  guides(fill = guide_legend(ncol = 1))
+
+print(graf_distribucion_apilada)
+guardar_multiformato(graf_distribucion_apilada, "distribucion_interna_cie10_apilada", 12, 10, 300)
+
+cat("- Gráfico guardado en: resultados_tesis/distribucion_interna_cie10_apilada.*\n")
 ```
 
 ---
