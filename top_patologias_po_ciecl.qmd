@@ -1,0 +1,690 @@
+---
+title: "Top Patologías Prevalentes en Pueblos Originarios"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Análisis de las 5 patologías más y menos prevalentes en PO vs PG usando ciecl"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+        toc-title: "Contenido"
+---
+
+# Top Patologías en Pueblos Originarios - Análisis con `ciecl`
+
+Este análisis identifica las 5 patologías **más prevalentes** y las 5 **menos prevalentes** en Pueblos Originarios, comparándolas con la Población General usando únicamente el paquete `ciecl` para clasificación CIE-10.
+
+::: {.callout-note}
+## Sobre el análisis urbano/rural
+
+**Los datos NO contienen información de zona urbana/rural**, por lo que este análisis se enfoca únicamente en la comparación entre Pueblos Originarios (PO) y Población General (PG) a nivel regional (Región Metropolitana).
+
+Para análisis urbano/rural se requeriría:
+- Variable de zona en los datos de egresos hospitalarios
+- Denominadores poblacionales del Censo 2017 desagregados por zona
+:::
+
+## 1. Configuración
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(scales)
+  library(censo2017)
+  library(ciecl)  # Paquete CIE-10 Chile
+})
+
+# Cargar funciones modulares
+source("R/cargar_funciones.R")
+load("BBDD_homologados.RData")
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  TOP PATOLOGÍAS PUEBLOS ORIGINARIOS - CIECL\n")
+cat("═══════════════════════════════════════════════════\n\n")
+cat("✓ Base de datos:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+cat("✓ Paquete ciecl:", as.character(packageVersion("ciecl")), "\n")
+cat("✓ Sistema modular: Funciones de perfiles cargadas\n\n")
+```
+
+## 2. Preparación de Datos
+
+### 2.1. Denominadores poblacionales
+
+```{r denominadores}
+cat("═══ DENOMINADORES POBLACIONALES (CENSO 2017) ═══\n")
+
+# Usar función modular para obtener población
+poblacion_censo <- obtener_poblacion_censo(verbose = TRUE)
+
+# Extraer valores
+pob_po <- poblacion_censo$pob_po
+pob_pg <- poblacion_censo$pob_pg
+
+# Período de estudio
+anos_estudio <- 13  # 2010-2022
+persona_anos_po <- pob_po * anos_estudio
+persona_anos_pg <- pob_pg * anos_estudio
+
+cat("\nDENOMINADORES PARA TASAS:\n")
+cat("  • Persona-años PO:", format(persona_anos_po, big.mark = ","), "\n")
+cat("  • Persona-años PG:", format(persona_anos_pg, big.mark = ","), "\n\n")
+```
+
+### 2.2. Procesar diagnósticos con `ciecl`
+
+```{r preparar_diagnosticos}
+cat("═══ PROCESANDO DIAGNÓSTICOS CON CIECL ═══\n\n")
+
+# Filtrar datos válidos
+datos_filtrados <- datos_homologados %>%
+  filter(!is.na(DIAG1), AÑO != "No reportado")
+
+cat("Registros válidos:", format(nrow(datos_filtrados), big.mark = ","), "\n\n")
+
+# Extraer códigos únicos para búsqueda
+codigos_unicos <- unique(datos_filtrados$DIAG1)
+cat("Códigos CIE-10 únicos:", format(length(codigos_unicos), big.mark = ","), "\n")
+cat("Método: cie_lookup() del paquete ciecl\n\n")
+
+# Buscar descripciones con ciecl (EXACTAMENTE como en OPTIMIZADO)
+inicio <- Sys.time()
+
+cat("Ejecutando cie_lookup()...\n")
+suppressMessages({
+  descripciones_cie <- cie_lookup(
+    codigo = codigos_unicos, 
+    normalizar = FALSE,
+    descripcion_completa = TRUE
+  )
+})
+
+cat("✓ Búsqueda completada:", nrow(descripciones_cie), "códigos encontrados\n")
+cat("  Columnas:", paste(names(descripciones_cie), collapse = ", "), "\n\n")
+
+# Unir con datos originales (EXACTAMENTE como en OPTIMIZADO)
+cat("Uniendo con datos originales...\n")
+datos_diag_preparados <- datos_filtrados %>%
+  left_join(
+    descripciones_cie %>% select(codigo, DIAG_COMPLETO = descripcion_completa),
+    by = c("DIAG1" = "codigo")
+  ) %>%
+  mutate(
+    # Si no se encontró descripción, usar solo el código original
+    DIAG_COMPLETO = if_else(is.na(DIAG_COMPLETO), DIAG1, DIAG_COMPLETO)
+  )
+
+tiempo <- as.numeric(difftime(Sys.time(), inicio, units = "secs"))
+
+# Calcular totales de egresos
+total_egresos_po <- sum(datos_diag_preparados$PERTENENCIA2 == 1, na.rm = TRUE)
+total_egresos_pg <- sum(datos_diag_preparados$PERTENENCIA2 == 0, na.rm = TRUE)
+
+cat("\nTOTAL EGRESOS POR GRUPO:\n")
+cat("  • Pueblos Originarios:", format(total_egresos_po, big.mark = ","), "\n")
+cat("  • Población General:", format(total_egresos_pg, big.mark = ","), "\n\n")
+
+# Verificar cobertura
+n_con_descripcion <- sum(str_detect(datos_diag_preparados$DIAG_COMPLETO, " - "), na.rm = TRUE)
+pct_cobertura <- (n_con_descripcion / nrow(datos_diag_preparados)) * 100
+
+cat("COBERTURA DE DESCRIPCIONES:\n")
+cat("  • Registros con descripción CIE-10:", format(n_con_descripcion, big.mark = ","), "\n")
+cat("  • Tasa de cobertura:", sprintf("%.1f%%", pct_cobertura), "\n")
+cat("  • Tiempo:", sprintf("%.2f", tiempo), "segundos\n")
+cat("  • Rendimiento:", sprintf("%.0f", length(codigos_unicos)/tiempo), "códigos/seg\n\n")
+```
+
+## 3. Perfiles Diagnósticos Completos
+
+### 3.1. Top 20 diagnósticos en Pueblos Originarios
+
+```{r perfil_po_completo}
+cat("═══ PERFIL COMPLETO - PUEBLOS ORIGINARIOS ═══\n")
+
+# Calcular perfil usando función modular
+perfil_po <- calcular_perfil_diagnostico(
+  datos = datos_diag_preparados,
+  pertenencia = 1,
+  poblacion = pob_po,
+  total_egresos = total_egresos_po,
+  anos_estudio = anos_estudio,
+  top_n = 20,
+  min_casos = 1,
+  verbose = TRUE
+)
+
+cat("\n")
+```
+
+### 3.2. Top 20 diagnósticos en Población General
+
+```{r perfil_pg_completo}
+cat("═══ PERFIL COMPLETO - POBLACIÓN GENERAL ═══\n")
+
+# Calcular perfil usando función modular
+perfil_pg <- calcular_perfil_diagnostico(
+  datos = datos_diag_preparados,
+  pertenencia = 0,
+  poblacion = pob_pg,
+  total_egresos = total_egresos_pg,
+  anos_estudio = anos_estudio,
+  top_n = 20,
+  min_casos = 1,
+  verbose = TRUE
+)
+
+cat("\n")
+```
+
+## 4. Top 5 Patologías MÁS Prevalentes en PO
+
+### 4.1. Identificación con RR y diferencias de tasas
+
+```{r top5_mas_prevalentes}
+cat("═══ TOP 5 PATOLOGÍAS MÁS PREVALENTES EN PO ═══\n\n")
+
+# Usar función modular para comparar perfiles
+comparacion_completa <- comparar_perfiles_po_pg(
+  datos = datos_diag_preparados,
+  poblacion_po = pob_po,
+  poblacion_pg = pob_pg,
+  total_egresos_po = total_egresos_po,
+  total_egresos_pg = total_egresos_pg,
+  anos_estudio = anos_estudio,
+  min_casos_po = 100,  # Mínimo 100 casos para estabilidad
+  top_n = 100,  # Obtener top 100 para luego filtrar
+  ordenar_por = "rr",
+  verbose = FALSE
+)
+
+# Filtrar las 5 más sobrerrepresentadas (mayor RR)
+top5_mas_prevalentes <- comparacion_completa %>%
+  filter(rr_crudo >= 1.0) %>%  # Solo las que son más frecuentes en PO
+  arrange(desc(rr_crudo)) %>%
+  slice(1:5)
+
+cat("CRITERIO: Mayor Riesgo Relativo (RR) - PO vs PG\n")
+cat("Filtro: RR ≥ 1.0 (más frecuente en PO que en PG)\n\n")
+
+# Mostrar resultados
+for(i in 1:nrow(top5_mas_prevalentes)) {
+  cat(sprintf("%d. %s\n", i, top5_mas_prevalentes$DIAG_COMPLETO[i]))
+  cat(sprintf("   • Tasa PO: %.2f x1000 p-a | Tasa PG: %.2f x1000 p-a\n", 
+              top5_mas_prevalentes$tasa_anual_po[i],
+              top5_mas_prevalentes$tasa_anual_pg[i]))
+  cat(sprintf("   • RR: %.2f (IC: PO tiene %.0f%% más riesgo que PG)\n", 
+              top5_mas_prevalentes$rr_crudo[i],
+              (top5_mas_prevalentes$rr_crudo[i] - 1) * 100))
+  cat(sprintf("   • Diferencia de tasas: %.2f x1000 p-a\n", 
+              top5_mas_prevalentes$dif_tasa_anual[i]))
+  cat(sprintf("   • Casos PO: %s | Casos PG: %s\n\n",
+              format(top5_mas_prevalentes$n_po[i], big.mark = ","),
+              format(top5_mas_prevalentes$n_pg[i], big.mark = ",")))
+}
+```
+
+### 4.2. Tabla de las 5 más prevalentes
+
+```{r tabla_top5_mas}
+cat("═══ TABLA TOP 5 MÁS PREVALENTES ═══\n")
+
+# Crear tabla formateada con flextable
+tabla_top5_mas <- crear_tabla_perfil(
+  datos = top5_mas_prevalentes,
+  tipo = "comparacion",
+  titulo = "Top 5 Patologías MÁS Prevalentes en Pueblos Originarios (Mayor RR)",
+  tamano_fuente = 9
+)
+
+print(tabla_top5_mas)
+
+# Guardar en HTML y PNG
+dir_salida <- "resultados_tesis"  # Variable global para guardar_tabla_png
+guardar_tabla_html(tabla_top5_mas, "top_patologias_po/top5_mas_prevalentes_po.html")
+guardar_tabla_png(tabla_top5_mas, "top_patologias_po/top5_mas_prevalentes_po", zoom = 3, fondo = "white")
+
+cat("\n✓ Tabla guardada en HTML y PNG con fondo blanco\n")
+```
+
+### 4.3. Gráfico comparativo - Top 5 Más Prevalentes
+
+```{r grafico_top5_mas}
+cat("\n═══ GRÁFICO TOP 5 MÁS PREVALENTES ═══\n")
+
+# Preparar datos para gráfico
+datos_graf_mas <- top5_mas_prevalentes %>%
+  select(DIAG_COMPLETO, tasa_anual_po, tasa_anual_pg) %>%
+  pivot_longer(
+    cols = c(tasa_anual_po, tasa_anual_pg),
+    names_to = "grupo",
+    values_to = "tasa"
+  ) %>%
+  mutate(
+    grupo = if_else(grupo == "tasa_anual_po", "Pueblos Originarios", "Población General"),
+    # Truncar nombres largos
+    DIAG_COMPLETO = str_trunc(DIAG_COMPLETO, width = 60, ellipsis = "...")
+  )
+
+# Crear gráfico
+graf_top5_mas <- ggplot(datos_graf_mas, aes(x = reorder(DIAG_COMPLETO, tasa), y = tasa, fill = grupo)) +
+  geom_col(position = "dodge", width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("Pueblos Originarios" = "#C62828", "Población General" = "#1565C0")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "Top 5 Patologías MÁS Prevalentes en Pueblos Originarios",
+    subtitle = "Tasas anuales por 1000 persona-años (2010-2022) - Ordenadas por RR descendente",
+    x = NULL,
+    y = "Tasa anual (x1000 persona-años)",
+    fill = "Grupo poblacional"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13, hjust = 0),
+    plot.subtitle = element_text(size = 10, color = "gray30", hjust = 0),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 9)
+  )
+
+print(graf_top5_mas)
+
+# Guardar en JPG y PNG con fondo blanco
+guardar_multiformato(graf_top5_mas, "top_patologias_po/top5_mas_prevalentes_po", 10, 7, 300)
+ggsave("resultados_tesis/top_patologias_po/top5_mas_prevalentes_po.png", 
+       graf_top5_mas, width = 10, height = 7, dpi = 300, bg = "white")
+
+cat("✓ Gráfico guardado en JPG y PNG con fondo blanco\n")
+```
+
+## 5. Top 5 Patologías MENOS Prevalentes en PO
+
+### 5.1. Identificación con RR y diferencias de tasas
+
+```{r top5_menos_prevalentes}
+cat("\n═══ TOP 5 PATOLOGÍAS MENOS PREVALENTES EN PO ═══\n\n")
+
+# Filtrar las 5 más subrepresentadas (menor RR)
+top5_menos_prevalentes <- comparacion_completa %>%
+  filter(rr_crudo < 1.0) %>%  # Solo las que son menos frecuentes en PO
+  arrange(rr_crudo) %>%
+  slice(1:5)
+
+cat("CRITERIO: Menor Riesgo Relativo (RR) - PO vs PG\n")
+cat("Filtro: RR < 1.0 (menos frecuente en PO que en PG)\n\n")
+
+# Mostrar resultados
+for(i in 1:nrow(top5_menos_prevalentes)) {
+  cat(sprintf("%d. %s\n", i, top5_menos_prevalentes$DIAG_COMPLETO[i]))
+  cat(sprintf("   • Tasa PO: %.2f x1000 p-a | Tasa PG: %.2f x1000 p-a\n", 
+              top5_menos_prevalentes$tasa_anual_po[i],
+              top5_menos_prevalentes$tasa_anual_pg[i]))
+  cat(sprintf("   • RR: %.2f (PO tiene %.0f%% menos riesgo que PG)\n", 
+              top5_menos_prevalentes$rr_crudo[i],
+              (1 - top5_menos_prevalentes$rr_crudo[i]) * 100))
+  cat(sprintf("   • Diferencia de tasas: %.2f x1000 p-a\n", 
+              top5_menos_prevalentes$dif_tasa_anual[i]))
+  cat(sprintf("   • Casos PO: %s | Casos PG: %s\n\n",
+              format(top5_menos_prevalentes$n_po[i], big.mark = ","),
+              format(top5_menos_prevalentes$n_pg[i], big.mark = ",")))
+}
+```
+
+### 5.2. Tabla de las 5 menos prevalentes
+
+```{r tabla_top5_menos}
+cat("═══ TABLA TOP 5 MENOS PREVALENTES ═══\n")
+
+# Crear tabla formateada con flextable
+tabla_top5_menos <- crear_tabla_perfil(
+  datos = top5_menos_prevalentes,
+  tipo = "comparacion",
+  titulo = "Top 5 Patologías MENOS Prevalentes en Pueblos Originarios (Menor RR)",
+  tamano_fuente = 9
+)
+
+print(tabla_top5_menos)
+
+# Guardar en HTML y PNG
+dir_salida <- "resultados_tesis"  # Variable global para guardar_tabla_png
+guardar_tabla_html(tabla_top5_menos, "top_patologias_po/top5_menos_prevalentes_po.html")
+guardar_tabla_png(tabla_top5_menos, "top_patologias_po/top5_menos_prevalentes_po", zoom = 3, fondo = "white")
+
+cat("\n✓ Tabla guardada en HTML y PNG con fondo blanco\n")
+```
+
+### 5.3. Gráfico comparativo - Top 5 Menos Prevalentes
+
+```{r grafico_top5_menos}
+cat("\n═══ GRÁFICO TOP 5 MENOS PREVALENTES ═══\n")
+
+# Preparar datos para gráfico
+datos_graf_menos <- top5_menos_prevalentes %>%
+  select(DIAG_COMPLETO, tasa_anual_po, tasa_anual_pg) %>%
+  pivot_longer(
+    cols = c(tasa_anual_po, tasa_anual_pg),
+    names_to = "grupo",
+    values_to = "tasa"
+  ) %>%
+  mutate(
+    grupo = if_else(grupo == "tasa_anual_po", "Pueblos Originarios", "Población General"),
+    # Truncar nombres largos
+    DIAG_COMPLETO = str_trunc(DIAG_COMPLETO, width = 60, ellipsis = "...")
+  )
+
+# Crear gráfico
+graf_top5_menos <- ggplot(datos_graf_menos, aes(x = reorder(DIAG_COMPLETO, -tasa), y = tasa, fill = grupo)) +
+  geom_col(position = "dodge", width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("Pueblos Originarios" = "#1565C0", "Población General" = "#C62828")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "Top 5 Patologías MENOS Prevalentes en Pueblos Originarios",
+    subtitle = "Tasas anuales por 1000 persona-años (2010-2022) - Ordenadas por RR ascendente",
+    x = NULL,
+    y = "Tasa anual (x1000 persona-años)",
+    fill = "Grupo poblacional"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13, hjust = 0),
+    plot.subtitle = element_text(size = 10, color = "gray30", hjust = 0),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 9)
+  )
+
+print(graf_top5_menos)
+
+# Guardar en JPG y PNG con fondo blanco
+guardar_multiformato(graf_top5_menos, "top_patologias_po/top5_menos_prevalentes_po", 10, 7, 300)
+ggsave("resultados_tesis/top_patologias_po/top5_menos_prevalentes_po.png", 
+       graf_top5_menos, width = 10, height = 7, dpi = 300, bg = "white")
+
+cat("✓ Gráfico guardado en JPG y PNG con fondo blanco\n")
+```
+
+## 6. Resumen Comparativo: Top 5 vs Bottom 5
+
+### 6.1. Tabla resumen combinada
+
+```{r tabla_resumen_combinada}
+cat("\n═══ RESUMEN COMBINADO TOP 5 MÁS Y MENOS ═══\n\n")
+
+# Crear tabla resumen
+resumen_top_bottom <- bind_rows(
+  top5_mas_prevalentes %>%
+    mutate(categoria = "TOP 5 MÁS PREVALENTES") %>%
+    select(categoria, DIAG_COMPLETO, n_po, n_pg, tasa_anual_po, tasa_anual_pg, rr_crudo, dif_tasa_anual),
+  top5_menos_prevalentes %>%
+    mutate(categoria = "TOP 5 MENOS PREVALENTES") %>%
+    select(categoria, DIAG_COMPLETO, n_po, n_pg, tasa_anual_po, tasa_anual_pg, rr_crudo, dif_tasa_anual)
+)
+
+# Crear tabla con flextable
+tabla_resumen <- resumen_top_bottom %>%
+  flextable() %>%
+  set_header_labels(
+    categoria = "Categoría",
+    DIAG_COMPLETO = "Diagnóstico",
+    n_po = "Casos PO",
+    n_pg = "Casos PG",
+    tasa_anual_po = "Tasa PO",
+    tasa_anual_pg = "Tasa PG",
+    rr_crudo = "RR",
+    dif_tasa_anual = "Dif. Tasa"
+  ) %>%
+  merge_v(j = "categoria") %>%
+  valign(j = "categoria", valign = "top") %>%
+  colformat_double(j = c("tasa_anual_po", "tasa_anual_pg", "rr_crudo", "dif_tasa_anual"), digits = 2) %>%
+  colformat_num(j = c("n_po", "n_pg"), big.mark = ",") %>%
+  bold(j = "categoria") %>%
+  bg(i = ~ categoria == "TOP 5 MÁS PREVALENTES", bg = "#FFEBEE") %>%
+  bg(i = ~ categoria == "TOP 5 MENOS PREVALENTES", bg = "#E3F2FD") %>%
+  fontsize(size = 8, part = "all") %>%
+  width(j = "DIAG_COMPLETO", width = 3.5) %>%
+  width(j = "categoria", width = 1.2) %>%
+  width(j = c("n_po", "n_pg"), width = 0.8) %>%
+  width(j = c("tasa_anual_po", "tasa_anual_pg", "rr_crudo", "dif_tasa_anual"), width = 0.7) %>%
+  add_header_lines(values = "Resumen Comparativo: Top 5 Más y Menos Prevalentes en PO") %>%
+  add_footer_lines(values = "Tasas: x1000 persona-años | RR: Riesgo Relativo PO/PG | Dif: Diferencia absoluta de tasas") %>%
+  theme_booktabs()
+
+print(tabla_resumen)
+
+# Guardar en HTML y PNG
+dir_salida <- "resultados_tesis"  # Variable global para guardar_tabla_png
+guardar_tabla_html(tabla_resumen, "top_patologias_po/resumen_top5_mas_menos_po.html")
+guardar_tabla_png(tabla_resumen, "top_patologias_po/resumen_top5_mas_menos_po", zoom = 3, fondo = "white")
+
+cat("\n✓ Tabla resumen guardada en HTML y PNG con fondo blanco\n")
+```
+
+### 6.2. Gráfico de diferencias de tasas (divergente)
+
+```{r grafico_divergente_combinado}
+cat("\n═══ GRÁFICO DIVERGENTE - TOP 5 MÁS Y MENOS ═══\n")
+
+# Preparar datos para gráfico divergente
+datos_divergente <- bind_rows(
+  top5_mas_prevalentes %>%
+    mutate(categoria = "Más prevalentes en PO") %>%
+    select(categoria, DIAG_COMPLETO, dif_tasa_anual),
+  top5_menos_prevalentes %>%
+    mutate(categoria = "Menos prevalentes en PO") %>%
+    select(categoria, DIAG_COMPLETO, dif_tasa_anual)
+) %>%
+  mutate(
+    DIAG_COMPLETO = str_trunc(DIAG_COMPLETO, width = 55, ellipsis = "..."),
+    color_categoria = if_else(dif_tasa_anual > 0, "PO > PG", "PG > PO")
+  ) %>%
+  arrange(dif_tasa_anual)
+
+# Crear gráfico divergente
+graf_divergente <- ggplot(datos_divergente, 
+                          aes(x = reorder(DIAG_COMPLETO, dif_tasa_anual), 
+                              y = dif_tasa_anual, 
+                              fill = color_categoria)) +
+  geom_col(width = 0.7) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "gray30", size = 0.8) +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("PO > PG" = "#C62828", "PG > PO" = "#1565C0"),
+    labels = c("PO > PG" = "Mayor en PO", "PG > PO" = "Mayor en PG")
+  ) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) +
+  labs(
+    title = "Top 5 Más y Menos Prevalentes en Pueblos Originarios",
+    subtitle = "Diferencia de tasas anuales (PO - PG) por 1000 persona-años",
+    x = NULL,
+    y = "Diferencia de tasas anuales (x1000 p-a)",
+    fill = "Dirección"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13, hjust = 0),
+    plot.subtitle = element_text(size = 10, color = "gray30", hjust = 0),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 9)
+  ) +
+  annotate("text", x = 5, y = max(datos_divergente$dif_tasa_anual) * 0.7, 
+           label = "Más en PO", color = "#C62828", fontface = "bold", size = 3.5) +
+  annotate("text", x = 5, y = min(datos_divergente$dif_tasa_anual) * 0.7, 
+           label = "Más en PG", color = "#1565C0", fontface = "bold", size = 3.5)
+
+print(graf_divergente)
+
+# Guardar en JPG y PNG con fondo blanco
+guardar_multiformato(graf_divergente, "top_patologias_po/comparativo_top5_mas_menos_po", 11, 8, 300)
+ggsave("resultados_tesis/top_patologias_po/comparativo_top5_mas_menos_po.png", 
+       graf_divergente, width = 11, height = 8, dpi = 300, bg = "white")
+
+cat("✓ Gráfico divergente guardado en JPG y PNG con fondo blanco\n")
+```
+
+## 7. Análisis Complementario: Distribución de RR
+
+### 7.1. Histograma de Riesgo Relativo
+
+```{r histograma_rr}
+cat("\n═══ DISTRIBUCIÓN DE RIESGO RELATIVO ═══\n\n")
+
+# Preparar datos para histograma
+datos_rr <- comparacion_completa %>%
+  filter(!is.na(rr_crudo), rr_crudo > 0, rr_crudo < 10)  # Filtrar outliers extremos
+
+# Calcular estadísticos
+cat("ESTADÍSTICOS DEL RIESGO RELATIVO:\n")
+cat("  • Media:", sprintf("%.2f", mean(datos_rr$rr_crudo, na.rm = TRUE)), "\n")
+cat("  • Mediana:", sprintf("%.2f", median(datos_rr$rr_crudo, na.rm = TRUE)), "\n")
+cat("  • Rango:", sprintf("%.2f - %.2f", 
+                          min(datos_rr$rr_crudo, na.rm = TRUE),
+                          max(datos_rr$rr_crudo, na.rm = TRUE)), "\n")
+cat("  • Diagnósticos con RR > 1 (más en PO):", 
+    sum(datos_rr$rr_crudo > 1, na.rm = TRUE), 
+    sprintf("(%.1f%%)", sum(datos_rr$rr_crudo > 1, na.rm = TRUE) / nrow(datos_rr) * 100), "\n")
+cat("  • Diagnósticos con RR < 1 (menos en PO):", 
+    sum(datos_rr$rr_crudo < 1, na.rm = TRUE),
+    sprintf("(%.1f%%)", sum(datos_rr$rr_crudo < 1, na.rm = TRUE) / nrow(datos_rr) * 100), "\n\n")
+
+# Crear histograma
+graf_histograma_rr <- ggplot(datos_rr, aes(x = rr_crudo)) +
+  geom_histogram(bins = 50, fill = "#6B8E23", color = "white", alpha = 0.8) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "#C62828", size = 1.2) +
+  geom_vline(xintercept = median(datos_rr$rr_crudo, na.rm = TRUE), 
+             linetype = "dotted", color = "#1565C0", size = 1) +
+  scale_x_continuous(breaks = seq(0, 10, 0.5)) +
+  labs(
+    title = "Distribución del Riesgo Relativo (RR) - PO vs PG",
+    subtitle = paste0("Línea roja: RR = 1 (sin diferencia) | Línea azul: Mediana = ", 
+                     sprintf("%.2f", median(datos_rr$rr_crudo, na.rm = TRUE))),
+    x = "Riesgo Relativo (RR)",
+    y = "Frecuencia (número de diagnósticos)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13),
+    plot.subtitle = element_text(size = 10, color = "gray30"),
+    panel.grid.minor = element_blank()
+  )
+
+print(graf_histograma_rr)
+
+# Guardar en JPG y PNG con fondo blanco
+guardar_multiformato(graf_histograma_rr, "top_patologias_po/distribucion_rr_po_pg", 10, 6, 300)
+ggsave("resultados_tesis/top_patologias_po/distribucion_rr_po_pg.png", 
+       graf_histograma_rr, width = 10, height = 6, dpi = 300, bg = "white")
+
+cat("✓ Histograma guardado en JPG y PNG con fondo blanco\n")
+```
+
+## 8. Resumen Ejecutivo
+
+```{r resumen_ejecutivo}
+cat("\n═══════════════════════════════════════════════════\n")
+cat("  RESUMEN EJECUTIVO - TOP PATOLOGÍAS PO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("DATOS ANALIZADOS:\n")
+cat("  • Período:", "2010-2022 (13 años)\n")
+cat("  • Total egresos PO:", format(total_egresos_po, big.mark = ","), "\n")
+cat("  • Total egresos PG:", format(total_egresos_pg, big.mark = ","), "\n")
+cat("  • Diagnósticos únicos:", format(length(codigos_unicos), big.mark = ","), "\n")
+cat("  • Cobertura CIE-10:", sprintf("%.1f%%", pct_cobertura), "\n\n")
+
+cat("METODOLOGÍA:\n")
+cat("  ✓ Paquete ciecl para clasificación CIE-10\n")
+cat("  ✓ Tasas anuales por 1000 persona-años (Censo 2017)\n")
+cat("  ✓ Riesgo Relativo (RR) crudo sin ajuste por edad\n")
+cat("  ✓ Mínimo 100 casos en PO para estabilidad\n\n")
+
+cat("RESULTADOS PRINCIPALES:\n\n")
+
+cat("TOP 5 MÁS PREVALENTES EN PO (RR más alto):\n")
+for(i in 1:min(5, nrow(top5_mas_prevalentes))) {
+  cat(sprintf("  %d. %s (RR: %.2f)\n", 
+              i, 
+              str_trunc(top5_mas_prevalentes$DIAG_COMPLETO[i], 50),
+              top5_mas_prevalentes$rr_crudo[i]))
+}
+
+cat("\nTOP 5 MENOS PREVALENTES EN PO (RR más bajo):\n")
+for(i in 1:min(5, nrow(top5_menos_prevalentes))) {
+  cat(sprintf("  %d. %s (RR: %.2f)\n", 
+              i, 
+              str_trunc(top5_menos_prevalentes$DIAG_COMPLETO[i], 50),
+              top5_menos_prevalentes$rr_crudo[i]))
+}
+
+cat("\nLIMITACIONES:\n")
+cat("  ⚠ NO hay información de zona urbana/rural en los datos\n")
+cat("  ⚠ Tasas NO ajustadas por edad (RR crudo)\n")
+cat("  ⚠ Solo incluye egresos hospitalarios (no APS ni urgencias)\n")
+cat("  ⚠ Solo Región Metropolitana\n\n")
+
+cat("ARCHIVOS GENERADOS:\n")
+cat("  TABLAS (HTML + PNG con fondo blanco):\n")
+cat("    • top5_mas_prevalentes_po.html / .png\n")
+cat("    • top5_menos_prevalentes_po.html / .png\n")
+cat("    • resumen_top5_mas_menos_po.html / .png\n")
+cat("  GRÁFICOS (JPG + PNG con fondo blanco):\n")
+cat("    • top5_mas_prevalentes_po.jpg / .png\n")
+cat("    • top5_menos_prevalentes_po.jpg / .png\n")
+cat("    • comparativo_top5_mas_menos_po.jpg / .png\n")
+cat("    • distribucion_rr_po_pg.jpg / .png\n")
+cat("  Ubicación: resultados_tesis/top_patologias_po/\n\n")
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  ANÁLISIS COMPLETADO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+```
+
+## 9. Nota sobre Análisis Urbano/Rural
+
+::: {.callout-warning}
+## Limitación: Sin datos urbano/rural
+
+Los datos de egresos hospitalarios **NO contienen información de zona urbana/rural** de residencia del paciente.
+
+Para realizar un análisis urbano/rural se requeriría:
+
+1. **Variable de zona en los datos**: Código o clasificación urbano/rural del lugar de residencia
+2. **Denominadores del Censo 2017 desagregados**: 
+   - Población PO urbana y rural
+   - Población PG urbana y rural
+   - Por región y grupo etario
+3. **Función de estratificación**: Modificar `comparar_perfiles_po_pg()` para incluir variable `zona`
+
+**Alternativa**: Si existiera la variable, el código sería:
+
+```r
+# EJEMPLO (NO EJECUTABLE - VARIABLE NO DISPONIBLE)
+comparacion_urbano <- comparar_perfiles_po_pg(
+  datos = datos_diag_preparados %>% filter(ZONA == "URBANO"),
+  poblacion_po = pob_po_urbano,
+  poblacion_pg = pob_pg_urbano,
+  # ... resto de parámetros
+)
+
+comparacion_rural <- comparar_perfiles_po_pg(
+  datos = datos_diag_preparados %>% filter(ZONA == "RURAL"),
+  poblacion_po = pob_po_rural,
+  poblacion_pg = pob_pg_rural,
+  # ... resto de parámetros
+)
+```
+:::
+
+---
+
+**Generado**: `r Sys.Date()` | **Paquete**: ciecl `r as.character(packageVersion("ciecl"))` | **Autor**: Rodolfo Tasso

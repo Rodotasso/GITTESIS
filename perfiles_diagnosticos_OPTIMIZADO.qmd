@@ -55,46 +55,41 @@ datos_filtrados <- datos_homologados %>%
 # Extraer códigos únicos
 codigos_unicos <- unique(datos_filtrados$DIAG1)
 cat("Códigos únicos a buscar:", format(length(codigos_unicos), big.mark = ","), "\n")
-cat("  • Base de datos: MINSAL/DEIS v2018\n")
-cat("  • Normalización: Automática (con/sin punto)\n")
-cat("  • Modo: Vectorizado\n\n")
+cat("  • Base de datos: MINSAL/DEIS (actualizada - 39,873 códigos)\n")
+cat("  • Incluye: Códigos capitulares (J44, I10, E11, etc.)\n")
+cat("  • Modo: Vectorizado con match directo\n\n")
 
 inicio <- Sys.time()
 
 # cie_lookup() con parámetros según documentación oficial:
 # - codigo: vector de códigos (soporta vectorización)
-# - normalizar: TRUE (elimina puntos automáticamente: E11.0 → E110)
+# - normalizar: FALSE (la BD tiene códigos CON punto: E11.0, J44.0)
 # - descripcion_completa: TRUE (formato "CODIGO - DESCRIPCION")
+# NOTA: La BD actualizada incluye 39,873 códigos con capítulos (J44, I10, etc.)
 cat("Ejecutando cie_lookup()...\n")
 suppressMessages({
   descripciones_cie <- cie_lookup(
     codigo = codigos_unicos, 
-    normalizar = TRUE,
+    normalizar = FALSE,
     descripcion_completa = TRUE
   )
 })
 
-cat("✓ Búsqueda completada:", nrow(descripciones_cie), "códigos encontrados\n\n")
+cat("✓ Búsqueda completada:", nrow(descripciones_cie), "códigos encontrados\n")
+cat("  Columnas:", paste(names(descripciones_cie), collapse = ", "), "\n\n")
 
-# Crear función de normalización local para hacer el join
-# (la función interna cie_normalizar no está exportada)
-normalizar_codigo <- function(codigo) {
-  toupper(gsub("\\.", "", stringr::str_trim(codigo)))
-}
-
-# Unir con datos originales usando códigos normalizados
+# Unir con datos originales directamente (sin normalizar)
+# La BD actualizada ya tiene los códigos en el formato correcto
 cat("Uniendo con datos originales...\n")
 datos_diag_preparados <- datos_filtrados %>%
-  mutate(DIAG1_NORM = normalizar_codigo(DIAG1)) %>%
   left_join(
     descripciones_cie %>% select(codigo, DIAG_COMPLETO = descripcion_completa),
-    by = c("DIAG1_NORM" = "codigo")
+    by = c("DIAG1" = "codigo")
   ) %>%
   mutate(
     # Si no se encontró descripción, usar solo el código original
     DIAG_COMPLETO = if_else(is.na(DIAG_COMPLETO), DIAG1, DIAG_COMPLETO)
-  ) %>%
-  select(-DIAG1_NORM)  # Eliminar columna temporal
+  )
 
 tiempo <- as.numeric(difftime(Sys.time(), inicio, units = "secs"))
 
@@ -109,7 +104,8 @@ cat("  • Egresos con descripción:", format(n_con_descripcion, big.mark = ",")
 cat("  • Tasa de éxito:", sprintf("%.1f%%", pct_exito), "\n")
 cat("  • Tiempo total:", sprintf("%.2f", tiempo), "segundos\n")
 cat("  • Rendimiento:", sprintf("%.0f", length(codigos_unicos)/tiempo), "códigos/seg\n")
-cat("  • Método: cie_lookup() con vectorización\n\n")
+cat("  • Método: cie_lookup() directo (sin normalización)\n")
+cat("  • BD actualizada: 39,873 códigos incluye capítulos\n\n")
 ```
 
 ### 2.2. Denominadores poblacionales (Censo 2017) - FUNCIÓN MODULAR
