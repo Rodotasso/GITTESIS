@@ -107,7 +107,9 @@ comparar_perfiles_po_pg <- function(datos,
       )
     ) %>%
     dplyr::filter(casos_po >= min_casos_po) %>%
-    dplyr::left_join(tabla_descripciones, by = "DIAG1")
+    dplyr::left_join(tabla_descripciones, by = "DIAG1") %>%
+    # Asegurar que DIAG_COMPLETO esté presente y al inicio
+    dplyr::select(DIAG_COMPLETO, dplyr::everything(), -DIAG1)
   
   # Ordenar según criterio
   if (ordenar_por == "rr") {

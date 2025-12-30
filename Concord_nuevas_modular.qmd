@@ -310,10 +310,10 @@ resultado_region <- resultado_region_detalle$ccc_valor
 
 # Agregar nombres de regiones con orden geográfico (norte a sur)
 nombres_regiones <- tibble::tibble(
-  region = c(15, 1, 2, 3, 4, 5, 13, 6, 16, 7, 8, 9, 14, 10, 11, 12),
+  region = c(15, 1, 2, 3, 4, 5, 13, 6, 7, 16, 8, 9, 14, 10, 11, 12),
   Región = c(
-    "Arica y Parinacota", "Tarapacá", "Antofagasta", "Atacama", "Coquimbo", 
-    "Valparaíso", "Metropolitana", "O'Higgins", "Ñuble", "Maule", 
+    "Arica y Parinacota", "Tarapacá", "Antofagasta", "Atacama", "Coquimbo",
+    "Valparaíso", "Metropolitana", "O'Higgins", "Maule", "Ñuble",
     "Biobío", "La Araucanía", "Los Ríos", "Los Lagos", "Aysén", "Magallanes"
   )
 )
@@ -807,58 +807,207 @@ guardar_tabla_html(tabla_ccc_egresos, "concordancias/09_ccc_resumen_egresos.html
 guardar_como_jpg(tabla_ccc_egresos, "09_ccc_resumen_egresos")
 ```
 
-### 5.6. Tabla comparativa: Variable Enriquecida vs Egresos Hospitalarios
+### 5.6. Tabla Consolidada de Concordancias: Kappa + Lin's CCC
 
-```{r tabla_comparativa_fuentes}
-cat("\n═══ TABLA COMPARATIVA: VARIABLE ENRIQUECIDA VS EGRESOS ═══\n\n")
+Esta tabla consolida los resultados de concordancia en dos secciones:
 
-# Preparar datos de Variable Enriquecida (limpiar nombre de desagregación)
-datos_enriquecida <- resultados_ccc %>%
-  mutate(Desagregacion = gsub(" \\(Egresos\\)", "", Desagregacion)) %>%
+1. **Concordancia Interna (Kappa)**: Compara cada fuente administrativa contra la Variable Enriquecida
+2. **Concordancia Externa (Lin's CCC)**: Compara el Censo 2017 contra Variable Enriquecida y contra Egresos Hospitalarios, mostrando valores estratificados por cada categoría
+
+```{r tabla_consolidada_concordancias}
+cat("\n═══ TABLA CONSOLIDADA DE CONCORDANCIAS ═══\n\n")
+
+# ============================================
+# PARTE 1: KAPPA (Concordancia Interna)
+# ============================================
+
+cat("Preparando sección de Cohen's Kappa...\n")
+
+# Preparar datos de Kappa
+datos_kappa_tabla <- resultados_kappa %>%
   select(
-    Desagregacion,
-    `Lin's CCC (Var. Enriquecida)` = `Lin's CCC`,
-    `IC 95% Inf (Var. Enr.)` = `IC 95% Inferior`,
-    `IC 95% Sup (Var. Enr.)` = `IC 95% Superior`,
-    `Interpretación (Var. Enr.)` = Interpretacion
+    Fuente = `Fuente de Datos`,
+    Kappa = `Valor Kappa`,
+    `IC 95% Inf` = `IC 95% Inf`,
+    `IC 95% Sup` = `IC 95% Sup`,
+    Interpretación = `Interpretación (Landis & Koch)`
   )
 
-# Preparar datos de Egresos (limpiar nombre de desagregación)
-datos_egresos_tabla <- resultados_ccc_egresos %>%
-  mutate(Desagregacion = gsub(" \\(Egresos\\)", "", Desagregacion)) %>%
-  select(
-    Desagregacion,
-    `Lin's CCC (Egresos)` = `Lin's CCC`,
-    `IC 95% Inf (Egresos)` = `IC 95% Inferior`,
-    `IC 95% Sup (Egresos)` = `IC 95% Superior`,
-    `Interpretación (Egresos)` = Interpretacion
+# ============================================
+# PARTE 2: LIN'S CCC ESTRATIFICADO
+# ============================================
+
+cat("Preparando sección de Lin's CCC estratificado...\n")
+
+# Nombres de regiones para ordenar geográficamente (norte a sur)
+nombres_regiones <- tibble::tibble(
+  region = c(15, 1, 2, 3, 4, 5, 13, 6, 7, 16, 8, 9, 14, 10, 11, 12),
+  Categoría = c(
+    "Arica y Parinacota", "Tarapacá", "Antofagasta", "Atacama", "Coquimbo",
+    "Valparaíso", "Metropolitana", "O'Higgins", "Maule", "Ñuble",
+    "Biobío", "La Araucanía", "Los Ríos", "Los Lagos", "Aysén", "Magallanes"
+  )
+)
+
+# --- DATOS ESTRATIFICADOS: Censo vs Variable Enriquecida ---
+
+# Por Región (desde tabla_detalle)
+datos_region_censo_enriq <- resultado_region_detalle$tabla_detalle %>%
+  left_join(nombres_regiones, by = "region") %>%
+  transmute(
+    Desagregación = "Región",
+    Categoría,
+    `CCC Censo-Enriq.` = `Lin's CCC`,
+    `IC (Censo-Enriq.)` = sprintf("[%.3f, %.3f]", `IC 95% Inferior`, `IC 95% Superior`),
+    `Int. (Censo-Enriq.)` = Interpretacion
   )
 
-# Combinar en una tabla con columnas lado a lado
-resultados_combinados <- datos_enriquecida %>%
-  full_join(datos_egresos_tabla, by = "Desagregacion")
+# Por Sexo
+datos_sexo_censo_enriq <- resultado_sexo_detalle$tabla_detalle %>%
+  transmute(
+    Desagregación = "Sexo",
+    Categoría = sexo,
+    `CCC Censo-Enriq.` = `Lin's CCC`,
+    `IC (Censo-Enriq.)` = sprintf("[%.3f, %.3f]", `IC 95% Inferior`, `IC 95% Superior`),
+    `Int. (Censo-Enriq.)` = Interpretacion
+  )
 
-# Crear tabla comparativa
-tabla_comparativa <- resultados_combinados %>%
+# Por Grupo Etario
+datos_edad_censo_enriq <- resultado_edad_detalle$tabla_detalle %>%
+  transmute(
+    Desagregación = "Grupo Etario",
+    Categoría = grupo_etario,
+    `CCC Censo-Enriq.` = `Lin's CCC`,
+    `IC (Censo-Enriq.)` = sprintf("[%.3f, %.3f]", `IC 95% Inferior`, `IC 95% Superior`),
+    `Int. (Censo-Enriq.)` = Interpretacion
+  )
+
+# Combinar Censo vs Variable Enriquecida
+datos_censo_enriq_estratificado <- bind_rows(
+  datos_region_censo_enriq,
+  datos_sexo_censo_enriq,
+  datos_edad_censo_enriq
+)
+
+# --- DATOS ESTRATIFICADOS: Censo vs Egresos Hospitalarios ---
+
+# Por Región
+datos_region_censo_egr <- resultado_region_egresos_detalle$tabla_detalle %>%
+  left_join(nombres_regiones, by = "region") %>%
+  transmute(
+    Desagregación = "Región",
+    Categoría,
+    `CCC Censo-Egr.` = `Lin's CCC`,
+    `IC (Censo-Egr.)` = sprintf("[%.3f, %.3f]", `IC 95% Inferior`, `IC 95% Superior`),
+    `Int. (Censo-Egr.)` = Interpretacion
+  )
+
+# Por Sexo
+datos_sexo_censo_egr <- resultado_sexo_egresos_detalle$tabla_detalle %>%
+  transmute(
+    Desagregación = "Sexo",
+    Categoría = sexo,
+    `CCC Censo-Egr.` = `Lin's CCC`,
+    `IC (Censo-Egr.)` = sprintf("[%.3f, %.3f]", `IC 95% Inferior`, `IC 95% Superior`),
+    `Int. (Censo-Egr.)` = Interpretacion
+  )
+
+# Por Grupo Etario
+datos_edad_censo_egr <- resultado_edad_egresos_detalle$tabla_detalle %>%
+  transmute(
+    Desagregación = "Grupo Etario",
+    Categoría = grupo_etario,
+    `CCC Censo-Egr.` = `Lin's CCC`,
+    `IC (Censo-Egr.)` = sprintf("[%.3f, %.3f]", `IC 95% Inferior`, `IC 95% Superior`),
+    `Int. (Censo-Egr.)` = Interpretacion
+  )
+
+# Combinar Censo vs Egresos
+datos_censo_egr_estratificado <- bind_rows(
+  datos_region_censo_egr,
+  datos_sexo_censo_egr,
+  datos_edad_censo_egr
+)
+
+# --- COMBINAR AMBAS COMPARACIONES EN COLUMNAS ---
+
+datos_lin_estratificado <- datos_censo_enriq_estratificado %>%
+  left_join(
+    datos_censo_egr_estratificado,
+    by = c("Desagregación", "Categoría")
+  )
+
+# ============================================
+# CREAR TABLA DE KAPPA
+# ============================================
+
+cat("\nGenerando tabla de Kappa...\n")
+
+tabla_kappa_consolidada <- datos_kappa_tabla %>%
   flextable() %>%
-  set_caption("Comparación de Concordancias: Censo vs Variable Enriquecida / Censo vs Egresos Hospitalarios") %>%
-  colformat_double(j = c("Lin's CCC (Var. Enriquecida)", "IC 95% Inf (Var. Enr.)", "IC 95% Sup (Var. Enr.)",
-                         "Lin's CCC (Egresos)", "IC 95% Inf (Egresos)", "IC 95% Sup (Egresos)"), 
-                   digits = 4) %>%
+  set_caption("Concordancia Interna: Fuentes Administrativas vs Variable Enriquecida (Cohen's Kappa)") %>%
+  colformat_double(j = c("Kappa", "IC 95% Inf", "IC 95% Sup"), digits = 4) %>%
   align(j = 1, align = "left", part = "all") %>%
-  align(j = 2:9, align = "center", part = "all") %>%
+  align(j = 2:5, align = "center", part = "all") %>%
   bold(part = "header") %>%
-  bold(j = c("Lin's CCC (Var. Enriquecida)", "Lin's CCC (Egresos)")) %>%
+  bold(j = "Kappa") %>%
   autofit() %>%
   theme_booktabs() %>%
   add_footer_lines(c(
-    "Variable Enriquecida: Integra RSH, CONADI y autodeclaración en egresos",
-    "Egresos Hospitalarios: Solo autodeclaración en egresos (PUEBLO_ORIGINARIO_BIN)"
+    "Variable Enriquecida como referencia (integra RSH + CONADI + Egresos)",
+    "Interpretación según Landis & Koch (1977)"
   ))
 
-# Aplicar colores a Lin's CCC (Var. Enriquecida)
-for(i in 1:nrow(resultados_combinados)) {
-  valor_enr <- resultados_combinados$`Lin's CCC (Var. Enriquecida)`[i]
+# Aplicar colores a Kappa
+for(i in 1:nrow(datos_kappa_tabla)) {
+  valor <- datos_kappa_tabla$Kappa[i]
+  if (!is.na(valor)) {
+    color_texto <- dplyr::case_when(
+      valor > 0.80 ~ "#198754",
+      valor > 0.60 ~ "#0d6efd",
+      valor > 0.40 ~ "#ffc107",
+      valor > 0.20 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_kappa_consolidada <- tabla_kappa_consolidada %>%
+      flextable::color(i = i, j = "Kappa", color = color_texto)
+  }
+}
+
+print(tabla_kappa_consolidada)
+guardar_tabla_html(tabla_kappa_consolidada, "concordancias/13a_kappa_consolidado.html")
+guardar_como_jpg(tabla_kappa_consolidada, "13a_kappa_consolidado")
+
+# ============================================
+# CREAR TABLA DE LIN'S CCC ESTRATIFICADA
+# ============================================
+
+cat("\nGenerando tabla de Lin's CCC estratificada...\n")
+
+tabla_lin_estratificada <- datos_lin_estratificado %>%
+  flextable() %>%
+  set_caption("Concordancia Externa: Censo 2017 vs Fuentes - Valores Estratificados (Lin's CCC)") %>%
+  colformat_double(j = c("CCC Censo-Enriq.", "CCC Censo-Egr."), digits = 4) %>%
+  align(j = 1:2, align = "left", part = "all") %>%
+  align(j = 3:7, align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  bold(j = c("CCC Censo-Enriq.", "CCC Censo-Egr.")) %>%
+  merge_v(j = "Desagregación") %>%
+  valign(j = "Desagregación", valign = "top") %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  # Líneas separadoras entre desagregaciones
+  hline(i = nrow(datos_region_censo_enriq), border = officer::fp_border(color = "gray70", width = 1.5)) %>%
+  hline(i = nrow(datos_region_censo_enriq) + nrow(datos_sexo_censo_enriq), border = officer::fp_border(color = "gray70", width = 1.5)) %>%
+  add_footer_lines(c(
+    "Censo 2017 como referencia poblacional en ambas comparaciones",
+    "Censo-Enriq.: Censo vs Variable Enriquecida (RSH+CONADI+Egresos) | Censo-Egr.: Censo vs Solo autodeclaración hospitalaria",
+    "Colores: Verde (>0.80), Azul (0.61-0.80), Amarillo (0.41-0.60), Naranja (0.21-0.40), Rojo (<0.21)"
+  ))
+
+# Aplicar colores a CCC Censo-Enriq.
+for(i in 1:nrow(datos_lin_estratificado)) {
+  valor_enr <- datos_lin_estratificado$`CCC Censo-Enriq.`[i]
   if (!is.na(valor_enr)) {
     color_texto <- dplyr::case_when(
       valor_enr > 0.80 ~ "#198754",
@@ -867,12 +1016,12 @@ for(i in 1:nrow(resultados_combinados)) {
       valor_enr > 0.21 ~ "#fd7e14",
       TRUE ~ "#dc3545"
     )
-    tabla_comparativa <- tabla_comparativa %>%
-      flextable::color(i = i, j = "Lin's CCC (Var. Enriquecida)", color = color_texto)
+    tabla_lin_estratificada <- tabla_lin_estratificada %>%
+      flextable::color(i = i, j = "CCC Censo-Enriq.", color = color_texto)
   }
-  
-  # Aplicar colores a Lin's CCC (Egresos)
-  valor_egr <- resultados_combinados$`Lin's CCC (Egresos)`[i]
+
+  # Color para Censo-Egresos
+  valor_egr <- datos_lin_estratificado$`CCC Censo-Egr.`[i]
   if (!is.na(valor_egr)) {
     color_texto <- dplyr::case_when(
       valor_egr > 0.80 ~ "#198754",
@@ -881,14 +1030,229 @@ for(i in 1:nrow(resultados_combinados)) {
       valor_egr > 0.21 ~ "#fd7e14",
       TRUE ~ "#dc3545"
     )
-    tabla_comparativa <- tabla_comparativa %>%
-      flextable::color(i = i, j = "Lin's CCC (Egresos)", color = color_texto)
+    tabla_lin_estratificada <- tabla_lin_estratificada %>%
+      flextable::color(i = i, j = "CCC Censo-Egr.", color = color_texto)
   }
 }
 
-print(tabla_comparativa)
-guardar_tabla_html(tabla_comparativa, "concordancias/13_comparativa_fuentes.html")
-guardar_como_jpg(tabla_comparativa, "13_comparativa_fuentes")
+print(tabla_lin_estratificada)
+guardar_tabla_html(tabla_lin_estratificada, "concordancias/13b_lin_estratificado.html")
+guardar_como_jpg(tabla_lin_estratificada, "13b_lin_estratificado")
+
+# ============================================
+# TABLA CONSOLIDADA FINAL (KAPPA + LIN'S CCC)
+# ============================================
+
+cat("\nGenerando tabla consolidada final...\n")
+
+# ============================================
+# PREPARAR SECCIÓN KAPPA (columnas compactas)
+# ============================================
+
+seccion_kappa <- datos_kappa_tabla %>%
+  transmute(
+    Tipo = "Concordancia Interna (Kappa)",
+    Desagregación = "Fuentes vs Var. Enriquecida",
+    Categoría = Fuente,
+    `Censo-Enriq.` = Kappa,
+    `IC (C-E)` = sprintf("[%.4f, %.4f]", `IC 95% Inf`, `IC 95% Sup`),
+    `Int. (C-E)` = Interpretación,
+    `Censo-Egr.` = NA_real_,
+    `IC (C-G)` = "-",
+    `Int. (C-G)` = "-"
+  )
+
+# ============================================
+# PREPARAR SECCIÓN LIN'S CCC ESTRATIFICADO
+# ============================================
+
+seccion_lin_estratificado <- datos_lin_estratificado %>%
+  transmute(
+    Tipo = "Concordancia Externa (Lin's CCC)",
+    Desagregación,
+    Categoría,
+    `Censo-Enriq.` = `CCC Censo-Enriq.`,
+    `IC (C-E)` = `IC (Censo-Enriq.)`,
+    `Int. (C-E)` = `Int. (Censo-Enriq.)`,
+    `Censo-Egr.` = `CCC Censo-Egr.`,
+    `IC (C-G)` = `IC (Censo-Egr.)`,
+    `Int. (C-G)` = `Int. (Censo-Egr.)`
+  )
+
+# ============================================
+# PREPARAR COMBINACIONES DOBLES Y TRIPLES
+# ============================================
+
+cat("Agregando combinaciones dobles y triples...\n")
+
+# Función auxiliar para crear fila de combinación
+crear_fila_combinacion <- function(resultado_enriq, resultado_egr, nombre_desag) {
+  tibble::tibble(
+    Tipo = "Concordancia Externa (Lin's CCC)",
+    Desagregación = nombre_desag,
+    Categoría = "(Global)",
+    `Censo-Enriq.` = resultado_enriq$`Lin's CCC`,
+    `IC (C-E)` = sprintf("[%.4f, %.4f]", resultado_enriq$`IC 95% Inferior`, resultado_enriq$`IC 95% Superior`),
+    `Int. (C-E)` = resultado_enriq$Interpretacion,
+    `Censo-Egr.` = resultado_egr$`Lin's CCC`,
+    `IC (C-G)` = sprintf("[%.4f, %.4f]", resultado_egr$`IC 95% Inferior`, resultado_egr$`IC 95% Superior`),
+    `Int. (C-G)` = resultado_egr$Interpretacion
+  )
+}
+
+# Crear filas para combinaciones
+seccion_combinaciones <- bind_rows(
+  crear_fila_combinacion(resultado_region_sexo, resultado_region_sexo_egresos, "Región × Sexo"),
+  crear_fila_combinacion(resultado_region_edad_comb, resultado_region_edad_egresos, "Región × Grupo Etario"),
+  crear_fila_combinacion(resultado_sexo_edad_comb, resultado_sexo_edad_egresos, "Sexo × Grupo Etario"),
+  crear_fila_combinacion(resultado_triple, resultado_triple_egresos, "Región × Sexo × Grupo Etario")
+)
+
+# ============================================
+# CREAR FILA DE HEADERS INTERMEDIA PARA LIN
+# ============================================
+
+fila_headers_lin <- tibble::tibble(
+  Tipo = "Tipo",
+  Desagregación = "Desagregación",
+  Categoría = "Categoría",
+  `Censo-Enriq.` = NA_real_,
+  `IC (C-E)` = "IC (C-E)",
+  `Int. (C-E)` = "Int. (C-E)",
+  `Censo-Egr.` = NA_real_,
+  `IC (C-G)` = "IC (C-G)",
+  `Int. (C-G)` = "Int. (C-G)"
+)
+
+# ============================================
+# COMBINAR TODO EN TABLA FINAL
+# ============================================
+
+tabla_consolidada_datos <- bind_rows(
+  seccion_kappa,
+  fila_headers_lin,
+  seccion_lin_estratificado,
+  seccion_combinaciones
+)
+
+# Calcular posiciones para líneas horizontales
+n_kappa <- nrow(seccion_kappa)
+n_estratificado <- nrow(seccion_lin_estratificado)
+n_combinaciones <- nrow(seccion_combinaciones)
+
+# ============================================
+# CREAR FLEXTABLE CONSOLIDADA
+# ============================================
+
+# Posición de la fila de headers de Lin (después de Kappa)
+pos_header_lin <- n_kappa + 1
+
+tabla_consolidada <- tabla_consolidada_datos %>%
+  flextable() %>%
+  set_caption(
+    caption = as_paragraph(
+      as_chunk("Tabla 13. ", props = fp_text(bold = TRUE)),
+      as_chunk("Concordancia entre fuentes de datos sobre pertenencia a pueblos originarios. ", props = fp_text(bold = TRUE)),
+      as_chunk("Chile, 2010-2022.", props = fp_text(bold = FALSE))
+    )
+  ) %>%
+  # Renombrar headers originales para Kappa (ocultar columnas de Egr)
+  set_header_labels(
+    `Censo-Egr.` = "",
+    `IC (C-G)` = "",
+    `Int. (C-G)` = ""
+  ) %>%
+  colformat_double(j = c("Censo-Enriq.", "Censo-Egr."), digits = 4) %>%
+  align(j = 1:3, align = "left", part = "all") %>%
+  align(j = 4:9, align = "center", part = "all") %>%
+  bold(part = "header") %>%
+  bold(j = c("Censo-Enriq.", "Censo-Egr.")) %>%
+  # Formatear fila de headers intermedia como header
+  bold(i = pos_header_lin, part = "body") %>%
+  bg(i = pos_header_lin, bg = "#f0f0f0", part = "body") %>%
+  # Poner texto en columnas numéricas de la fila header
+  compose(i = pos_header_lin, j = "Censo-Enriq.", value = as_paragraph("Censo-Enriq.")) %>%
+  compose(i = pos_header_lin, j = "Censo-Egr.", value = as_paragraph("Censo-Egr.")) %>%
+  merge_v(j = c("Tipo", "Desagregación")) %>%
+  valign(j = c("Tipo", "Desagregación"), valign = "top") %>%
+  autofit() %>%
+  theme_booktabs() %>%
+  fontsize(size = 9, part = "body") %>%
+  fontsize(size = 9, part = "header") %>%
+  # Línea antes de header Lin
+  hline(i = n_kappa, border = officer::fp_border(color = "black", width = 2)) %>%
+  # Línea después de header Lin
+  hline(i = pos_header_lin, border = officer::fp_border(color = "black", width = 1)) %>%
+  # Línea antes de combinaciones
+  hline(i = pos_header_lin + n_estratificado, border = officer::fp_border(color = "gray50", width = 1.5)) %>%
+  # Footer compacto
+  add_footer_lines(c(
+    "Kappa: acuerdo categórico fuentes vs Var. Enriquecida. Lin's CCC: concordancia distribuciones Censo 2017 vs cada fuente. Interpretación: Casi perfecta (>0.80), Sustancial (0.61-0.80), Moderada (0.41-0.60), Aceptable (0.21-0.40), Leve (<0.21). C-E: Censo vs Enriquecida. C-G: Censo vs Egresos.",
+    "Fuentes: DEIS; RSH; CONADI; Censo 2017, INE. Elaboración propia."
+  )) %>%
+  fontsize(size = 8, part = "footer") %>%
+  italic(part = "footer")
+
+# Aplicar colores según interpretación (saltar fila de headers intermedia)
+for(i in 1:nrow(tabla_consolidada_datos)) {
+  # Saltar la fila de headers intermedia
+  if (i == pos_header_lin) next
+
+  # Color para Censo-Enriq. (Kappa o CCC)
+  valor_enr <- tabla_consolidada_datos$`Censo-Enriq.`[i]
+  if (!is.na(valor_enr)) {
+    color_texto <- dplyr::case_when(
+      valor_enr > 0.80 ~ "#198754",
+      valor_enr > 0.60 ~ "#0d6efd",
+      valor_enr > 0.40 ~ "#ffc107",
+      valor_enr > 0.20 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_consolidada <- tabla_consolidada %>%
+      flextable::color(i = i, j = "Censo-Enriq.", color = color_texto)
+  }
+
+  # Color para Censo-Egr. (solo Lin's CCC)
+  valor_egr <- tabla_consolidada_datos$`Censo-Egr.`[i]
+  if (!is.na(valor_egr)) {
+    color_texto <- dplyr::case_when(
+      valor_egr > 0.80 ~ "#198754",
+      valor_egr > 0.60 ~ "#0d6efd",
+      valor_egr > 0.40 ~ "#ffc107",
+      valor_egr > 0.20 ~ "#fd7e14",
+      TRUE ~ "#dc3545"
+    )
+    tabla_consolidada <- tabla_consolidada %>%
+      flextable::color(i = i, j = "Censo-Egr.", color = color_texto)
+  }
+}
+
+print(tabla_consolidada)
+guardar_tabla_html(tabla_consolidada, "concordancias/13_tabla_consolidada.html")
+guardar_como_jpg(tabla_consolidada, "13_tabla_consolidada")
+
+# Guardar en final_resultados con formato horizontal y ajustado
+tabla_consolidada_final <- tabla_consolidada %>%
+  padding(padding = 1, part = "all") %>%
+  line_spacing(space = 1, part = "all")
+
+# Configurar página horizontal
+seccion_horizontal <- officer::prop_section(
+  page_size = officer::page_size(orient = "landscape"),
+  page_margins = officer::page_mar(bottom = 0.5, top = 0.5, right = 0.5, left = 0.5, gutter = 0)
+)
+
+save_as_docx(
+  `Tabla 13. Concordancia Interna (Kappa) y Externa (Lin's CCC) entre fuentes de datos sobre pertenencia a pueblos originarios` = tabla_consolidada_final,
+  path = "resultados_tesis/final_resultados/Tabla_13_Concordancias.docx",
+  pr_section = seccion_horizontal
+)
+cat("\n✓ Tabla guardada en: resultados_tesis/final_resultados/Tabla_13_Concordancias.docx\n")
+
+cat("\n✓ Tablas consolidadas generadas:\n")
+cat("  - 13a_kappa_consolidado: Solo Kappa (3 fuentes vs Var. Enriquecida)\n")
+cat("  - 13b_lin_estratificado: Lin's CCC estratificado (cada región, sexo, grupo etario)\n")
+cat("  - 13_tabla_consolidada: Kappa + Lin's CCC unificado con valores estratificados\n")
 ```
 
 ### 4.9. Análisis de Lin's CCC temporal (2010-2022)

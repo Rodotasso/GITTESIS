@@ -89,32 +89,81 @@ codigos_unicos <- unique(datos_filtrados$DIAG1)
 cat("Códigos CIE-10 únicos:", format(length(codigos_unicos), big.mark = ","), "\n")
 cat("Método: cie_lookup() del paquete ciecl\n\n")
 
-# Buscar descripciones con ciecl (EXACTAMENTE como en OPTIMIZADO)
+# Normalizar códigos CIE-10: agregar punto si no lo tiene (formato estándar)
+# Los datos vienen como "O800" pero ciecl espera "O80.0"
+normalizar_codigo_cie10 <- function(codigo) {
+  # Si el código tiene más de 3 caracteres y no tiene punto, agregar punto después del 3er caracter
+  if (nchar(codigo) > 3 && !grepl("\\.", codigo)) {
+    paste0(substr(codigo, 1, 3), ".", substr(codigo, 4, nchar(codigo)))
+  } else {
+    codigo
+  }
+}
+
+codigos_normalizados <- sapply(codigos_unicos, normalizar_codigo_cie10)
+
+# Usar cie_lookup() para buscar descripciones
 inicio <- Sys.time()
 
-cat("Ejecutando cie_lookup()...\n")
+cat("Buscando descripciones CIE-10 con cie_lookup()...\n")
 suppressMessages({
   descripciones_cie <- cie_lookup(
-    codigo = codigos_unicos, 
-    normalizar = FALSE,
+    codigo = codigos_normalizados,
     descripcion_completa = TRUE
   )
 })
 
-cat("✓ Búsqueda completada:", nrow(descripciones_cie), "códigos encontrados\n")
-cat("  Columnas:", paste(names(descripciones_cie), collapse = ", "), "\n\n")
+# Agregar columna con código original (sin punto) para el join
+descripciones_cie <- descripciones_cie %>%
+  mutate(codigo_original = gsub("\\.", "", codigo))
 
-# Unir con datos originales (EXACTAMENTE como en OPTIMIZADO)
+cat("✓ Búsqueda completada:", format(nrow(descripciones_cie), big.mark = ","), "resultados\n")
+cat("  Columnas:", paste(names(descripciones_cie), collapse = ", "), "\n")
+
+# Mostrar primeras filas para diagnóstico
+cat("\n📋 ESTRUCTURA DE DATOS DE CIECL:\n")
+print(head(descripciones_cie, 3))
+cat("\n")
+
+# Asegurar que existe la columna descripcion_completa (workaround para bug de ciecl)
+if (!"descripcion_completa" %in% names(descripciones_cie)) {
+  cat("⚠ Columna 'descripcion_completa' no existe, creándola manualmente...\n")
+  if ("descripcion" %in% names(descripciones_cie)) {
+    descripciones_cie <- descripciones_cie %>%
+      mutate(descripcion_completa = paste0(codigo, " - ", descripcion))
+    cat("✓ Columna creada desde 'descripcion'\n\n")
+  } else if ("desc" %in% names(descripciones_cie)) {
+    descripciones_cie <- descripciones_cie %>%
+      mutate(descripcion_completa = paste0(codigo, " - ", desc))
+    cat("✓ Columna creada desde 'desc'\n\n")
+  } else {
+    cat("❌ ERROR: No se encontró columna de descripción en los datos de ciecl\n")
+    cat("   Columnas disponibles:", paste(names(descripciones_cie), collapse = ", "), "\n\n")
+  }
+} else {
+  cat("✓ Columna 'descripcion_completa' encontrada en datos de ciecl\n\n")
+}
+
+# Unir con datos originales
 cat("Uniendo con datos originales...\n")
 datos_diag_preparados <- datos_filtrados %>%
   left_join(
-    descripciones_cie %>% select(codigo, DIAG_COMPLETO = descripcion_completa),
-    by = c("DIAG1" = "codigo")
+    descripciones_cie %>% select(codigo_original, DIAG_COMPLETO = descripcion_completa),
+    by = c("DIAG1" = "codigo_original")
   ) %>%
   mutate(
     # Si no se encontró descripción, usar solo el código original
     DIAG_COMPLETO = if_else(is.na(DIAG_COMPLETO), DIAG1, DIAG_COMPLETO)
   )
+
+# Verificar datos unidos
+cat("\n📋 MUESTRA DE DATOS UNIDOS (DIAG_COMPLETO):\n")
+muestra_diags <- datos_diag_preparados %>% 
+  select(DIAG1, DIAG_COMPLETO) %>% 
+  distinct() %>% 
+  slice_head(n = 5)
+print(muestra_diags)
+cat("\n")
 
 tiempo <- as.numeric(difftime(Sys.time(), inicio, units = "secs"))
 
@@ -221,8 +270,8 @@ for(i in 1:nrow(top5_mas_prevalentes)) {
   cat(sprintf("   • Diferencia de tasas: %.2f x1000 p-a\n", 
               top5_mas_prevalentes$dif_tasa_anual[i]))
   cat(sprintf("   • Casos PO: %s | Casos PG: %s\n\n",
-              format(top5_mas_prevalentes$n_po[i], big.mark = ","),
-              format(top5_mas_prevalentes$n_pg[i], big.mark = ",")))
+              format(top5_mas_prevalentes$casos_po[i], big.mark = ","),
+              format(top5_mas_prevalentes$casos_pg[i], big.mark = ",")))
 }
 ```
 
@@ -330,8 +379,8 @@ for(i in 1:nrow(top5_menos_prevalentes)) {
   cat(sprintf("   • Diferencia de tasas: %.2f x1000 p-a\n", 
               top5_menos_prevalentes$dif_tasa_anual[i]))
   cat(sprintf("   • Casos PO: %s | Casos PG: %s\n\n",
-              format(top5_menos_prevalentes$n_po[i], big.mark = ","),
-              format(top5_menos_prevalentes$n_pg[i], big.mark = ",")))
+              format(top5_menos_prevalentes$casos_po[i], big.mark = ","),
+              format(top5_menos_prevalentes$casos_pg[i], big.mark = ",")))
 }
 ```
 
@@ -422,10 +471,10 @@ cat("\n═══ RESUMEN COMBINADO TOP 5 MÁS Y MENOS ═══\n\n")
 resumen_top_bottom <- bind_rows(
   top5_mas_prevalentes %>%
     mutate(categoria = "TOP 5 MÁS PREVALENTES") %>%
-    select(categoria, DIAG_COMPLETO, n_po, n_pg, tasa_anual_po, tasa_anual_pg, rr_crudo, dif_tasa_anual),
+    select(categoria, DIAG_COMPLETO, casos_po, casos_pg, tasa_anual_po, tasa_anual_pg, rr_crudo, dif_tasa_anual),
   top5_menos_prevalentes %>%
     mutate(categoria = "TOP 5 MENOS PREVALENTES") %>%
-    select(categoria, DIAG_COMPLETO, n_po, n_pg, tasa_anual_po, tasa_anual_pg, rr_crudo, dif_tasa_anual)
+    select(categoria, DIAG_COMPLETO, casos_po, casos_pg, tasa_anual_po, tasa_anual_pg, rr_crudo, dif_tasa_anual)
 )
 
 # Crear tabla con flextable
@@ -434,8 +483,8 @@ tabla_resumen <- resumen_top_bottom %>%
   set_header_labels(
     categoria = "Categoría",
     DIAG_COMPLETO = "Diagnóstico",
-    n_po = "Casos PO",
-    n_pg = "Casos PG",
+    casos_po = "Casos PO",
+    casos_pg = "Casos PG",
     tasa_anual_po = "Tasa PO",
     tasa_anual_pg = "Tasa PG",
     rr_crudo = "RR",
@@ -444,14 +493,14 @@ tabla_resumen <- resumen_top_bottom %>%
   merge_v(j = "categoria") %>%
   valign(j = "categoria", valign = "top") %>%
   colformat_double(j = c("tasa_anual_po", "tasa_anual_pg", "rr_crudo", "dif_tasa_anual"), digits = 2) %>%
-  colformat_num(j = c("n_po", "n_pg"), big.mark = ",") %>%
+  colformat_num(j = c("casos_po", "casos_pg"), big.mark = ",") %>%
   bold(j = "categoria") %>%
   bg(i = ~ categoria == "TOP 5 MÁS PREVALENTES", bg = "#FFEBEE") %>%
   bg(i = ~ categoria == "TOP 5 MENOS PREVALENTES", bg = "#E3F2FD") %>%
   fontsize(size = 8, part = "all") %>%
   width(j = "DIAG_COMPLETO", width = 3.5) %>%
   width(j = "categoria", width = 1.2) %>%
-  width(j = c("n_po", "n_pg"), width = 0.8) %>%
+  width(j = c("casos_po", "casos_pg"), width = 0.8) %>%
   width(j = c("tasa_anual_po", "tasa_anual_pg", "rr_crudo", "dif_tasa_anual"), width = 0.7) %>%
   add_header_lines(values = "Resumen Comparativo: Top 5 Más y Menos Prevalentes en PO") %>%
   add_footer_lines(values = "Tasas: x1000 persona-años | RR: Riesgo Relativo PO/PG | Dif: Diferencia absoluta de tasas") %>%

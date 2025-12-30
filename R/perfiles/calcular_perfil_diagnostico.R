@@ -79,6 +79,7 @@ calcular_perfil_diagnostico <- function(datos,
       
       ranking = dplyr::row_number()
     ) %>%
+    # Asegurar que DIAG_COMPLETO esté presente y al inicio
     dplyr::select(ranking, DIAG_COMPLETO, n_casos, tasa_anual, 
                   prop_x1000_egresos, pct_total, pct_acumulado)
   

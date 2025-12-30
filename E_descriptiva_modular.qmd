@@ -290,7 +290,125 @@ if (!is.null(resultados_cie10$tablas_anuales)) {
 cat("\n✓ Análisis Top CIE-10 completado\n")
 ```
 
-## 9. Resumen
+## 9. Tabla 1: Estadísticas Unificadas de Fuentes de Datos
+
+```{r tabla_unificada_fuentes}
+cat("\n═══ TABLA 1: ESTADÍSTICAS UNIFICADAS DE FUENTES DE DATOS ═══\n\n")
+
+# Crear datos sin duplicados (un registro por RUN, el más reciente)
+datos_unicos <- datos_preparados %>%
+  filter(!is.na(RUN)) %>%
+  arrange(RUN, desc(AÑO)) %>%
+  distinct(RUN, .keep_all = TRUE)
+
+n_egresos <- nrow(datos_analisis)
+n_pacientes <- nrow(datos_unicos)
+
+cat(sprintf("Total egresos hospitalarios: %s\n", format(n_egresos, big.mark = ",")))
+cat(sprintf("Total pacientes únicos: %s\n", format(n_pacientes, big.mark = ",")))
+
+# --- SECCIÓN A: Por Egresos Hospitalarios (con duplicados) ---
+tabla_egresos <- tibble(
+  Fuente = c("RSH", "CONADI", "Egresos Hospitalarios", "Variable Enriquecida"),
+  Variable = c("RSH", "CONADI", "PUEBLO_ORIGINARIO_BIN", "PERTENENCIA2")
+) %>%
+  rowwise() %>%
+  mutate(
+    Reportados = sum(!is.na(datos_analisis[[Variable]]) & datos_analisis[[Variable]] %in% c(0, 1)),
+    Pertenece = sum(datos_analisis[[Variable]] == 1, na.rm = TRUE),
+    `No Pertenece` = sum(datos_analisis[[Variable]] == 0, na.rm = TRUE),
+    `% Completitud` = Reportados / n_egresos * 100,
+    `% Pertenece` = ifelse(Reportados > 0, Pertenece / Reportados * 100, NA_real_)
+  ) %>%
+  ungroup() %>%
+  select(-Variable)
+
+# --- SECCIÓN B: Por Paciente Único (sin duplicados) ---
+tabla_pacientes <- tibble(
+  Fuente = c("RSH", "CONADI", "Egresos Hospitalarios", "Variable Enriquecida"),
+  Variable = c("RSH", "CONADI", "PUEBLO_ORIGINARIO_BIN", "PERTENENCIA2")
+) %>%
+  rowwise() %>%
+  mutate(
+    Reportados_pac = sum(!is.na(datos_unicos[[Variable]]) & datos_unicos[[Variable]] %in% c(0, 1)),
+    Pertenece_pac = sum(datos_unicos[[Variable]] == 1, na.rm = TRUE),
+    `No Pertenece_pac` = sum(datos_unicos[[Variable]] == 0, na.rm = TRUE),
+    `% Completitud_pac` = Reportados_pac / n_pacientes * 100,
+    `% Pertenece_pac` = ifelse(Reportados_pac > 0, Pertenece_pac / Reportados_pac * 100, NA_real_)
+  ) %>%
+  ungroup() %>%
+  select(-Variable)
+
+# --- Combinar ambas tablas ---
+tabla_unificada <- tabla_egresos %>%
+  left_join(tabla_pacientes, by = "Fuente") %>%
+  transmute(
+    Fuente,
+    # Por egresos
+    `N Reportados (Egr.)` = format(Reportados, big.mark = ","),
+    `% Complet. (Egr.)` = sprintf("%.1f%%", `% Completitud`),
+    `N Pertenece (Egr.)` = format(Pertenece, big.mark = ","),
+    `% Pert. (Egr.)` = sprintf("%.2f%%", `% Pertenece`),
+    # Por pacientes
+    `N Reportados (Pac.)` = format(Reportados_pac, big.mark = ","),
+    `% Complet. (Pac.)` = sprintf("%.1f%%", `% Completitud_pac`),
+    `N Pertenece (Pac.)` = format(Pertenece_pac, big.mark = ","),
+    `% Pert. (Pac.)` = sprintf("%.2f%%", `% Pertenece_pac`)
+  )
+
+# Crear flextable unificada
+ft_tabla1 <- tabla_unificada %>%
+  flextable() %>%
+  set_caption("Tabla 1. Completitud y prevalencia de pertenencia a pueblos originarios según fuente de datos") %>%
+  add_header_row(
+    values = c("", "Por Egresos Hospitalarios", "Por Paciente Único"),
+    colwidths = c(1, 4, 4)
+  ) %>%
+  theme_booktabs() %>%
+  bold(j = "Fuente") %>%
+  bold(j = c("% Pert. (Egr.)", "% Pert. (Pac.)")) %>%
+  align(j = 2:9, align = "center", part = "all") %>%
+  fontsize(size = 9, part = "body") %>%
+  fontsize(size = 9, part = "header") %>%
+  add_footer_lines(c(
+    sprintf("N egresos hospitalarios = %s (2010-2022, permite duplicados por paciente). N pacientes únicos = %s (un registro por RUN, el más reciente).",
+            format(n_egresos, big.mark = ","), format(n_pacientes, big.mark = ",")),
+    "Completitud: proporción de registros con información reportada (pertenece/no pertenece). Variable Enriquecida: integra RSH, CONADI, Censo 2017 y autodeclaración hospitalaria.",
+    "Fuentes: DEIS, Ministerio de Salud; RSH, Ministerio de Desarrollo Social; CONADI; Censo 2017, INE. Elaboración propia."
+  )) %>%
+  fontsize(size = 8, part = "footer") %>%
+  italic(part = "footer") %>%
+  autofit()
+
+print(ft_tabla1)
+
+# Guardar en múltiples formatos
+guardar_tabla_html(ft_tabla1, "tabla1_fuentes_unificada.html")
+guardar_como_jpg(ft_tabla1, "tabla1_fuentes_unificada")
+
+# Guardar en final_resultados como DOCX con formato horizontal y ajustado
+ft_tabla1_final <- ft_tabla1 %>%
+  padding(padding = 1, part = "all") %>%
+  line_spacing(space = 1, part = "all")
+
+# Configurar página horizontal
+seccion_horizontal <- officer::prop_section(
+  page_size = officer::page_size(orient = "landscape"),
+  page_margins = officer::page_mar(bottom = 0.5, top = 0.5, right = 0.5, left = 0.5, gutter = 0)
+)
+
+save_as_docx(
+  `Tabla 1. Completitud y prevalencia de pertenencia a pueblos originarios según fuente de datos` = ft_tabla1_final,
+  path = "resultados_tesis/final_resultados/Tabla_1_Fuentes_Unificada.docx",
+  pr_section = seccion_horizontal
+)
+
+cat("\n✓ Tabla 1 unificada guardada en:\n")
+cat("  - resultados_tesis/tabla1_fuentes_unificada.html\n")
+cat("  - resultados_tesis/final_resultados/Tabla_1_Fuentes_Unificada.docx\n")
+```
+
+## 10. Resumen
 
 ```{r resumen}
 cat("\n═══════════════════════════════════════════════════\n")

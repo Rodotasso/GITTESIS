@@ -36,3 +36,14 @@ Meta/
 .DS_Store
 __pycache__/
 *.pyc
+# IDE/Tool config
+.claude/
+
+# HTML outputs (regenerables desde .qmd)
+*.html
+
+# Test files
+test_*.R
+
+# Windows null device
+nul
