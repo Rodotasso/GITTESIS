@@ -1,0 +1,356 @@
+---
+title: "Estadísticas Descriptivas - Primer Párrafo de Resultados"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+---
+
+# Objetivo
+
+Este documento calcula las estadísticas descriptivas básicas utilizadas en el primer párrafo de la sección de Resultados del artículo para Salud Pública de México.
+
+**Variables calculadas:**
+
+- Total de egresos hospitalarios
+- Pacientes únicos (RUN)
+- Múltiples hospitalizaciones
+- Distribución por sexo
+- Período de estudio
+- Distribución por región de establecimiento
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+# Cargar datos
+load("BBDD_homologados.RData")
+datos <- datos_homologados
+
+cat("Base de datos cargada correctamente\n")
+cat("Columnas disponibles:", paste(names(datos), collapse = ", "), "\n\n")
+```
+
+# 1. Totales de Egresos y Pacientes Únicos
+
+```{r totales}
+# Total de egresos hospitalarios (filas en la base)
+total_egresos <- nrow(datos)
+
+# Pacientes únicos (RUN únicos)
+pacientes_unicos <- datos %>%
+  filter(!is.na(RUN)) %>%
+  distinct(RUN) %>%
+  nrow()
+
+# Egresos con RUN repetido (re-hospitalizaciones)
+egresos_repetidos <- total_egresos - pacientes_unicos
+
+# Promedio de egresos por paciente
+promedio_egresos_paciente <- total_egresos / pacientes_unicos
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  TOTALES DE EGRESOS Y PACIENTES\n")
+cat("═══════════════════════════════════════════════════\n\n")
+cat("Total de egresos hospitalarios:", format(total_egresos, big.mark = ","), "\n")
+cat("Pacientes únicos (RUN):", format(pacientes_unicos, big.mark = ","), "\n")
+cat("Egresos de pacientes con múltiples hospitalizaciones:", format(egresos_repetidos, big.mark = ","), "\n")
+cat("Promedio de egresos por paciente:", round(promedio_egresos_paciente, 2), "\n\n")
+```
+
+# 2. Distribución por Sexo
+
+```{r sexo}
+# Distribución por sexo - total egresos
+sexo_egresos <- datos %>%
+  count(GLOSA_SEXO) %>%
+  mutate(
+    porcentaje = n / sum(n) * 100,
+    porcentaje_fmt = sprintf("%.1f%%", porcentaje)
+  )
+
+# Distribución por sexo - pacientes únicos
+sexo_pacientes <- datos %>%
+  filter(!is.na(RUN)) %>%
+  distinct(RUN, .keep_all = TRUE) %>%
+  count(GLOSA_SEXO) %>%
+  mutate(
+    porcentaje = n / sum(n) * 100,
+    porcentaje_fmt = sprintf("%.1f%%", porcentaje)
+  )
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  DISTRIBUCIÓN POR SEXO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("Por egresos hospitalarios:\n")
+print(sexo_egresos)
+
+cat("\nPor pacientes únicos:\n
+")
+print(sexo_pacientes)
+
+# Extraer valores para el texto
+n_hombres_egresos <- sexo_egresos %>% filter(GLOSA_SEXO == "HOMBRE") %>% pull(n)
+n_mujeres_egresos <- sexo_egresos %>% filter(GLOSA_SEXO == "MUJER") %>% pull(n)
+pct_hombres_egresos <- sexo_egresos %>% filter(GLOSA_SEXO == "HOMBRE") %>% pull(porcentaje)
+pct_mujeres_egresos <- sexo_egresos %>% filter(GLOSA_SEXO == "MUJER") %>% pull(porcentaje)
+
+n_hombres_pac <- sexo_pacientes %>% filter(GLOSA_SEXO == "HOMBRE") %>% pull(n)
+n_mujeres_pac <- sexo_pacientes %>% filter(GLOSA_SEXO == "MUJER") %>% pull(n)
+
+cat("\n--- Para el texto ---\n")
+cat("Egresos hombres:", format(n_hombres_egresos, big.mark = ","), sprintf("(%.1f%%)", pct_hombres_egresos), "\n")
+cat("Egresos mujeres:", format(n_mujeres_egresos, big.mark = ","), sprintf("(%.1f%%)", pct_mujeres_egresos), "\n")
+cat("Pacientes únicos hombres:", format(n_hombres_pac, big.mark = ","), "\n")
+cat("Pacientes únicos mujeres:", format(n_mujeres_pac, big.mark = ","), "\n")
+```
+
+# 3. Período de Estudio
+
+```{r periodo}
+# Años disponibles
+anos <- datos %>%
+  filter(AÑO != "No reportado") %>%
+  pull(AÑO) %>%
+  unique() %>%
+  sort()
+
+ano_min <- min(anos)
+ano_max <- max(anos)
+n_anos <- length(anos)
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  PERÍODO DE ESTUDIO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+cat("Período:", ano_min, "-", ano_max, "\n")
+cat("Número de años:", n_anos, "\n")
+cat("Años incluidos:", paste(anos, collapse = ", "), "\n")
+```
+
+# 4. Distribución por Año
+
+```{r por_ano}
+egresos_por_ano <- datos %>%
+  filter(AÑO != "No reportado") %>%
+  count(AÑO) %>%
+  arrange(AÑO)
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  EGRESOS POR AÑO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+print(egresos_por_ano)
+
+cat("\nPromedio anual de egresos:", format(round(mean(egresos_por_ano$n)), big.mark = ","), "\n")
+```
+
+# 5. Edad
+
+```{r edad}
+# Estadísticas de edad
+if ("EDAD" %in% names(datos)) {
+  edad_stats <- datos %>%
+    filter(!is.na(EDAD), EDAD >= 0, EDAD <= 120) %>%
+    summarise(
+      media = mean(EDAD),
+      mediana = median(EDAD),
+      de = sd(EDAD),
+      min = min(EDAD),
+      max = max(EDAD),
+      q25 = quantile(EDAD, 0.25),
+      q75 = quantile(EDAD, 0.75)
+    )
+
+  cat("═══════════════════════════════════════════════════\n")
+  cat("  ESTADÍSTICAS DE EDAD\n")
+  cat("═══════════════════════════════════════════════════\n\n")
+  cat("Media:", round(edad_stats$media, 1), "años\n")
+  cat("Mediana:", round(edad_stats$mediana, 1), "años\n")
+  cat("DE:", round(edad_stats$de, 1), "\n")
+  cat("Rango:", edad_stats$min, "-", edad_stats$max, "años\n")
+  cat("RIQ:", edad_stats$q25, "-", edad_stats$q75, "años\n")
+}
+```
+
+# 6. Pertenencia a Pueblos Originarios
+
+```{r pertenencia}
+# Variable enriquecida
+pertenencia_stats <- datos %>%
+  count(PERTENENCIA2) %>%
+  mutate(
+    categoria = case_when(
+      PERTENENCIA2 == 1 ~ "Pertenece",
+      PERTENENCIA2 == 0 ~ "No pertenece",
+      TRUE ~ "No reportado"
+    ),
+    porcentaje = n / sum(n) * 100
+  )
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  PERTENENCIA A PUEBLOS ORIGINARIOS (Variable Enriquecida)\n")
+cat("═══════════════════════════════════════════════════\n\n")
+print(pertenencia_stats)
+
+n_pertenece <- pertenencia_stats %>% filter(categoria == "Pertenece") %>% pull(n)
+pct_pertenece <- pertenencia_stats %>% filter(categoria == "Pertenece") %>% pull(porcentaje)
+
+cat("\n--- Para el texto ---\n")
+cat("Pertenecientes a PPOO:", format(n_pertenece, big.mark = ","), sprintf("(%.2f%%)", pct_pertenece), "\n")
+```
+
+# 7. Regiones
+
+```{r regiones}
+# Distribución por región de establecimiento
+regiones <- datos %>%
+  filter(!is.na(NOMBRE_REGION)) %>%
+  count(NOMBRE_REGION) %>%
+  mutate(
+    porcentaje = n / sum(n) * 100,
+    porcentaje_fmt = sprintf("%.2f%%", porcentaje)
+  ) %>%
+  arrange(desc(n))
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  DISTRIBUCIÓN POR REGIÓN DE ESTABLECIMIENTO\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+print(regiones, n = 20)
+
+n_regiones <- nrow(regiones)
+
+cat("\n--- Resumen para el texto ---\n")
+cat("Total de regiones:", n_regiones, "\n\n")
+
+# Top 3 regiones
+cat("Mayor representación:\n")
+for(i in 1:3) {
+  cat(sprintf("  %d. %s: %s egresos (%.1f%%)\n",
+      i,
+      regiones$NOMBRE_REGION[i],
+      format(regiones$n[i], big.mark = ","),
+      regiones$porcentaje[i]))
+}
+
+# Región con menor representación (excluyendo NA)
+cat("\nMenor representación:\n")
+cat(sprintf("  %s: %s egresos (%.2f%%)\n",
+    regiones$NOMBRE_REGION[n_regiones],
+    format(regiones$n[n_regiones], big.mark = ","),
+    regiones$porcentaje[n_regiones]))
+
+# Guardar variables para resumen
+region_mayor <- regiones$NOMBRE_REGION[1]
+region_mayor_pct <- regiones$porcentaje[1]
+region_2 <- regiones$NOMBRE_REGION[2]
+region_2_pct <- regiones$porcentaje[2]
+region_3 <- regiones$NOMBRE_REGION[3]
+region_3_pct <- regiones$porcentaje[3]
+region_menor <- regiones$NOMBRE_REGION[n_regiones]
+region_menor_pct <- regiones$porcentaje[n_regiones]
+```
+
+# 8. Resumen para Copiar al Artículo
+
+```{r resumen_final}
+cat("\n")
+cat("╔══════════════════════════════════════════════════════════════════╗\n")
+cat("║           RESUMEN DE DATOS PARA EL ARTÍCULO                      ║\n")
+cat("╚══════════════════════════════════════════════════════════════════╝\n\n")
+
+cat("PÁRRAFO SUGERIDO PARA RESULTADOS:\n")
+cat("─────────────────────────────────────────────────────────────────────\n\n")
+
+# Simplificar nombres de regiones para el texto
+region_mayor_txt <- gsub("Región ", "", region_mayor)
+region_2_txt <- gsub("Región ", "", region_2)
+region_3_txt <- gsub("Región Del |Región De ", "", region_3)
+region_menor_txt <- gsub("Región De Aysén del General Carlos Ibañez del Campo", "Aysén", region_menor)
+
+parrafo <- sprintf(
+"Se analizaron %s egresos hospitalarios correspondientes a %s pacientes
+únicos durante el período %s-%s en Chile. Del total de egresos, %s
+correspondieron a mujeres (%.1f%%) y %s a hombres (%.1f%%).
+Se identificaron %s egresos de pacientes con múltiples hospitalizaciones
+durante el período (promedio de %.2f egresos por paciente). Los egresos
+provinieron de establecimientos de las %d regiones del país, con mayor
+concentración en la %s (%.1f%%), seguida por las regiones del
+%s (%.1f%%) y %s (%.1f%%), mientras que la Región de %s
+presentó la menor proporción (%.1f%%).",
+  format(total_egresos, big.mark = ","),
+  format(pacientes_unicos, big.mark = ","),
+  ano_min,
+  ano_max,
+  format(n_mujeres_egresos, big.mark = ","),
+  pct_mujeres_egresos,
+  format(n_hombres_egresos, big.mark = ","),
+  pct_hombres_egresos,
+  format(egresos_repetidos, big.mark = ","),
+  promedio_egresos_paciente,
+  n_regiones,
+  region_mayor_txt,
+  region_mayor_pct,
+  gsub("Región Del ", "", region_2),
+  region_2_pct,
+  gsub("Región De ", "", region_3),
+  region_3_pct,
+  region_menor_txt,
+  region_menor_pct
+)
+
+cat(parrafo)
+cat("\n\n─────────────────────────────────────────────────────────────────────\n")
+```
+
+# 9. Tabla Resumen de Estadísticas
+
+```{r tabla_resumen}
+cat("═══════════════════════════════════════════════════\n")
+cat("  TABLA RESUMEN DE ESTADÍSTICAS DESCRIPTIVAS\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+resumen <- data.frame(
+  Estadistica = c(
+    "Total egresos hospitalarios",
+    "Pacientes únicos (RUN)",
+    "Egresos múltiples hospitalizaciones",
+    "Promedio egresos por paciente",
+    "Período de estudio",
+    "Número de años",
+    "Egresos mujeres",
+    "Porcentaje mujeres",
+    "Egresos hombres",
+    "Porcentaje hombres",
+    "Número de regiones",
+    "Región mayor concentración",
+    "Porcentaje región mayor",
+    "Región menor concentración",
+    "Porcentaje región menor"
+  ),
+  Valor = c(
+    format(total_egresos, big.mark = ","),
+    format(pacientes_unicos, big.mark = ","),
+    format(egresos_repetidos, big.mark = ","),
+    round(promedio_egresos_paciente, 2),
+    paste0(ano_min, "-", ano_max),
+    n_anos,
+    format(n_mujeres_egresos, big.mark = ","),
+    sprintf("%.1f%%", pct_mujeres_egresos),
+    format(n_hombres_egresos, big.mark = ","),
+    sprintf("%.1f%%", pct_hombres_egresos),
+    n_regiones,
+    region_mayor,
+    sprintf("%.1f%%", region_mayor_pct),
+    region_menor,
+    sprintf("%.2f%%", region_menor_pct)
+  )
+)
+
+print(resumen, row.names = FALSE)
+```
+
+---
+**Generado**: `r Sys.Date()`

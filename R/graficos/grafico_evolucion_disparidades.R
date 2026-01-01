@@ -2,10 +2,10 @@
 #'
 #' Genera un gráfico de líneas mostrando la evolución temporal de la representación
 #' de pueblos originarios en diferentes grupos diagnósticos CIE-10, comparado con
-#' la tendencia general de PERTENENCIA2.
+#' la tendencia general de la variable enriquecida.
 #'
 #' @param datos_evolucion Data frame con datos de evolución temporal por grupo
-#' @param tendencia_pertenencia2 Data frame con tendencia anual de PERTENENCIA2
+#' @param tendencia_pertenencia2 Data frame con tendencia anual de variable enriquecida
 #' @param pct_variable_enriquecida Numeric. Porcentaje de referencia (Variable Enriquecida)
 #' @param clasificacion_grupos Data frame con clasificación de grupos
 #' @param colores_disparidad Named vector con colores por grupo
@@ -42,31 +42,29 @@ grafico_evolucion_disparidades <- function(datos_evolucion,
                                            subtitulo = NULL,
                                            ancho = 15,
                                            alto = 11) {
-  
+
   # Cargar librería necesaria
   require(ggplot2)
   require(dplyr)
   require(stringr)
-  
+
   # Validaciones
   if (nrow(datos_evolucion) == 0) {
     stop("datos_evolucion está vacío. No hay datos para graficar.")
   }
-  
+
   # Calcular límite superior del eje Y
   max_porcentaje <- max(datos_evolucion$porcentaje, na.rm = TRUE)
   limite_y <- max(40, ceiling(max_porcentaje / 5) * 5 + 5)
-  
-  # Títulos por defecto
+
+  # Títulos por defecto (sin subtítulo, se mueve a notas)
   if (is.null(titulo)) {
-    titulo <- "Evolución temporal: Grupos CIE-10 con sobre/subrepresentación de Pueblos Originarios"
+    titulo <- "Evolución temporal de la representación de personas pertenecientes a pueblos originarios por grupo diagnóstico CIE-10"
   }
-  
+
+  # Subtítulo vacío por defecto (información se mueve a notas al pie)
   if (is.null(subtitulo)) {
-    subtitulo <- paste0(
-      "Comparación con tendencia anual de PERTENENCIA2 (Variable Enriquecida). ",
-      "Grupos con diferencia ≥ ", sprintf("%.1f", umbral), " puntos porcentuales + grupos clave"
-    )
+    subtitulo <- NULL
   }
   
   # Número de años y grupos
@@ -131,41 +129,41 @@ grafico_evolucion_disparidades <- function(datos_evolucion,
       ymin = -Inf, ymax = mean(tendencia_pertenencia2$pct_po),
       fill = "#3498DB", alpha = 0.04
     ) +
-    
-    # Etiquetas de zonas
+
+    # Etiquetas de zonas (sin mayúsculas excesivas)
     annotate(
-      "text", 
-      x = 2, 
-      y = limite_y * 0.92, 
-      label = "ZONA DE\nSOBRERREPRESENTACIÓN",
+      "text",
+      x = 2,
+      y = limite_y * 0.95,
+      label = "Sobrerrepresentacion",
       hjust = 0,
-      size = 4,
-      color = "#C62828",
-      alpha = 0.8,
-      fontface = "bold",
-      lineheight = 0.9
-    ) +
-    annotate(
-      "text", 
-      x = n_anios - 1, 
-      y = mean(tendencia_pertenencia2$pct_po) * 0.4, 
-      label = "ZONA DE\nSUBREPRESENTACIÓN",
-      hjust = 1,
-      size = 4,
-      color = "#1565C0",
-      alpha = 0.8,
-      fontface = "bold",
-      lineheight = 0.9
-    ) +
-    
-    # Anotación de línea de tendencia PERTENENCIA2
-    annotate(
-      "text", 
-      x = n_anios / 2, 
-      y = max(tendencia_pertenencia2$pct_po) + 1.5, 
-      label = "Tendencia PERTENENCIA2\n(Variable Enriquecida año a año)",
-      hjust = 0.5,
       size = 3.5,
+      color = "#C62828",
+      alpha = 0.7,
+      fontface = "italic",
+      lineheight = 0.9
+    ) +
+    annotate(
+      "text",
+      x = n_anios - 1,
+      y = 2,
+      label = "Subrepresentacion",
+      hjust = 1,
+      size = 3.5,
+      color = "#1565C0",
+      alpha = 0.7,
+      fontface = "italic",
+      lineheight = 0.9
+    ) +
+
+    # Anotación de línea de tendencia (referencia general)
+    annotate(
+      "text",
+      x = n_anios / 2,
+      y = max(tendencia_pertenencia2$pct_po) + 1.5,
+      label = "Tendencia general\n(variable enriquecida)",
+      hjust = 0.5,
+      size = 3.2,
       fontface = "bold",
       color = "#2C3E50",
       lineheight = 0.9
@@ -174,15 +172,16 @@ grafico_evolucion_disparidades <- function(datos_evolucion,
     # Líneas de evolución temporal (DATOS PRINCIPALES)
     geom_line(alpha = 0.9) +
     geom_point(size = 3, alpha = 0.9) +
-    
-    # Etiquetas finales en el extremo derecho
+
+    # Etiquetas finales: nombres de grupos diagnósticos (no porcentajes)
     geom_text(
       data = datos_evolucion %>% filter(AÑO == max(AÑO)),
-      aes(label = sprintf("%.1f%%", porcentaje), x = AÑO, y = porcentaje),
-      hjust = -0.3,
-      size = 3.5,
-      fontface = "bold",
-      show.legend = FALSE
+      aes(label = str_wrap(Grupo_CIE10, width = 25), x = AÑO, y = porcentaje),
+      hjust = -0.05,
+      size = 2.8,
+      fontface = "plain",
+      show.legend = FALSE,
+      lineheight = 0.85
     ) +
     
     # Escalas
@@ -201,20 +200,22 @@ grafico_evolucion_disparidades <- function(datos_evolucion,
       limits = c(0, limite_y),
       expand = c(0.02, 0)
     ) +
-    scale_x_discrete(expand = expansion(add = c(0.5, 1.5))) +
+    scale_x_discrete(expand = expansion(add = c(0.5, 3.5))) +
     
     # Etiquetas
     labs(
       title = titulo,
       subtitle = subtitulo,
       x = "Año",
-      y = "% de Pueblos Originarios dentro de cada grupo CIE-10",
+      y = "Porcentaje de atenciones de personas\npertenecientes a pueblos originarios",
       caption = paste0(
-        "Nota: La línea GRIS OSCURO GRUESA muestra la evolución del % de PO en TODOS los egresos (tendencia PERTENENCIA2).\n",
-        "Las LÍNEAS DE COLORES muestran el % de PO dentro de cada grupo CIE-10 específico.\n",
-        "ROJOS = Sobrerrepresentación (arriba de tendencia). AZULES/VERDES = Subrepresentación (abajo de tendencia).\n",
-        "Umbral: ≥", sprintf("%.1f", umbral), "pp. Datos: egresos 2010-2023. N grupos: ", n_grupos, " | ",
-        "Variable Enriquecida promedio: ", sprintf("%.1f%%", pct_variable_enriquecida)
+        "Notas: Línea negra gruesa: tendencia general de la variable enriquecida (todos los egresos). ",
+        "Línea gris punteada: promedio general del período (", sprintf("%.1f%%", pct_variable_enriquecida), "). ",
+        "Banda gris: intervalo de ±0.5 puntos porcentuales respecto al promedio.\n",
+        "Líneas de colores: porcentaje de atenciones de personas pertenecientes a pueblos originarios dentro de cada grupo diagnóstico. ",
+        "Colores rojos/naranjas: sobrerrepresentación (sobre la tendencia). Colores azules/verdes: subrepresentación (bajo la tendencia).\n",
+        "Se incluyen grupos con diferencia ≥", sprintf("%.1f", umbral), " puntos porcentuales respecto a la tendencia general. ",
+        "Fuente: Egresos hospitalarios 2010-2022, Departamento de Estadísticas e Información de Salud. Elaboración propia."
       )
     ) +
     
