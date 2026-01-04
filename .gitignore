@@ -38,6 +38,7 @@ __pycache__/
 *.pyc
 # IDE/Tool config
 .claude/
+CLAUDE.md
 
 # HTML outputs (regenerables desde .qmd)
 *.html
