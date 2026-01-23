@@ -11,13 +11,9 @@ format:
         toc-depth: 3
 ---
 
-
-
 # Perfiles Epidemiológicos - Egresos Hospitalarios
 
 ## 1. Configuración
-
-
 
 ```{r setup, message=FALSE, warning=FALSE}
 suppressPackageStartupMessages({
@@ -28,40 +24,29 @@ suppressPackageStartupMessages({
 })
 
 # Cargar funciones y datos
-source("R/cargar_funciones.R")
-load("BBDD_homologados.RData")
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
 
 cat("- Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
 ```
 
-
-
 ## 2. Preparación y Denominadores
 
-### 2.1. Procesar diagnósticos con descripciones CIE-10
-
-
+### 2.1. Procesar diagnósticos con descripciones CIE-10 (PAQUETE ciecl)
 
 ```{r preparar_datos}
 cat("═══ PREPARANDO DATOS Y DENOMINADORES ═══\n\n")
 
-# Concatenar códigos CIE-10 con descripciones en español (FONASA)
+# Concatenar códigos CIE-10 con descripciones usando paquete ciecl
+# Base de datos oficial MINSAL/DEIS v2018 con 39,873 códigos
 datos_diag_preparados <- datos_homologados %>%
   filter(!is.na(DIAG1), AÑO != "No reportado") %>%
-  concatenar_diag_cie10("DIAG1", "DIAG_COMPLETO")
+  concatenar_diag_ciecl("DIAG1", "DIAG_COMPLETO", verbose = TRUE)
 
 cat("\n")
-
-# Obtener códigos únicos
-n_codigos <- length(unique(datos_diag_preparados$DIAG1))
-cat("- Total códigos diagnósticos únicos:", format(n_codigos, big.mark = ","), "\n\n")
 ```
 
-
-
 ### 2.2. Denominadores poblacionales (Censo 2017)
-
-
 
 ```{r denominadores}
 cat("═══ CARGANDO DENOMINADORES POBLACIONALES ═══\n")
@@ -115,8 +100,6 @@ cat("  • Población General:", sprintf("%.2f", tasa_anual_pg), "x1000\n")
 cat("  • Diferencia (PO - PG):", sprintf("%.2f", tasa_anual_po - tasa_anual_pg), "x1000\n")
 ```
 
-
-
 ## 3. Estandarización por Edad
 
 ::: {.callout-warning}
@@ -130,8 +113,6 @@ Esta sección requiere crear una función adicional para extraer estructura etar
 
 **Nota metodológica**: Las tasas y razones de riesgo (RR) presentadas en las secciones siguientes NO están ajustadas por edad y pueden estar confundidas por diferencias en estructura etaria entre poblaciones.
 :::
-
-
 
 ```{r estandarizacion_pendiente, eval=FALSE}
 # CÓDIGO PENDIENTE - No ejecutar hasta implementar función de censo por edad
@@ -201,13 +182,9 @@ Esta sección requiere crear una función adicional para extraer estructura etar
 # cat("Diferencia absoluta de tasas:", sprintf("%.2f", tasa_std_po - tasa_std_pg), "x1000\n")
 ```
 
-
-
 ## 4. Top 20 Diagnósticos - Pueblos Originarios
 
 ### 4.1. Tabla con tasas y proporciones
-
-
 
 ```{r perfil_po_tabla}
 cat("\n═══ TOP 20 DIAGNÓSTICOS - PUEBLOS ORIGINARIOS ═══\n")
@@ -243,11 +220,7 @@ cat("\n- Top 20 diagnósticos representan:",
     "del total de egresos PO\n")
 ```
 
-
-
 ### 4.2. Gráfico - Top 20 PO
-
-
 
 ```{r perfil_po_grafico}
 cat("═══ GRÁFICO TOP 20 - PUEBLOS ORIGINARIOS ═══\n")
@@ -268,13 +241,9 @@ guardar_multiformato(graf_perfil_po, "perfiles/perfil_po_top20", 12, 9, 300)
 cat("- Gráfico guardado en: resultados_tesis/perfiles/\n")
 ```
 
-
-
 ## 5. Comparación PO vs PG
 
 ### 5.1. Diagnósticos con mayor diferencia de tasas
-
-
 
 ```{r comparacion_tasas}
 cat("\n═══ COMPARACIÓN DE TASAS PO vs PG ═══\n")
@@ -296,11 +265,7 @@ comparacion_diag <- comparar_perfiles_po_pg(
 cat("\n- Top", nrow(comparacion_diag), "diagnósticos con mayor diferencia identificados\n")
 ```
 
-
-
 ### 5.2. Tabla de comparación
-
-
 
 ```{r tabla_comparacion}
 # Crear tabla de comparación usando función modularizada
@@ -317,11 +282,7 @@ guardar_tabla_html(tabla_comparacion, "perfiles/comparacion_tasas_po_pg.html")
 cat("- Tabla guardada en: resultados_tesis/perfiles/comparacion_tasas_po_pg.html\n")
 ```
 
-
-
 ### 5.3. Gráfico de diferencias de tasas
-
-
 
 ```{r grafico_diferencias}
 cat("═══ GRÁFICO DE DIFERENCIAS ═══\n")
@@ -345,11 +306,7 @@ guardar_multiformato(graf_diferencias, "perfiles/diferencias_tasas_po_pg", 13, 9
 cat("- Gráfico guardado en: resultados_tesis/perfiles/\n")
 ```
 
-
-
 ## 6. Resumen
-
-
 
 ```{r resumen}
 cat("\n═══════════════════════════════════════════════════\n")
@@ -381,7 +338,7 @@ cat("  PENDIENTE: Estandarización por edad\n\n")
 
 cat("FUNCIONES MODULARIZADAS UTILIZADAS:\n")
 cat("  • obtener_poblacion_censo() - Denominadores desde censo2017\n")
-cat("  • concatenar_diag_cie10() - Descripciones CIE-10 FONASA (español)\n")
+cat("  • concatenar_diag_ciecl() - Descripciones CIE-10 con paquete ciecl (39,873 códigos)\n")
 cat("  • calcular_perfil_diagnostico() - Tasas y proporciones por diagnóstico\n")
 cat("  • comparar_perfiles_po_pg() - Comparación con RR crudo\n")
 cat("  • crear_tabla_perfil() - Tablas formateadas estandarizadas\n")
@@ -409,4 +366,3 @@ cat("  Funciones creadas: 5 nuevas funciones en R/perfiles/\n")
 
 ---
 **Generado**: `r Sys.Date()` | **Análisis**: Perfiles epidemiológicos por pertenencia | **Autor**: Rodolfo Tasso
-

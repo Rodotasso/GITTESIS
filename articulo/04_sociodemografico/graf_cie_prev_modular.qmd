@@ -30,8 +30,8 @@ colores_analisis <- c(
 )
 
 # Cargar funciones y datos
-source("R/cargar_funciones.R")
-load("BBDD_homologados.RData")
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
 
 cat("✓ Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
 cat("✓ Variables clave:\n")

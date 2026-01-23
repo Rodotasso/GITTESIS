@@ -50,6 +50,8 @@ extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
   crear_conexion <- is.null(conexion)
   if(crear_conexion) {
     con_censo <- censo2017::censo_conectar()
+    # Garantizar cierre de conexión al salir (incluso si hay error)
+    on.exit(censo2017::censo_desconectar(), add = TRUE)
   } else {
     con_censo <- conexion
   }
@@ -286,10 +288,7 @@ extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
     ) %>%
     dplyr::rename(sexo = sexo_txt)
   
-  # --- PASO 3: CERRAR CONEXION SI FUE CREADA ---
-  if(crear_conexion) {
-    censo2017::censo_desconectar()
-  }
+  # Nota: La conexión se cierra automáticamente via on.exit() si fue creada
   
   if(verbose) cat("\n═══ EXTRACCIÓN COMPLETADA ═══\n\n")
   

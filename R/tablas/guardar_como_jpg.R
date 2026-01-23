@@ -14,6 +14,7 @@
 #   @param zoom            Factor de zoom para mejor calidad (default: 3)
 #   @param vwidth          Ancho del viewport en píxeles (default: 1400)
 #   @param vheight         Alto del viewport en píxeles (default: NULL = auto)
+#   @param dir_salida      Directorio de salida (default: "resultados_tesis")
 #
 # RETORNA:
 #   Invisible TRUE si tiene éxito, FALSE si falla
@@ -25,9 +26,6 @@
 # DEPENDENCIAS:
 #   - flextable::save_as_html o flextable::save_as_image
 #   - webshot2::webshot (método primario)
-#
-# VARIABLES GLOBALES:
-#   - dir_salida: Directorio donde guardar el archivo
 #
 # NOTAS:
 #   - PNG produce mejor calidad para tablas (texto más nítido)
@@ -47,24 +45,16 @@ guardar_como_jpg <- function(tabla_ft,
                              formato = "png",
                              zoom = 3,
                              vwidth = 1400,
-                             vheight = NULL) {
+                             vheight = NULL,
+                             dir_salida = "resultados_tesis") {
   
   # Validar formato
   formato <- tolower(formato)
   if (!formato %in% c("png", "jpg", "jpeg")) {
     formato <- "png"
-    warning("Formato no válido. Usando PNG por defecto.")
+    warning("Formato no valido. Usando PNG por defecto.")
   }
   if (formato == "jpeg") formato <- "jpg"
-  
-  # Verificar que dir_salida existe
-  if (!exists("dir_salida", envir = .GlobalEnv)) {
-    dir_salida <- "resultados_tesis"
-    warning("Variable 'dir_salida' no definida. Usando: ", dir_salida)
-    assign("dir_salida", dir_salida, envir = .GlobalEnv)
-  } else {
-    dir_salida <- get("dir_salida", envir = .GlobalEnv)
-  }
   
   # Crear directorio si no existe
   if (!dir.exists(dir_salida)) {

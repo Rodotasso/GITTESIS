@@ -15,6 +15,7 @@
 #   @param zoom            Factor de zoom para calidad (2-4 recomendado, default: 3)
 #   @param expand          Margen alrededor de la tabla en píxeles (default: 20)
 #   @param fondo           Color de fondo (default: "white")
+#   @param dir_salida      Directorio de salida (default: "resultados_tesis")
 #
 # RETORNA:
 #   Invisible TRUE si tiene éxito, FALSE si falla
@@ -27,9 +28,6 @@
 #   - flextable::save_as_image (método preferido)
 #   - webshot2::webshot (método alternativo)
 #   - officer, magick (para save_as_image)
-#
-# VARIABLES GLOBALES:
-#   - dir_salida: Directorio donde guardar el archivo
 #
 # CALIDAD DE IMAGEN:
 #   - zoom=2: Calidad media (~150 DPI)
@@ -55,16 +53,8 @@ guardar_tabla_png <- function(tabla_ft,
                               nombre_archivo, 
                               zoom = 3,
                               expand = 20,
-                              fondo = "white") {
-  
-  # Verificar que dir_salida existe
-  if (!exists("dir_salida", envir = .GlobalEnv)) {
-    dir_salida <- "resultados_tesis"
-    warning("Variable 'dir_salida' no definida. Usando: ", dir_salida)
-    assign("dir_salida", dir_salida, envir = .GlobalEnv)
-  } else {
-    dir_salida <- get("dir_salida", envir = .GlobalEnv)
-  }
+                              fondo = "white",
+                              dir_salida = "resultados_tesis") {
   
   # Crear directorio si no existe
   if (!dir.exists(dir_salida)) {

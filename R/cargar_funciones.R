@@ -141,9 +141,11 @@ cat("  ✓ desglosar_por_subtipo (NUEVA)\n")
 # ------------------------------------------------------------------------------
 cat("\nCargando funciones de utilidades...\n")
 source(file.path(directorio_r, "utilidades", "concatenar_diag_cie10.R"))
+source(file.path(directorio_r, "utilidades", "concatenar_diag_ciecl.R"))
 source(file.path(directorio_r, "utilidades", "guardar_tabla_jpg.R"))
 source(file.path(directorio_r, "utilidades", "crear_region_nuble.R"))
 cat("  ✓ concatenar_diag_cie10\n")
+cat("  ✓ concatenar_diag_ciecl (paquete ciecl)\n")
 cat("  ✓ guardar_tabla_jpg\n")
 cat("  ✓ crear_region_nuble\n")
 

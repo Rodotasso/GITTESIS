@@ -35,8 +35,8 @@ colores_fuentes <- c("RSH" = "#E41A1C", "CONADI" = "#4DAF4A",
                      "Egresos Hospitalarios" = "#377EB8", "Variable Enriquecida" = "#FF7F00")
 
 # Cargar funciones y datos
-source("R/cargar_funciones.R")
-load("BBDD_homologados.RData")
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
 datos_preparados <- datos_homologados
 
 # Directorio de salida para JPG
@@ -50,6 +50,7 @@ cat("✓", format(nrow(datos_preparados), big.mark = ","), "registros |",
 
 ```{r exploracion}
 glimpse(datos_preparados)
+```
 
 ## 3. Completitud
 

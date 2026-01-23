@@ -26,7 +26,7 @@ Este documento calcula las estadísticas descriptivas básicas utilizadas en el 
 library(tidyverse)
 
 # Cargar datos
-load("BBDD_homologados.RData")
+load("../../BBDD_homologados.RData")
 datos <- datos_homologados
 
 cat("Base de datos cargada correctamente\n")

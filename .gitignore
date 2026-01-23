@@ -32,6 +32,12 @@ Meta/
 /_extensions/
 /DOCUMENTOS TESIS/
 
+# Archivos historicos/experimentales
+/archivo/
+
+# Archivos temporales de Claude Code
+tmpclaude-*
+
 # System files
 .DS_Store
 __pycache__/

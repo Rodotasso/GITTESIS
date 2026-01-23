@@ -1,0 +1,353 @@
+---
+title: "Perfiles Epidemiológicos - Pueblos Originarios"
+subtitle: "Análisis con paquete ciecl"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Perfiles Epidemiológicos - Egresos Hospitalarios
+
+Versión limpia usando exclusivamente el paquete `ciecl` para manejo de códigos CIE-10.
+
+## 1. Configuración
+
+```{r setup, message=FALSE, warning=FALSE}
+# Paquetes necesarios
+library(tidyverse)
+library(flextable)
+library(scales)
+library(censo2017)
+library(ciecl)
+
+# Cargar funciones modulares (sin concatenar_diag_cie10)
+source("../../R/cargar_funciones.R")
+
+# Cargar datos
+load("../../BBDD_homologados.RData")
+
+cat("═══════════════════════════════════════════════════\n")
+cat("  PERFILES EPIDEMIOLÓGICOS - VERSIÓN CIECL\n")
+cat("═══════════════════════════════════════════════════\n\n")
+cat("✓ Base de datos:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+cat("✓ Paquete ciecl: 39,873 códigos CIE-10 oficiales\n\n")
+```
+
+## 2. Preparación de Datos con ciecl
+
+### 2.1. Obtener descripciones CIE-10
+
+```{r preparar_datos}
+cat("═══ PREPARANDO DATOS CON PAQUETE ciecl ═══\n\n")
+
+# Filtrar datos válidos
+datos_filtrados <- datos_homologados %>%
+  filter(!is.na(DIAG1), AÑO != "No reportado")
+
+cat("Registros válidos:", format(nrow(datos_filtrados), big.mark = ","), "\n\n")
+
+# Obtener códigos únicos
+codigos_unicos <- unique(datos_filtrados$DIAG1)
+cat("Códigos únicos a procesar:", length(codigos_unicos), "\n")
+
+# Usar cie_lookup con normalizar = TRUE (acepta códigos sin punto)
+cat("Buscando descripciones con cie_lookup(normalizar = TRUE)...\n\n")
+
+inicio <- Sys.time()
+
+resultado_ciecl <- cie_lookup(
+  codigo = codigos_unicos,
+  normalizar = TRUE,
+  descripcion_completa = TRUE
+)
+
+tiempo <- round(as.numeric(difftime(Sys.time(), inicio, units = "secs")), 2)
+
+cat("✓ Códigos encontrados:", nrow(resultado_ciecl), "de", length(codigos_unicos), "\n")
+cat("✓ Tiempo de búsqueda:", tiempo, "segundos\n")
+cat("✓ Tasa de éxito:", round(nrow(resultado_ciecl)/length(codigos_unicos)*100, 1), "%\n\n")
+
+# Mostrar muestra de resultados
+cat("Muestra de resultados:\n")
+print(head(resultado_ciecl[, c("codigo", "descripcion")], 5))
+```
+
+### 2.2. Unir descripciones con datos
+
+```{r unir_datos}
+cat("\n═══ UNIENDO DESCRIPCIONES CON DATOS ═══\n\n")
+
+# Crear tabla de lookup: código sin punto -> descripción completa
+# Los códigos en BBDD no tienen punto (O800), ciecl devuelve con punto (O80.0)
+# También los códigos pueden terminar en X (I10X -> I10)
+tabla_lookup <- resultado_ciecl %>%
+  mutate(
+    codigo_sin_punto = gsub("\\.", "", codigo),
+    DIAG_COMPLETO = paste0(codigo, " - ", descripcion)
+  ) %>%
+  select(codigo_sin_punto, DIAG_COMPLETO)
+
+# Función para normalizar código de BBDD:
+# 1. Quitar puntos
+# 2. Quitar X final si existe (I10X -> I10)
+normalizar_codigo_bbdd <- function(codigo) {
+  codigo <- gsub("\\.", "", codigo)
+  codigo <- gsub("X$", "", codigo)  # Quitar X final
+  return(codigo)
+}
+
+# Unir con datos originales
+datos_diag_preparados <- datos_filtrados %>%
+  mutate(codigo_busqueda = normalizar_codigo_bbdd(DIAG1)) %>%
+  left_join(tabla_lookup, by = c("codigo_busqueda" = "codigo_sin_punto")) %>%
+  mutate(
+    DIAG_COMPLETO = if_else(is.na(DIAG_COMPLETO), DIAG1, DIAG_COMPLETO)
+  ) %>%
+  select(-codigo_busqueda)
+
+# Verificar resultado
+n_con_desc <- sum(str_detect(datos_diag_preparados$DIAG_COMPLETO, " - "), na.rm = TRUE)
+pct_exito <- round(n_con_desc / nrow(datos_diag_preparados) * 100, 1)
+
+cat("✓ Registros con descripción CIE-10:", format(n_con_desc, big.mark = ","), "\n")
+cat("✓ Tasa de éxito:", pct_exito, "%\n\n")
+
+# Mostrar ejemplos
+cat("Ejemplos de diagnósticos procesados:\n")
+datos_diag_preparados %>%
+  select(DIAG1, DIAG_COMPLETO) %>%
+  distinct() %>%
+  head(10) %>%
+  print()
+```
+
+## 3. Denominadores Poblacionales
+
+```{r denominadores}
+cat("\n═══ CARGANDO DENOMINADORES POBLACIONALES ═══\n")
+
+# Usar función modular
+poblacion_censo <- obtener_poblacion_censo(verbose = TRUE)
+
+# Extraer valores
+pob_po <- poblacion_censo$pob_po
+pob_pg <- poblacion_censo$pob_pg
+pob_total <- pob_po + pob_pg
+
+# Período de estudio
+anos_estudio <- 13  # 2010-2022
+persona_anos_po <- pob_po * anos_estudio
+persona_anos_pg <- pob_pg * anos_estudio
+
+# Total egresos por grupo
+total_egresos_po <- sum(datos_diag_preparados$PERTENENCIA2 == 1, na.rm = TRUE)
+total_egresos_pg <- sum(datos_diag_preparados$PERTENENCIA2 == 0, na.rm = TRUE)
+total_egresos <- nrow(datos_diag_preparados)
+
+cat("\nEGRESOS HOSPITALARIOS (2010-2022):\n")
+cat("  • Pueblos Originarios:", format(total_egresos_po, big.mark = ","), "egresos\n")
+cat("  • Población General:", format(total_egresos_pg, big.mark = ","), "egresos\n")
+cat("  • Total:", format(total_egresos, big.mark = ","), "egresos\n\n")
+
+# Calcular tasas
+tasa_acumulada_po <- (total_egresos_po / pob_po) * 1000
+tasa_acumulada_pg <- (total_egresos_pg / pob_pg) * 1000
+tasa_anual_po <- (total_egresos_po / persona_anos_po) * 1000
+tasa_anual_pg <- (total_egresos_pg / persona_anos_pg) * 1000
+
+cat("TASAS DE EGRESOS:\n")
+cat("  Tasa Acumulada 2010-2022 (x1000 hab):\n")
+cat("    • PO:", sprintf("%.2f", tasa_acumulada_po), "x1000\n")
+cat("    • PG:", sprintf("%.2f", tasa_acumulada_pg), "x1000\n\n")
+
+cat("  Tasa Anual Promedio (x1000 persona-años):\n")
+cat("    • PO:", sprintf("%.2f", tasa_anual_po), "x1000\n")
+cat("    • PG:", sprintf("%.2f", tasa_anual_pg), "x1000\n")
+```
+
+## 4. Top 20 Diagnósticos - Pueblos Originarios
+
+```{r perfil_po}
+cat("\n═══ TOP 20 DIAGNÓSTICOS - PUEBLOS ORIGINARIOS ═══\n")
+
+# Calcular perfil usando función modular
+perfil_po <- calcular_perfil_diagnostico(
+  datos = datos_diag_preparados,
+  pertenencia = 1,
+  poblacion = pob_po,
+  total_egresos = total_egresos_po,
+  anos_estudio = anos_estudio,
+  top_n = 20,
+  min_casos = 1,
+  verbose = TRUE
+)
+
+# Crear tabla formateada
+tabla_perfil_po <- crear_tabla_perfil(
+  datos = perfil_po,
+  tipo = "perfil",
+  titulo = "Top 20 Diagnósticos - Pueblos Originarios",
+  tamano_fuente = 8
+)
+
+tabla_perfil_po
+```
+
+```{r info_top20}
+cat("\n✓ Top 20 representan:", sprintf("%.1f%%", sum(perfil_po$pct_total)), 
+    "del total de egresos PO\n")
+```
+
+### 4.1. Gráfico - Top 20 PO
+
+```{r grafico_po, fig.width=12, fig.height=9}
+graf_perfil_po <- graficar_perfil_top(
+  datos = perfil_po,
+  titulo = "Top 20 Diagnósticos - Pueblos Originarios",
+  subtitulo = "Egresos hospitalarios ordenados por frecuencia (2010-2022)",
+  color_barras = "#0A2351",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas = 2.5
+)
+
+print(graf_perfil_po)
+```
+
+## 5. Comparación PO vs PG
+
+```{r comparacion}
+cat("\n═══ COMPARACIÓN DE TASAS PO vs PG ═══\n")
+
+# Calcular comparación
+comparacion_diag <- comparar_perfiles_po_pg(
+  datos = datos_diag_preparados,
+  poblacion_po = pob_po,
+  poblacion_pg = pob_pg,
+  total_egresos_po = total_egresos_po,
+  total_egresos_pg = total_egresos_pg,
+  anos_estudio = anos_estudio,
+  min_casos_po = 100,
+  top_n = 20,
+  ordenar_por = "dif_tasa",
+  verbose = TRUE
+)
+
+# Clasificación basada en direccion
+n_sobre <- sum(comparacion_diag$direccion == "↑↑ PO", na.rm = TRUE)
+n_sub <- sum(comparacion_diag$direccion %in% c("↓↓ PG", "↓ PG"), na.rm = TRUE)
+
+cat("\nCLASIFICACIÓN:\n")
+cat("  • Sobrerrepresentados en PO (RR ≥ 1.5):", n_sobre, "diagnósticos\n")
+cat("  • Subrepresentados en PO o Mayor en PG:", n_sub, "diagnósticos\n")
+```
+
+### 5.1. Tabla de comparación
+
+```{r tabla_comparacion}
+tabla_comparacion <- crear_tabla_perfil(
+  datos = comparacion_diag,
+  tipo = "comparacion",
+  titulo = "Comparación de Tasas PO vs PG - Top 20 Diferencias",
+  tamano_fuente = 8
+)
+
+tabla_comparacion
+```
+
+### 5.2. Gráfico de diferencias
+
+```{r grafico_diferencias, fig.width=13, fig.height=9}
+graf_diferencias <- graficar_diferencias_tasas(
+  datos = comparacion_diag,
+  top_n = 15,
+  ordenar_por = "abs",
+  titulo = "Top 15 Diagnósticos con mayor diferencia de tasas anuales",
+  subtitulo = "Diferencia en tasas anuales promedio por 1000 persona-años (2010-2022)",
+  color_po = "#C62828",
+  color_pg = "#1565C0",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas = 2.3
+)
+
+print(graf_diferencias)
+```
+
+## 6. Funcionalidades adicionales de ciecl
+
+### 6.1. Búsqueda fuzzy
+
+```{r busqueda_fuzzy}
+cat("\n═══ BÚSQUEDA FUZZY CON ciecl ═══\n\n")
+
+# Buscar términos con errores tipográficos
+terminos_buscar <- c("neumonia", "diabetis", "hipertension")
+
+for (termino in terminos_buscar) {
+  cat("Buscando:", termino, "\n")
+  resultado <- cie_search(termino, threshold = 0.70, max_results = 3)
+  if (nrow(resultado) > 0) {
+    print(resultado[, c("codigo", "descripcion")])
+  }
+  cat("\n")
+}
+```
+
+### 6.2. Validación de códigos
+
+```{r validacion}
+cat("═══ VALIDACIÓN DE CÓDIGOS ═══\n\n")
+
+# Muestra de códigos para validar
+codigos_muestra <- head(codigos_unicos, 20)
+
+validacion <- cie_validate_vector(codigos_muestra)
+
+cat("Códigos validados:", sum(validacion), "de", length(validacion), "\n")
+cat("Códigos inválidos:\n")
+print(codigos_muestra[!validacion])
+```
+
+## 7. Resumen
+
+```{r resumen}
+cat("\n═══════════════════════════════════════════════════\n")
+cat("  RESUMEN DEL ANÁLISIS\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("DATOS PROCESADOS:\n")
+cat("  • Registros totales:", format(nrow(datos_diag_preparados), big.mark = ","), "\n")
+cat("  • Códigos CIE-10 únicos:", length(codigos_unicos), "\n")
+cat("  • Tasa de descripción:", pct_exito, "%\n\n")
+
+cat("DENOMINADORES:\n")
+cat("  • Población PO:", format(pob_po, big.mark = ","), "\n")
+cat("  • Población PG:", format(pob_pg, big.mark = ","), "\n")
+cat("  • Egresos PO:", format(total_egresos_po, big.mark = ","), "\n")
+cat("  • Egresos PG:", format(total_egresos_pg, big.mark = ","), "\n\n")
+
+cat("PAQUETE ciecl UTILIZADO:\n")
+cat("  • cie_lookup() - Búsqueda vectorizada de códigos\n")
+cat("  • cie_search() - Búsqueda fuzzy por descripción\n")
+cat("  • cie_validate_vector() - Validación de códigos\n")
+cat("  • Base de datos: MINSAL/DEIS v2018 (39,873 códigos)\n\n")
+
+cat("FUNCIONES MODULARES UTILIZADAS:\n")
+cat("  • obtener_poblacion_censo()\n")
+cat("  • calcular_perfil_diagnostico()\n")
+cat("  • comparar_perfiles_po_pg()\n")
+cat("  • crear_tabla_perfil()\n")
+cat("  • graficar_perfil_top()\n")
+cat("  • graficar_diferencias_tasas()\n")
+
+cat("\n═══════════════════════════════════════════════════\n")
+cat("✓ ANÁLISIS COMPLETADO\n")
+cat("═══════════════════════════════════════════════════\n")
+```
+
+---
+**Generado**: `r Sys.Date()` | **Autor**: Rodolfo Tasso | **Paquete**: ciecl v0.1.0

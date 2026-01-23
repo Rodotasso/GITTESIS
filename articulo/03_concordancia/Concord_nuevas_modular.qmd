@@ -39,7 +39,7 @@ suppressPackageStartupMessages({
 })
 
 # Cargar funciones personalizadas
-source("R/cargar_funciones.R")
+source("../../R/cargar_funciones.R")
 
 # Configurar directorio de salida para guardar resultados
 dir_salida <- "resultados_tesis/concordancias"

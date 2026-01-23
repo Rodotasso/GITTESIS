@@ -41,8 +41,8 @@ colores_fuentes <- c(
 )
 
 # Cargar funciones y datos
-source("R/cargar_funciones.R")
-load("BBDD_homologados.RData")
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
 
 # Preparar datos - ELIMINAR DUPLICADOS POR RUN (un registro por paciente, el más reciente)
 datos_preparados <- datos_homologados %>%

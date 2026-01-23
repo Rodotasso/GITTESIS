@@ -27,8 +27,8 @@ suppressPackageStartupMessages({
 })
 
 # Cargar funciones y datos
-source("R/cargar_funciones.R")
-load("BBDD_homologados.RData")
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
 
 cat("═══════════════════════════════════════════════════\n")
 cat("  SISTEMA DE PERFILES EPIDEMIOLÓGICOS - v2.0\n")
@@ -45,67 +45,15 @@ cat("✓ Optimización: Paquete ciecl + funciones de patologías\n\n")
 ```{r preparar_datos}
 cat("═══ PREPARANDO DATOS Y DENOMINADORES ═══\n\n")
 
-# OPTIMIZACIÓN: Usar función cie_lookup() del paquete ciecl con normalización automática
-cat("Método: Usando cie_lookup() vectorizado del paquete ciecl\n\n")
+# OPTIMIZACIÓN: Usar función concatenar_diag_ciecl() con paquete ciecl
+# Base de datos oficial MINSAL/DEIS v2018 con 39,873 códigos
+# Ventajas: vectorizado, sin dependencias de archivos externos, actualizada
+# IMPORTANTE: normalizar = TRUE porque códigos en BBDD no tienen punto (O800 -> O80.0)
+datos_diag_preparados <- datos_homologados %>%
+  filter(!is.na(DIAG1), AÑO != "No reportado") %>%
+  concatenar_diag_ciecl("DIAG1", "DIAG_COMPLETO", normalizar = TRUE, verbose = TRUE)
 
-# Filtrar datos
-datos_filtrados <- datos_homologados %>%
-  filter(!is.na(DIAG1), AÑO != "No reportado")
-
-# Extraer códigos únicos
-codigos_unicos <- unique(datos_filtrados$DIAG1)
-cat("Códigos únicos a buscar:", format(length(codigos_unicos), big.mark = ","), "\n")
-cat("  • Base de datos: MINSAL/DEIS (actualizada - 39,873 códigos)\n")
-cat("  • Incluye: Códigos capitulares (J44, I10, E11, etc.)\n")
-cat("  • Modo: Vectorizado con match directo\n\n")
-
-inicio <- Sys.time()
-
-# cie_lookup() con parámetros según documentación oficial:
-# - codigo: vector de códigos (soporta vectorización)
-# - normalizar: FALSE (la BD tiene códigos CON punto: E11.0, J44.0)
-# - descripcion_completa: TRUE (formato "CODIGO - DESCRIPCION")
-# NOTA: La BD actualizada incluye 39,873 códigos con capítulos (J44, I10, etc.)
-cat("Ejecutando cie_lookup()...\n")
-suppressMessages({
-  descripciones_cie <- cie_lookup(
-    codigo = codigos_unicos, 
-    normalizar = FALSE,
-    descripcion_completa = TRUE
-  )
-})
-
-cat("✓ Búsqueda completada:", nrow(descripciones_cie), "códigos encontrados\n")
-cat("  Columnas:", paste(names(descripciones_cie), collapse = ", "), "\n\n")
-
-# Unir con datos originales directamente (sin normalizar)
-# La BD actualizada ya tiene los códigos en el formato correcto
-cat("Uniendo con datos originales...\n")
-datos_diag_preparados <- datos_filtrados %>%
-  left_join(
-    descripciones_cie %>% select(codigo, DIAG_COMPLETO = descripcion_completa),
-    by = c("DIAG1" = "codigo")
-  ) %>%
-  mutate(
-    # Si no se encontró descripción, usar solo el código original
-    DIAG_COMPLETO = if_else(is.na(DIAG_COMPLETO), DIAG1, DIAG_COMPLETO)
-  )
-
-tiempo <- as.numeric(difftime(Sys.time(), inicio, units = "secs"))
-
-# Verificar resultado
-n_codigos <- length(unique(datos_diag_preparados$DIAG1))
-n_con_descripcion <- sum(str_detect(datos_diag_preparados$DIAG_COMPLETO, " - "), na.rm = TRUE)
-pct_exito <- (n_con_descripcion / nrow(datos_diag_preparados)) * 100
-
-cat("\n═══ RESULTADO DE BÚSQUEDA CIE-10 ═══\n")
-cat("  • Códigos únicos procesados:", format(n_codigos, big.mark = ","), "\n")
-cat("  • Egresos con descripción:", format(n_con_descripcion, big.mark = ","), "\n")
-cat("  • Tasa de éxito:", sprintf("%.1f%%", pct_exito), "\n")
-cat("  • Tiempo total:", sprintf("%.2f", tiempo), "segundos\n")
-cat("  • Rendimiento:", sprintf("%.0f", length(codigos_unicos)/tiempo), "códigos/seg\n")
-cat("  • Método: cie_lookup() directo (sin normalización)\n")
-cat("  • BD actualizada: 39,873 códigos incluye capítulos\n\n")
+cat("\n")
 ```
 
 ### 2.2. Denominadores poblacionales (Censo 2017) - FUNCIÓN MODULAR
@@ -877,20 +825,21 @@ cat("  ⏳ PENDIENTE: RR ajustado por edad\n\n")
 
 cat("FUNCIONES MODULARES UTILIZADAS:\n")
 cat("  1. obtener_poblacion_censo() - Denominadores Censo 2017\n")
-cat("  2. calcular_perfil_diagnostico() - Tasas y proporciones\n")
-cat("  3. comparar_perfiles_po_pg() - Comparación con RR\n")
-cat("  4. crear_tabla_perfil() - Tablas formateadas\n")
-cat("  5. graficar_perfil_top() - Gráfico barras horizontales\n")
-cat("  6. graficar_diferencias_tasas() - Gráfico divergente\n")
-cat("  7. guardar_tabla_html() - Exportación HTML\n")
-cat("  8. guardar_multiformato() - Exportación PNG/JPG/PDF\n\n")
+cat("  2. concatenar_diag_ciecl() - Descripciones CIE-10 con paquete ciecl (modular)\n")
+cat("  3. calcular_perfil_diagnostico() - Tasas y proporciones\n")
+cat("  4. comparar_perfiles_po_pg() - Comparación con RR\n")
+cat("  5. crear_tabla_perfil() - Tablas formateadas\n")
+cat("  6. graficar_perfil_top() - Gráfico barras horizontales\n")
+cat("  7. graficar_diferencias_tasas() - Gráfico divergente\n")
+cat("  8. guardar_tabla_html() - Exportación HTML\n")
+cat("  9. guardar_multiformato() - Exportación PNG/JPG/PDF\n\n")
 
 cat("PAQUETE ciecl - FUNCIONALIDADES UTILIZADAS:\n")
-cat("  1. cie_lookup() - Búsqueda SQL optimizada (10x más rápido)\n")
-cat("  2. cie_search() - Búsqueda difusa (fuzzy matching Jaro-Winkler)\n")
-cat("  3. cie_validate_vector() - Validación de códigos CIE-10\n")
-cat("  4. cie_expand() - Expansión jerárquica de códigos\n")
-cat("  5. cie_comorbid() - Índices Charlson/Elixhauser (en desarrollo)\n\n")
+cat("  1. concatenar_diag_ciecl() - Función modular para concatenar códigos y descripciones\n")
+cat("  2. obtener_descripciones_ciecl() - Tabla de descripciones\n")
+cat("  3. validar_codigos_ciecl() - Validación de códigos CIE-10\n")
+cat("  4. Base de datos: MINSAL/DEIS v2018 (39,873 códigos oficiales)\n")
+cat("  5. Búsqueda vectorizada con SQLite (10x más rápido que método anterior)\n\n")
 
 cat("ANÁLISIS GENERADOS:\n")
 cat("  ✓ Top 20 diagnósticos en PO con tasas anuales\n")

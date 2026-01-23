@@ -59,46 +59,57 @@ Evaluar la relación entre la completitud y representatividad de los registros d
 
 ```
 GITTESIS/
-├── README.md                                    # Este archivo
-├── Protocolo Tesis RTS.md                       # Protocolo completo del estudio
-├── DESCRIPTION                                  # Metadatos del paquete R
-├── GITTESIS.Rproj                              # Proyecto RStudio
+├── README.md                           # Este archivo
+├── DESCRIPTION                         # Metadatos del paquete R
+├── renv.lock                           # Lock file de dependencias
 │
-├── Análisis de Datos (Archivos .qmd):
-│   ├── BBDD Limpia.qmd                         # Limpieza y preparación de datos
-│   ├── E_descriptiva.qmd                       # Análisis estadístico descriptivo principal
-│   ├── E_descriptiva2.qmd                      # Análisis descriptivo complementario
-│   ├── Concord_nuevas.qmd                      # Análisis de concordancia entre fuentes
-│   ├── Homologacion de establecimientos.qmd    # Estandarización de establecimientos
-│   ├── Pruebas de agregacion para ver errores.qmd  # Verificación de agregaciones
-│   └── noinsertado_concordancia.qmd            # Análisis de casos sin inserción
+├── articulo/                           # QMDs organizados por seccion del articulo
+│   ├── README.md                       # Indice de secciones
+│   ├── 01_descriptivos/                # Cuadro I - Completitud
+│   │   ├── E_descriptiva_modular.qmd
+│   │   └── datos_descriptivos_modular.qmd
+│   ├── 02_tendencias/                  # Figura 1 - Tendencia temporal
+│   │   └── grafico_pertenencia_modular.qmd
+│   ├── 03_concordancia/                # Cuadro II - Kappa y CCC
+│   │   └── Concord_nuevas_modular.qmd
+│   ├── 04_sociodemografico/            # Figura 2 - Prevision
+│   │   └── graf_cie_prev_modular.qmd
+│   └── 05_perfiles_cie10/              # Figura 3 - Perfiles CIE-10
+│       ├── perfiles_diagnosticos_modular.qmd
+│       ├── perfiles_diagnosticos_OPTIMIZADO.qmd
+│       ├── perfiles_diagnosticos_ciecl.qmd
+│       └── top_patologias_po_ciecl.qmd
 │
-├── Visualizaciones (Archivos .qmd):
-│   ├── grafico_pertenencia.qmd                 # Gráficos de pertenencia étnica
-│   ├── graf_cie_prev.qmd                       # Gráficos CIE-10 y prevalencia
-│   ├── grafico simple.qmd                      # Visualizaciones básicas
-│   ├── Prueba de graficos.qmd                  # Pruebas de visualización
-│   └── codigo de graficos.qmd                  # Código reutilizable de gráficos
+├── R/                                  # Funciones modulares (56 funciones)
+│   ├── cargar_funciones.R              # Carga todas las funciones
+│   ├── graficos/                       # 13 funciones de visualizacion
+│   ├── analisis/                       # 10 funciones estadisticas
+│   ├── concordancias/                  # 9 funciones CCC/Kappa
+│   ├── perfiles/                       # 8 funciones epidemiologicas
+│   ├── tablas/                         # 5 funciones exportacion
+│   └── utilidades/                     # 5 funciones auxiliares
 │
-├── Metodología y Documentación:
-│   ├── Probando tablas de variables para metodologia.qmd  # Tablas metodológicas
-│   ├── transcripcion para retomar.qmd          # Notas de progreso
-│   └── Presentacion-CongresoPostgrado2025.pptx # Presentación de resultados
+├── preparacion/                        # Preparacion y limpieza de datos
+│   ├── BBDD Limpia.qmd
+│   └── Homologacion de establecimientos.qmd
 │
-├── Configuración:
-│   ├── Config_github.qmd                       # Configuración de GitHub
-│   ├── .gitignore                              # Archivos excluidos del repositorio
-│   ├── .Rprofile                               # Configuración de R
-│   ├── renv.lock                               # Lock file de dependencias
-│   └── renv/                                   # Entorno virtual de R
-│
-└── Outputs Generados (.html):
-    ├── E_descriptiva.html
-    ├── E_descriptiva2.html
-    ├── graf_cie_prev.html
-    ├── grafico simple.html
-    └── grafico_pertenencia.html
+└── Configuracion:
+    ├── .gitignore
+    ├── .Rprofile
+    └── renv/
 ```
+
+### Mapeo Articulo → Codigo
+
+| Seccion del Articulo | Figura/Cuadro | Carpeta |
+|----------------------|---------------|---------|
+| Material y Metodos | - | `preparacion/` |
+| Completitud | Cuadro I | `articulo/01_descriptivos/` |
+| Tendencia temporal | Figura 1 | `articulo/02_tendencias/` |
+| Concordancia Kappa | Cuadro II-A | `articulo/03_concordancia/` |
+| Concordancia CCC | Cuadro II-B | `articulo/03_concordancia/` |
+| Prevision | Figura 2 | `articulo/04_sociodemografico/` |
+| Perfiles CIE-10 | Figura 3 | `articulo/05_perfiles_cie10/` |
 
 ---
 
