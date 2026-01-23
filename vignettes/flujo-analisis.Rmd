@@ -1,0 +1,185 @@
+---
+title: "Flujo de Analisis"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Flujo de Analisis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+## Estructura del Articulo
+
+Este proyecto implementa el analisis para la tesis:
+
+**"Completitud y Representatividad del Registro de Pertenencia a Pueblos Originarios en Egresos Hospitalarios de Chile (2010-2022)"**
+
+## Mapeo Articulo - Codigo
+
+La estructura del repositorio sigue la organizacion del articulo academico:
+
+| Seccion del Articulo | Figura/Cuadro | Carpeta | QMD Principal |
+|---------------------|---------------|---------|---------------|
+| Material y Metodos | - | `preparacion/` | `BBDD Limpia.qmd` |
+| Completitud | Cuadro I | `articulo/01_descriptivos/` | `E_descriptiva_modular.qmd` |
+| Tendencia temporal | Figura 1 | `articulo/02_tendencias/` | `grafico_pertenencia_modular.qmd` |
+| Concordancia Kappa | Cuadro II-A | `articulo/03_concordancia/` | `Concord_nuevas_modular.qmd` |
+| Concordancia CCC | Cuadro II-B | `articulo/03_concordancia/` | `Concord_nuevas_modular.qmd` |
+| Prevision | Figura 2 | `articulo/04_sociodemografico/` | `graf_cie_prev_modular.qmd` |
+| Perfiles CIE-10 | Figura 3 | `articulo/05_perfiles_cie10/` | `perfiles_diagnosticos_modular.qmd` |
+
+## Flujo de Ejecucion
+
+```
+PREPARACION
+    |
+    v
++-------------------+
+| BBDD Limpia.qmd   |  --> base_reducida.RData
++-------------------+
+    |
+    v
++---------------------------+
+| Homologacion de           |  --> datos_homologados
+| establecimientos.qmd      |
++---------------------------+
+    |
+    +---> ANALISIS PARALELOS
+          |
+          +---> 01_descriptivos/
+          |         |
+          |         +---> E_descriptiva_modular.qmd
+          |         +---> datos_descriptivos_modular.qmd
+          |
+          +---> 02_tendencias/
+          |         |
+          |         +---> grafico_pertenencia_modular.qmd
+          |
+          +---> 03_concordancia/
+          |         |
+          |         +---> Concord_nuevas_modular.qmd
+          |
+          +---> 04_sociodemografico/
+          |         |
+          |         +---> graf_cie_prev_modular.qmd
+          |
+          +---> 05_perfiles_cie10/
+                    |
+                    +---> perfiles_diagnosticos_modular.qmd
+                    +---> top_patologias_po_ciecl.qmd
+```
+
+## Funciones Principales
+
+### Graficos (`R/graficos/`)
+
+| Funcion | Descripcion |
+|---------|-------------|
+| `guardar_multiformato()` | Exporta graficos en PNG/PDF/SVG |
+| `grafico_tendencia_pertenencia()` | Tendencia temporal de pertenencia |
+| `grafico_evolucion_disparidades()` | Evolucion de disparidades regionales |
+| `crear_paleta_disparidad()` | Paleta de colores para disparidades |
+
+### Analisis (`R/analisis/`)
+
+| Funcion | Descripcion |
+|---------|-------------|
+| `analizar_pertenencia()` | Analisis descriptivo por variable |
+| `calcular_tendencia_pertenencia2()` | Calcula tendencias temporales |
+| `identificar_grupos_disparidad()` | Identifica grupos con disparidades |
+| `generar_resumen_disparidades()` | Resume disparidades identificadas |
+
+### Concordancia (`R/concordancias/`)
+
+| Funcion | Descripcion |
+|---------|-------------|
+| `calcular_concordancia_desctools()` | Calcula CCC usando DescTools |
+| `calcular_ccc_desagregacion()` | CCC desagregado por variable |
+| `calcular_ccc_temporal()` | CCC temporal (por ano) |
+| `crear_tabla_ccc()` | Tabla formateada de resultados CCC |
+
+### Perfiles (`R/perfiles/`)
+
+| Funcion | Descripcion |
+|---------|-------------|
+| `calcular_perfil_diagnostico()` | Perfil epidemiologico por grupo |
+| `comparar_perfiles_po_pg()` | Compara PO vs Poblacion General |
+| `crear_tabla_perfil()` | Tabla de perfil diagnostico |
+| `graficar_diferencias_tasas()` | Grafico de diferencias en tasas |
+
+### Tablas (`R/tablas/`)
+
+| Funcion | Descripcion |
+|---------|-------------|
+| `guardar_tabla_png()` | Exporta tabla como imagen PNG |
+| `guardar_tabla_html()` | Exporta tabla como HTML |
+| `flex_to_df()` | Convierte flextable a data.frame |
+
+## Outputs Generados
+
+### Graficos
+
+Los graficos se guardan en `output_qmd/` en tres formatos:
+
+```
+output_qmd/
+├── figura_1_tendencia.png
+├── figura_1_tendencia.pdf
+├── figura_1_tendencia.svg
+├── figura_2_prevision.png
+...
+```
+
+### Tablas
+
+Las tablas se exportan como PNG para inclusion directa en documentos:
+
+```
+output_qmd/
+├── cuadro_I_completitud.png
+├── cuadro_II_concordancia.png
+...
+```
+
+## Paquete ciecl
+
+Para analisis de codigos CIE-10, el proyecto utiliza el paquete `ciecl`:
+
+```{r}
+library(ciecl)
+
+# Busqueda de codigos
+cie_lookup("E11.0")  # Diabetes tipo 2 con coma
+
+# Expansion jerarquica
+cie_lookup("E11", expandir = TRUE)  # Todos los E11.x
+
+# Busqueda fuzzy
+cie_search("diabetis mellitus", threshold = 0.70)
+```
+
+Ver documentacion completa en: https://github.com/Rodotasso/ciecl
+
+## Reproducibilidad
+
+Para reproducir los analisis:
+
+1. Clonar repositorio
+2. Restaurar dependencias: `renv::restore()`
+3. Cargar funciones: `source("R/cargar_funciones.R")`
+4. Ejecutar QMDs en orden
+
+**Nota:** Los datos originales no estan incluidos por razones de privacidad.
+
+## Referencias
+
+- MINSAL-DEIS: Egresos hospitalarios
+- Censo 2017: Datos de referencia
+- RSH/CONADI: Fuentes de pertenencia etnica

@@ -1,6 +1,11 @@
 # GITTESIS - Análisis de Pertenencia a Pueblos Originarios en Egresos Hospitalarios de Chile
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![R](https://img.shields.io/badge/R-%3E%3D4.0-blue?logo=r)](https://www.r-project.org/)
+[![Quarto](https://img.shields.io/badge/Quarto-1.4+-purple?logo=quarto)](https://quarto.org/)
+[![Status](https://img.shields.io/badge/Status-En%20Desarrollo-orange)](https://github.com/Rodotasso/GITTESIS)
+[![Universidad](https://img.shields.io/badge/Universidad%20de%20Chile-MSP-red)](https://www.uchile.cl/)
+![Visitas](https://visitor-badge.laobi.icu/badge?page_id=Rodotasso.GITTESIS)
 
 ## Descripción General
 

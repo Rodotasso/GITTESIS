@@ -1,0 +1,157 @@
+---
+title: "Guia Rapida de Uso"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Guia Rapida de Uso}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+## Introduccion
+
+Esta guia proporciona instrucciones para comenzar a trabajar con el proyecto GITTESIS, que contiene el analisis de pertenencia a Pueblos Originarios en egresos hospitalarios de Chile (2012-2022).
+
+## Requisitos Previos
+
+- R version >= 4.0
+- RStudio (recomendado)
+- Quarto >= 1.4
+
+## Instalacion de Dependencias
+
+El proyecto utiliza `renv` para gestionar las dependencias. Para restaurar el entorno:
+
+```{r}
+# Instalar renv si no esta disponible
+if (!requireNamespace("renv", quietly = TRUE)) {
+  install.packages("renv")
+}
+
+# Restaurar dependencias del proyecto
+renv::restore()
+```
+
+## Carga de Funciones
+
+El proyecto contiene 56 funciones modulares organizadas en carpetas tematicas. Para cargarlas todas:
+
+```{r}
+source("R/cargar_funciones.R")
+```
+
+Este script carga automaticamente las funciones de:
+
+- `R/graficos/` - 13 funciones de visualizacion
+- `R/analisis/` - 10 funciones estadisticas
+- `R/concordancias/` - 9 funciones CCC/Kappa
+- `R/perfiles/` - 8 funciones epidemiologicas
+- `R/tablas/` - 5 funciones de exportacion
+- `R/utilidades/` - 5 funciones auxiliares
+
+## Carga de Datos
+
+Los datos principales estan en formato RData:
+
+```{r}
+# Cargar base de datos homologada
+load("BBDD_homologados.RData")
+
+# El objeto cargado es: datos_homologados
+head(datos_homologados)
+```
+
+### Variables Principales
+
+| Variable | Descripcion |
+|----------|-------------|
+| `GLOSA_PUEBLO_ORIGINARIO` | Pertenencia declarada |
+| `GLOSA_SEXO` | Sexo biologico |
+| `GLOSA_REGION_RESIDENCIA` | Region de residencia |
+| `GLOSA_PREVISION` | Sistema de salud |
+| `DIAG_PPAL` | Diagnostico principal CIE-10 |
+| `ANO_EGRESO` | Ano del egreso |
+
+## Ejemplo Basico de Analisis
+
+### Analisis Descriptivo
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Distribucion por pertenencia a PO
+datos_homologados %>%
+  count(GLOSA_PUEBLO_ORIGINARIO) %>%
+  mutate(pct = n / sum(n) * 100)
+
+# Tendencia temporal
+datos_homologados %>%
+  filter(GLOSA_PUEBLO_ORIGINARIO == "Pertenece") %>%
+  count(ANO_EGRESO) %>%
+  ggplot(aes(x = ANO_EGRESO, y = n)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Egresos de Pueblos Originarios por Ano",
+       x = "Ano", y = "Numero de egresos")
+```
+
+### Uso de Funciones del Proyecto
+
+```{r}
+# Analizar pertenencia por variable
+resultado <- analizar_pertenencia(
+  data = datos_homologados,
+  var = "GLOSA_REGION_RESIDENCIA",
+  etiqueta = "Region"
+)
+
+# Guardar grafico en multiples formatos
+guardar_multiformato(
+  grafico = resultado$grafico,
+  nombre = "pertenencia_region",
+  ancho = 10,
+  alto = 8,
+  dpi = 300
+)
+```
+
+## Renderizado de QMDs
+
+Los documentos Quarto estan organizados en `articulo/`:
+
+```{r}
+# Renderizar un documento especifico
+quarto::quarto_render("articulo/01_descriptivos/E_descriptiva_modular.qmd")
+
+# O desde terminal:
+# quarto render articulo/01_descriptivos/E_descriptiva_modular.qmd
+```
+
+### Orden Recomendado de Ejecucion
+
+1. `preparacion/BBDD Limpia.qmd` - Limpieza inicial
+2. `articulo/01_descriptivos/` - Estadistica descriptiva
+3. `articulo/02_tendencias/` - Tendencias temporales
+4. `articulo/03_concordancia/` - Analisis de concordancia
+5. `articulo/04_sociodemografico/` - Analisis por prevision
+6. `articulo/05_perfiles_cie10/` - Perfiles diagnosticos
+
+## Recursos Adicionales
+
+- **README.md** - Descripcion completa del proyecto
+- **CLAUDE.md** - Instrucciones detalladas para desarrollo
+- **articulo/README.md** - Indice de secciones del articulo
+
+## Contacto
+
+Rodolfo Jose Tasso Suazo
+rtasso@uchile.cl
+Magister en Salud Publica - Universidad de Chile
