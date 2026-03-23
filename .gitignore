@@ -38,6 +38,18 @@ Meta/
 # Archivos temporales de Claude Code
 tmpclaude-*
 
+# Obsidian vault
+.obsidian/
+
+# Quarto output files
+*_files/
+
+# R Markdown intermediate
+*.rmarkdown
+
+# Python virtual environment
+.venv/
+
 # System files
 .DS_Store
 __pycache__/
