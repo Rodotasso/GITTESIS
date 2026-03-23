@@ -1,0 +1,339 @@
+---
+title: "Perfiles de Egresos Hospitalarios - Variable Enriquecida"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Perfiles de egresos hospitalarios usando la Variable Enriquecida (PERTENENCIA2): solo registros con clasificación definida (0=PG, 1=PO), excluyendo NA"
+format: 
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Perfiles de Egresos Hospitalarios — Variable Enriquecida
+
+Análisis descriptivo de los diagnósticos principales de egreso hospitalario
+comparando Pueblos Originarios (PO) y Población General (PG) usando la
+**Variable Enriquecida (PERTENENCIA2)**, que integra RSH, CONADI y Egresos
+Hospitalarios. Solo se incluyen registros con clasificación definida
+(`PERTENENCIA2 %in% c(0, 1)`). Región Metropolitana, 2010-2022.
+
+## 1. Configuración
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(scales)
+  library(censo2017)
+  library(ciecl)
+})
+
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
+
+cat("Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+```
+
+## 2. Preparación de datos
+
+### 2.1. Filtro Variable Enriquecida y descripciones CIE-10
+
+```{r preparar_datos}
+cat("═══ PREPARANDO DATOS ═══\n\n")
+
+n_total <- nrow(datos_homologados)
+
+# Filtrar: DIAG1 válido, año reportado, y PERTENENCIA2 definida (0 o 1)
+# IDate se convierte a Date antes de dplyr::mutate/join para evitar error data.table
+datos_prep <- datos_homologados %>%
+  filter(
+    !is.na(DIAG1),
+    AÑO != "No reportado",
+    PERTENENCIA2 %in% c(0L, 1L)
+  ) %>%
+  mutate(
+    FECHA_INGRESO_FMT_DEIS = as.Date(FECHA_INGRESO_FMT_DEIS),
+    FECHA_EGRESO_FMT_DEIS  = as.Date(FECHA_EGRESO_FMT_DEIS),
+    DIAS_ESTADA = as.integer(FECHA_EGRESO_FMT_DEIS - FECHA_INGRESO_FMT_DEIS),
+    DIAS_ESTADA = ifelse(DIAS_ESTADA < 0 | DIAS_ESTADA > 365, NA_integer_, DIAS_ESTADA)
+  ) %>%
+  concatenar_diag_ciecl("DIAG1", "DIAG_COMPLETO", verbose = TRUE)
+
+n_validos    <- nrow(datos_prep)
+n_excluidos  <- n_total - n_validos
+n_po         <- sum(datos_prep$PERTENENCIA2 == 1)
+n_pg         <- sum(datos_prep$PERTENENCIA2 == 0)
+
+cat("\nREGISTROS:\n")
+cat("  Total base original:      ", format(n_total,    big.mark = ","), "\n")
+cat("  Con PERTENENCIA2 definida:", format(n_validos,  big.mark = ","),
+    sprintf("(%.1f%%)\n", n_validos / n_total * 100))
+cat("  Excluidos (NA u otros):   ", format(n_excluidos, big.mark = ","),
+    sprintf("(%.1f%%)\n", n_excluidos / n_total * 100))
+cat("\nDISTRIBUCIÓN:\n")
+cat("  PO (PERTENENCIA2 = 1):", format(n_po, big.mark = ","),
+    sprintf("(%.1f%%)\n", n_po / n_validos * 100))
+cat("  PG (PERTENENCIA2 = 0):", format(n_pg, big.mark = ","),
+    sprintf("(%.1f%%)\n", n_pg / n_validos * 100))
+cat("\nDIAS_ESTADA calculado:\n")
+cat("  Mediana:", median(datos_prep$DIAS_ESTADA, na.rm = TRUE), "días\n")
+cat("  Promedio:", round(mean(datos_prep$DIAS_ESTADA, na.rm = TRUE), 1), "días\n")
+cat("  NA:", format(sum(is.na(datos_prep$DIAS_ESTADA)), big.mark = ","),
+    sprintf("(%.1f%%)\n", mean(is.na(datos_prep$DIAS_ESTADA)) * 100))
+```
+
+### 2.2. Denominadores poblacionales (Censo 2017)
+
+```{r denominadores}
+cat("═══ DENOMINADORES POBLACIONALES ═══\n")
+
+poblacion_censo <- obtener_poblacion_censo(verbose = TRUE)
+
+pob_po <- poblacion_censo$pob_po
+pob_pg <- poblacion_censo$pob_pg
+
+anos_estudio <- 13  # 2010-2022
+persona_anos_po <- pob_po * anos_estudio
+persona_anos_pg <- pob_pg * anos_estudio
+
+# Denominadores de egresos: solo registros con PERTENENCIA2 definida
+total_egresos_po <- sum(datos_prep$PERTENENCIA2 == 1)
+total_egresos_pg <- sum(datos_prep$PERTENENCIA2 == 0)
+total_egresos_ve <- total_egresos_po + total_egresos_pg
+
+cat("\nPOBLACIÓN (Censo 2017):\n")
+cat("  PO:", format(pob_po, big.mark = ","), "hab\n")
+cat("  PG:", format(pob_pg, big.mark = ","), "hab\n\n")
+
+cat("EGRESOS (Variable Enriquecida, 2010-2022):\n")
+cat("  PO:", format(total_egresos_po, big.mark = ","), "\n")
+cat("  PG:", format(total_egresos_pg, big.mark = ","), "\n")
+cat("  Total VE:", format(total_egresos_ve, big.mark = ","), "\n")
+```
+
+## 3. Perfil de egresos — Pueblos Originarios (VE)
+
+### 3.1. Top 20 diagnósticos PO
+
+```{r perfil_po}
+cat("═══ TOP 20 DIAGNÓSTICOS - PUEBLOS ORIGINARIOS (VE) ═══\n")
+
+perfil_po <- calcular_perfil_diagnostico(
+  datos          = datos_prep,
+  pertenencia    = 1,
+  poblacion      = pob_po,
+  total_egresos  = total_egresos_po,
+  anos_estudio   = anos_estudio,
+  top_n          = 20,
+  min_casos      = 1,
+  verbose        = TRUE
+)
+
+tabla_po <- crear_tabla_perfil(
+  datos            = perfil_po,
+  tipo             = "perfil",
+  titulo           = "Top 20 Diagnósticos - Pueblos Originarios (Variable Enriquecida)",
+  resaltar_umbral  = 5,
+  col_umbral       = "pct_total",
+  color_resaltado  = "#FFEBEE",
+  tamano_fuente    = 8
+)
+
+dir_salida <- file.path(directorio_base, "resultados_tesis", "perfiles_simples_ve")
+if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
+
+print(tabla_po)
+guardar_tabla_html(tabla_po, "tabla_perfil_po_top20.html", dir_salida = dir_salida)
+
+cat("\nTop 20 representan:", sprintf("%.1f%%", sum(perfil_po$pct_total)), "del total PO\n")
+```
+
+### 3.2. Gráfico Top 20 PO
+
+```{r grafico_po, fig.width=12, fig.height=9}
+graf_po <- graficar_perfil_top(
+  datos             = perfil_po,
+  titulo            = "Top 20 Diagnósticos - Pueblos Originarios (Variable Enriquecida)",
+  subtitulo         = "Egresos hospitalarios, RM 2010-2022",
+  color_barras      = "#C62828",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas  = 2.5
+)
+
+print(graf_po)
+guardar_multiformato(graf_po, "perfil_po_top20", 12, 9, 300, dir_salida = dir_salida)
+```
+
+## 4. Perfil de egresos — Población General (VE)
+
+### 4.1. Top 20 diagnósticos PG
+
+```{r perfil_pg}
+cat("═══ TOP 20 DIAGNÓSTICOS - POBLACIÓN GENERAL (VE) ═══\n")
+
+perfil_pg <- calcular_perfil_diagnostico(
+  datos          = datos_prep,
+  pertenencia    = 0,
+  poblacion      = pob_pg,
+  total_egresos  = total_egresos_pg,
+  anos_estudio   = anos_estudio,
+  top_n          = 20,
+  min_casos      = 1,
+  verbose        = TRUE
+)
+
+tabla_pg <- crear_tabla_perfil(
+  datos            = perfil_pg,
+  tipo             = "perfil",
+  titulo           = "Top 20 Diagnósticos - Población General (Variable Enriquecida)",
+  resaltar_umbral  = 5,
+  col_umbral       = "pct_total",
+  color_resaltado  = "#E3F2FD",
+  tamano_fuente    = 8
+)
+
+print(tabla_pg)
+guardar_tabla_html(tabla_pg, "tabla_perfil_pg_top20.html", dir_salida = dir_salida)
+
+cat("\nTop 20 representan:", sprintf("%.1f%%", sum(perfil_pg$pct_total)), "del total PG\n")
+```
+
+### 4.2. Gráfico Top 20 PG
+
+```{r grafico_pg, fig.width=12, fig.height=9}
+graf_pg <- graficar_perfil_top(
+  datos             = perfil_pg,
+  titulo            = "Top 20 Diagnósticos - Población General (Variable Enriquecida)",
+  subtitulo         = "Egresos hospitalarios, RM 2010-2022",
+  color_barras      = "#1565C0",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas  = 2.5
+)
+
+print(graf_pg)
+guardar_multiformato(graf_pg, "perfil_pg_top20", 12, 9, 300, dir_salida = dir_salida)
+```
+
+## 5. Comparación PO vs PG (VE)
+
+### 5.1. Diagnósticos con mayor diferencia de tasas
+
+```{r comparacion}
+cat("═══ COMPARACIÓN PO vs PG (VARIABLE ENRIQUECIDA) ═══\n")
+
+comparacion <- comparar_perfiles_po_pg(
+  datos              = datos_prep,
+  poblacion_po       = pob_po,
+  poblacion_pg       = pob_pg,
+  total_egresos_po   = total_egresos_po,
+  total_egresos_pg   = total_egresos_pg,
+  anos_estudio       = anos_estudio,
+  min_casos_po       = 100,
+  top_n              = 20,
+  ordenar_por        = "dif_tasa",
+  verbose            = TRUE
+)
+
+cat("\nTop", nrow(comparacion), "diagnósticos con mayor diferencia identificados\n")
+```
+
+### 5.2. Tabla comparativa
+
+```{r tabla_comparacion}
+tabla_comp <- crear_tabla_perfil(
+  datos    = comparacion,
+  tipo     = "comparacion",
+  titulo   = "Comparación de Tasas PO vs PG - Top 20 Diferencias (Variable Enriquecida)",
+  tamano_fuente = 8,
+  incluir_rr = FALSE
+)
+
+print(tabla_comp)
+guardar_tabla_html(tabla_comp, "tabla_comparacion_po_pg.html", dir_salida = dir_salida)
+```
+
+### 5.3. Gráfico de diferencias
+
+```{r grafico_diferencias, fig.width=13, fig.height=9}
+graf_dif <- graficar_diferencias_tasas(
+  datos             = comparacion,
+  top_n             = 15,
+  ordenar_por       = "abs",
+  titulo            = "Top 15 Diagnósticos con mayor diferencia de tasas anuales (Variable Enriquecida)",
+  subtitulo         = "Diferencia en tasas anuales promedio por 1000 persona-años (RM, 2010-2022)",
+  color_po          = "#C62828",
+  color_pg          = "#1565C0",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas  = 2.3
+)
+
+print(graf_dif)
+guardar_multiformato(graf_dif, "diferencias_tasas_po_pg", 13, 9, 300, dir_salida = dir_salida)
+```
+
+## 6. Resumen descriptivo
+
+```{r resumen}
+cat("═══════════════════════════════════════════════════\n")
+cat("  RESUMEN - PERFILES VE DE EGRESOS\n")
+cat("═══════════════════════════════════════════════════\n\n")
+
+cat("FUENTE DE PERTENENCIA:\n")
+cat("  Variable Enriquecida (PERTENENCIA2)\n")
+cat("  Integra: RSH + CONADI + Egresos Hospitalarios\n")
+cat("  Registros con PERTENENCIA2 definida:", format(n_validos, big.mark = ","),
+    sprintf("(%.1f%% del total)\n\n", n_validos / n_total * 100))
+
+cat("DENOMINADORES:\n")
+cat("  Población PO (Censo 2017):", format(pob_po, big.mark = ","), "hab\n")
+cat("  Población PG (Censo 2017):", format(pob_pg, big.mark = ","), "hab\n")
+cat("  Egresos PO (VE):", format(total_egresos_po, big.mark = ","), "\n")
+cat("  Egresos PG (VE):", format(total_egresos_pg, big.mark = ","), "\n\n")
+
+tasa_anual_po <- (total_egresos_po / persona_anos_po) * 1000
+tasa_anual_pg <- (total_egresos_pg / persona_anos_pg) * 1000
+
+cat("TASAS ANUALES PROMEDIO (x1000 persona-años):\n")
+cat("  PO:", sprintf("%.2f", tasa_anual_po), "\n")
+cat("  PG:", sprintf("%.2f", tasa_anual_pg), "\n")
+cat("  Diferencia (PO - PG):", sprintf("%.2f", tasa_anual_po - tasa_anual_pg), "\n\n")
+
+# Proporción de letalidad intrahospitalaria global (Protocolo Tabla 4)
+let_global_po <- attr(perfil_po, "prop_letalidad_global_x1000")
+let_global_pg <- attr(perfil_pg, "prop_letalidad_global_x1000")
+if (!is.null(let_global_po) && !is.null(let_global_pg)) {
+  cat("PROPORCIÓN DE LETALIDAD GLOBAL (x1000 egresos):\n")
+  cat("  PO:", sprintf("%.2f", let_global_po), "\n")
+  cat("  PG:", sprintf("%.2f", let_global_pg), "\n\n")
+}
+
+cat("INDICADORES CALCULADOS:\n")
+cat("  - Frecuencia absoluta de egresos por diagnóstico\n")
+cat("  - Proporción sobre total de egresos (x1000)\n")
+cat("  - Tasa anual promedio (x1000 persona-años)\n")
+cat("  - Diferencia de tasas (PO - PG)\n")
+cat("  - Diferencia de tasas (PO - PG)\n")
+cat("  - Promedio y mediana de días de estada\n")
+cat("  - Tasa de letalidad intrahospitalaria por causa (x1000)\n")
+cat("  - Proporción de letalidad intrahospitalaria global (x1000)\n\n")
+
+cat("LIMITACIONES:\n")
+cat("  - Tasas crudas, sin estandarización por edad\n")
+cat("  - Población Censo 2017 fija para todo el período\n")
+cat("  - Registros sin PERTENENCIA2 excluidos del análisis\n")
+cat("  - No se ajusta por otros confusores\n\n")
+
+cat("ARCHIVOS GENERADOS:\n")
+cat("  resultados_tesis/perfiles_simples_ve/\n")
+cat("    tabla_perfil_po_top20.html\n")
+cat("    tabla_perfil_pg_top20.html\n")
+cat("    tabla_comparacion_po_pg.html\n")
+cat("    perfil_po_top20.{png,pdf,jpg}\n")
+cat("    perfil_pg_top20.{png,pdf,jpg}\n")
+cat("    diferencias_tasas_po_pg.{png,pdf,jpg}\n")
+```
+
+---
+**Generado**: `r Sys.Date()` | **Variable de pertenencia**: PERTENENCIA2 (Variable Enriquecida) | **Autor**: Rodolfo Tasso

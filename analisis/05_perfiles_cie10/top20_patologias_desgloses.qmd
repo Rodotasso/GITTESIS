@@ -1,0 +1,386 @@
+---
+title: "Top 20 Patolog\u00edas - Desgloses por Pertenencia, Sexo, Edad y Regi\u00f3n"
+subtitle: "Egresos Hospitalarios Chile 2012-2022 | Variable Enriquecida (RSH + CONADI + EH)"
+author: "Rodolfo Tasso"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+    theme: flatly
+execute:
+  warning: false
+  message: false
+  echo: true
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(scales)
+library(flextable)
+library(forcats)
+
+source("../../R/cargar_funciones.R")
+```
+
+## 1. Carga de datos
+
+```{r}
+#| label: cargar-datos
+
+load("../../BBDD_homologados.RData")
+
+cat("Dimensiones:", format(nrow(datos_homologados), big.mark = ","), "x",
+    ncol(datos_homologados), "\n")
+```
+
+## 2. Preparaci\u00f3n de datos
+
+La **Variable Enriquecida** (`PERTENENCIA2`) integra tres fuentes administrativas:
+RSH (Registro Social de Hogares), CONADI y Egresos Hospitalarios (autodeclaraci\u00f3n).
+No incluye datos censales.
+
+```{r}
+#| label: preparar-datos
+
+# Filtrar: PERTENENCIA2 valida (0 o 1), DIAG1 no vacio, AÑO valido
+datos_filtrados <- datos_homologados %>%
+  filter(
+    PERTENENCIA2 %in% c(0, 1),
+    !is.na(DIAG1), nchar(DIAG1) > 0,
+    !is.na(AÑO), AÑO != "No reportado"
+  )
+
+cat("Registros originales:", format(nrow(datos_homologados), big.mark = ","), "\n")
+cat("Registros filtrados:", format(nrow(datos_filtrados), big.mark = ","), "\n")
+cat("Excluidos:", format(nrow(datos_homologados) - nrow(datos_filtrados), big.mark = ","),
+    sprintf("(%.1f%%)\n", (1 - nrow(datos_filtrados)/nrow(datos_homologados)) * 100))
+
+# Resumen pertenencia
+cat("\nDistribucion PERTENENCIA2:\n")
+datos_filtrados %>%
+  count(PERTENENCIA2) %>%
+  mutate(
+    grupo = ifelse(PERTENENCIA2 == 1, "Pueblos Originarios", "Poblacion General"),
+    pct = sprintf("%.1f%%", n / sum(n) * 100)
+  ) %>%
+  select(grupo, n, pct) %>%
+  print()
+```
+
+```{r}
+#| label: concatenar-ciecl
+
+# Agregar descripciones CIE-10 usando ciecl
+datos_filtrados <- concatenar_diag_ciecl(datos_filtrados)
+```
+
+```{r}
+#| label: calcular-dias-estada
+
+# Calcular dias de estada si hay fechas disponibles
+if (all(c("FECHA_INGRESO_FMT_DEIS", "FECHA_EGRESO_FMT_DEIS") %in% names(datos_filtrados))) {
+  datos_filtrados <- datos_filtrados %>%
+    mutate(
+      DIAS_ESTADA = as.numeric(
+        difftime(FECHA_EGRESO_FMT_DEIS, FECHA_INGRESO_FMT_DEIS, units = "days")
+      ),
+      DIAS_ESTADA = ifelse(DIAS_ESTADA < 0, NA_real_, DIAS_ESTADA)
+    )
+  cat("Dias de estada calculados.\n")
+  cat("Mediana:", median(datos_filtrados$DIAS_ESTADA, na.rm = TRUE), "dias\n")
+}
+```
+
+## 3. Top 20 patolog\u00edas globales
+
+```{r}
+#| label: top20-global
+
+resultado_top <- calcular_top_patologias_desglose(
+  datos = datos_filtrados,
+  top_n = 20,
+  verbose = TRUE
+)
+
+top_global <- resultado_top$top_global
+datos_top <- resultado_top$datos_top
+```
+
+### Tabla resumen
+
+```{r}
+#| label: tabla-top20-global
+
+# Crear directorio de salida
+dir_salida <- "../../resultados_tesis/top20_desgloses"
+if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
+
+ft_global <- top_global %>%
+  flextable::flextable() %>%
+  flextable::set_header_labels(
+    ranking = "#",
+    DIAG1 = "C\u00f3digo",
+    DIAG_COMPLETO = "Diagn\u00f3stico",
+    n_total = "N\u00b0 Egresos",
+    pct_total = "% Total"
+  ) %>%
+  flextable::colformat_num(j = "n_total", big.mark = ",") %>%
+  flextable::colformat_double(j = "pct_total", digits = 2) %>%
+  flextable::align(align = "center", part = "all") %>%
+  flextable::align(j = "DIAG_COMPLETO", align = "left", part = "body") %>%
+  flextable::bold(part = "header") %>%
+  flextable::fontsize(size = 8, part = "all") %>%
+  flextable::width(j = "DIAG_COMPLETO", width = 3.0) %>%
+  flextable::set_caption("Top 20 Diagn\u00f3sticos m\u00e1s frecuentes - Egresos Hospitalarios 2012-2022") %>%
+  flextable::theme_booktabs() %>%
+  flextable::autofit()
+
+ft_global
+
+guardar_tabla_png(ft_global, "tabla_top20_global", dir_salida = dir_salida)
+```
+
+### Gr\u00e1fico de barras horizontales
+
+```{r}
+#| label: grafico-top20
+#| fig-width: 10
+#| fig-height: 8
+
+g_top20 <- graficar_perfil_top(
+  datos = top_global %>% rename(n_casos = n_total),
+  titulo = "Top 20 Diagn\u00f3sticos m\u00e1s Frecuentes",
+  subtitulo = "Egresos hospitalarios Chile 2012-2022 (PO + PG combinados)"
+)
+
+g_top20
+
+guardar_multiformato(g_top20, "top20_global", ancho = 10, alto = 8,
+                     dir_salida = dir_salida)
+```
+
+## 4. Desglose por Pertenencia (PO vs PG)
+
+```{r}
+#| label: desglose-pertenencia
+
+ft_pertenencia <- crear_tabla_desglose(
+  datos_top = datos_top,
+  top_global = top_global,
+  var_desglose = "PERTENENCIA2",
+  titulo = "Top 20 Diagn\u00f3sticos por Pertenencia a Pueblos Originarios (Variable Enriquecida)",
+  etiquetas_var = list("0" = "Poblaci\u00f3n General", "1" = "Pueblos Originarios")
+)
+
+ft_pertenencia
+
+guardar_tabla_png(ft_pertenencia, "tabla_desglose_pertenencia", dir_salida = dir_salida)
+```
+
+```{r}
+#| label: grafico-pertenencia
+#| fig-width: 12
+#| fig-height: 8
+
+# Preparar datos para grafico agrupado
+datos_graf_pert <- datos_top %>%
+  mutate(grupo = ifelse(PERTENENCIA2 == 1, "PO", "PG")) %>%
+  count(DIAG_COMPLETO, grupo) %>%
+  inner_join(top_global %>% select(DIAG_COMPLETO, ranking), by = "DIAG_COMPLETO")
+
+g_pert <- ggplot(datos_graf_pert,
+                 aes(x = reorder(DIAG_COMPLETO, -ranking), y = n, fill = grupo)) +
+  geom_col(position = "dodge", width = 0.7) +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values = c("PG" = "#1565C0", "PO" = "#C62828"),
+                    name = "Grupo") +
+  labs(
+    title = "Top 20 Diagn\u00f3sticos por Pertenencia",
+    subtitle = "Pueblos Originarios vs Poblaci\u00f3n General",
+    x = NULL, y = "N\u00famero de egresos"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 7),
+    legend.position = "top",
+    panel.grid.major.y = element_blank()
+  )
+
+g_pert
+
+guardar_multiformato(g_pert, "desglose_pertenencia", ancho = 12, alto = 8,
+                     dir_salida = dir_salida)
+```
+
+## 5. Desglose por Sexo
+
+```{r}
+#| label: desglose-sexo
+
+ft_sexo <- crear_tabla_desglose(
+  datos_top = datos_top,
+  top_global = top_global,
+  var_desglose = "GLOSA_SEXO",
+  titulo = "Top 20 Diagn\u00f3sticos por Sexo"
+)
+
+ft_sexo
+
+guardar_tabla_png(ft_sexo, "tabla_desglose_sexo", dir_salida = dir_salida)
+```
+
+```{r}
+#| label: grafico-sexo
+#| fig-width: 12
+#| fig-height: 8
+
+datos_graf_sexo <- datos_top %>%
+  count(DIAG_COMPLETO, GLOSA_SEXO) %>%
+  inner_join(top_global %>% select(DIAG_COMPLETO, ranking), by = "DIAG_COMPLETO")
+
+g_sexo <- ggplot(datos_graf_sexo,
+                 aes(x = reorder(DIAG_COMPLETO, -ranking), y = n, fill = GLOSA_SEXO)) +
+  geom_col(position = "dodge", width = 0.7) +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values = c("HOMBRE" = "#2E86AB", "MUJER" = "#A23B72"),
+                    name = "Sexo") +
+  labs(
+    title = "Top 20 Diagn\u00f3sticos por Sexo",
+    subtitle = "Egresos hospitalarios Chile 2012-2022",
+    x = NULL, y = "N\u00famero de egresos"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 7),
+    legend.position = "top",
+    panel.grid.major.y = element_blank()
+  )
+
+g_sexo
+
+guardar_multiformato(g_sexo, "desglose_sexo", ancho = 12, alto = 8,
+                     dir_salida = dir_salida)
+```
+
+## 6. Desglose por Grupo Etario
+
+```{r}
+#| label: desglose-edad
+
+ft_edad <- crear_tabla_desglose(
+  datos_top = datos_top,
+  top_global = top_global,
+  var_desglose = "GRUPO_ETARIO",
+  titulo = "Top 20 Diagn\u00f3sticos por Grupo Etario",
+  tamano_fuente = 7
+)
+
+ft_edad
+
+guardar_tabla_png(ft_edad, "tabla_desglose_edad", dir_salida = dir_salida)
+```
+
+```{r}
+#| label: heatmap-edad
+#| fig-width: 14
+#| fig-height: 8
+
+# Preparar datos para heatmap
+datos_heatmap <- datos_top %>%
+  filter(!is.na(GRUPO_ETARIO)) %>%
+  count(DIAG_COMPLETO, GRUPO_ETARIO) %>%
+  group_by(DIAG_COMPLETO) %>%
+  mutate(pct = n / sum(n) * 100) %>%
+  ungroup() %>%
+  inner_join(top_global %>% select(DIAG_COMPLETO, ranking), by = "DIAG_COMPLETO")
+
+g_heatmap <- ggplot(datos_heatmap,
+                    aes(x = GRUPO_ETARIO,
+                        y = reorder(DIAG_COMPLETO, -ranking),
+                        fill = pct)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = sprintf("%.0f%%", pct)), size = 2.5) +
+  scale_fill_gradient(low = "#F7FBFF", high = "#08519C",
+                      name = "% del\ndiagn\u00f3stico") +
+  labs(
+    title = "Distribuci\u00f3n de Top 20 Diagn\u00f3sticos por Grupo Etario",
+    subtitle = "Porcentaje dentro de cada diagn\u00f3stico",
+    x = "Grupo etario", y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 7),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+
+g_heatmap
+
+guardar_multiformato(g_heatmap, "heatmap_edad", ancho = 14, alto = 8,
+                     dir_salida = dir_salida)
+```
+
+## 7. Desglose por Regi\u00f3n del Establecimiento
+
+Se muestran las 5 regiones con mayor volumen de egresos.
+
+**Nota:** `NOMBRE_REGION` corresponde a la regi\u00f3n del establecimiento de salud,
+no a la regi\u00f3n de residencia del paciente.
+
+```{r}
+#| label: desglose-region
+
+ft_region <- crear_tabla_desglose(
+  datos_top = datos_top,
+  top_global = top_global,
+  var_desglose = "NOMBRE_REGION",
+  titulo = "Top 20 Diagn\u00f3sticos por Regi\u00f3n del Establecimiento (Top 5 regiones)",
+  top_categorias = 5,
+  tamano_fuente = 7
+)
+
+ft_region
+
+guardar_tabla_png(ft_region, "tabla_desglose_region", dir_salida = dir_salida)
+```
+
+## 8. Resumen
+
+```{r}
+#| label: resumen
+
+cat("=== RESUMEN DE RESULTADOS ===\n\n")
+cat("Registros analizados:", format(nrow(datos_filtrados), big.mark = ","), "\n")
+cat("Top 20 diagnosticos cubren:",
+    format(nrow(datos_top), big.mark = ","), "egresos",
+    sprintf("(%.1f%%)\n", nrow(datos_top) / nrow(datos_filtrados) * 100))
+cat("\nDesgloses generados:\n")
+cat("  1. Pertenencia PO/PG (Variable Enriquecida)\n")
+cat("  2. Sexo (HOMBRE/MUJER)\n")
+cat("  3. Grupo etario (7 grupos)\n")
+cat("  4. Region del establecimiento (top 5)\n")
+cat("\nArchivos guardados en:", normalizePath(dir_salida, mustWork = FALSE), "\n")
+
+# Listar archivos generados
+archivos <- list.files(dir_salida, full.names = FALSE)
+if (length(archivos) > 0) {
+  cat("\nArchivos generados:\n")
+  for (a in archivos) cat("  -", a, "\n")
+}
+
+cat("\nLIMITACIONES:\n")
+cat("  - NOMBRE_REGION = region del establecimiento (no del paciente)\n")
+cat("  - Variable Enriquecida integra RSH + CONADI + EH (sin Censo)\n")
+cat("  - Diagnostico principal (DIAG1) solamente, sin secundarios\n")
+```

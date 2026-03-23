@@ -27,14 +27,38 @@ cat("===========================================================================
 cat("CARGANDO FUNCIONES PERSONALIZADAS\n")
 cat("================================================================================\n\n")
 
-# Obtener directorio base del proyecto
-directorio_base <- getwd()
+# Obtener directorio base del proyecto (compatible con source() desde cualquier path)
+# Primero intenta la ubicación del script (funciona con source("../../R/cargar_funciones.R"))
+directorio_base <- tryCatch({
+  script_path <- sys.frames()[[1]]$filename
+  if (!is.null(script_path) && nzchar(script_path)) {
+    normalizePath(file.path(dirname(script_path), ".."), mustWork = FALSE)
+  } else {
+    getwd()
+  }
+}, error = function(e) getwd())
+
 directorio_r <- file.path(directorio_base, "R")
 
-# Verificar que existe el directorio R/
+# Si no encontró R/ con el path del script, intentar subiendo desde getwd()
+if (!dir.exists(directorio_r)) {
+  # Buscar raíz subiendo directorios hasta encontrar R/
+  dir_actual <- getwd()
+  for (i in 1:5) {
+    if (dir.exists(file.path(dir_actual, "R"))) {
+      directorio_base <- dir_actual
+      directorio_r <- file.path(directorio_base, "R")
+      break
+    }
+    dir_actual <- dirname(dir_actual)
+  }
+}
+
 if (!dir.exists(directorio_r)) {
   stop("ERROR: No se encuentra el directorio R/ en el proyecto.")
 }
+
+cat("Directorio base:", directorio_base, "\n")
 
 # ------------------------------------------------------------------------------
 # FUNCIONES DE GRAFICOS
@@ -127,6 +151,9 @@ source(file.path(directorio_r, "perfiles", "crear_tabla_perfil.R"))
 source(file.path(directorio_r, "perfiles", "graficar_perfil_top.R"))
 source(file.path(directorio_r, "perfiles", "graficar_diferencias_tasas.R"))
 source(file.path(directorio_r, "perfiles", "funciones_patologias.R"))
+source(file.path(directorio_r, "perfiles", "calcular_top_patologias_desglose.R"))
+source(file.path(directorio_r, "perfiles", "calcular_indicadores_protocolo.R"))
+source(file.path(directorio_r, "perfiles", "unificar_por_run.R"))
 cat("  ✓ calcular_perfil_diagnostico\n")
 cat("  ✓ comparar_perfiles_po_pg\n")
 cat("  ✓ crear_tabla_perfil\n")
@@ -135,15 +162,23 @@ cat("  ✓ graficar_diferencias_tasas\n")
 cat("  ✓ crear_perfil_patologia (NUEVA)\n")
 cat("  ✓ comparar_patologias (NUEVA)\n")
 cat("  ✓ desglosar_por_subtipo (NUEVA)\n")
+cat("  ✓ calcular_top_patologias_desglose (NUEVA)\n")
+cat("  ✓ crear_tabla_desglose (NUEVA)\n")
+cat("  ✓ calcular_indicadores_globales (NUEVA)\n")
+cat("  ✓ calcular_indicadores_desagregados (NUEVA)\n")
+cat("  ✓ crear_tabla_indicadores (NUEVA)\n")
+cat("  ✓ unificar_por_run (NUEVA)\n")
 
 # ------------------------------------------------------------------------------
 # FUNCIONES DE UTILIDADES
 # ------------------------------------------------------------------------------
 cat("\nCargando funciones de utilidades...\n")
+source(file.path(directorio_r, "utilidades", "paleta_colores.R"))
 source(file.path(directorio_r, "utilidades", "concatenar_diag_cie10.R"))
 source(file.path(directorio_r, "utilidades", "concatenar_diag_ciecl.R"))
 source(file.path(directorio_r, "utilidades", "guardar_tabla_jpg.R"))
 source(file.path(directorio_r, "utilidades", "crear_region_nuble.R"))
+cat("  ✓ paleta_colores (centralizada)\n")
 cat("  ✓ concatenar_diag_cie10\n")
 cat("  ✓ concatenar_diag_ciecl (paquete ciecl)\n")
 cat("  ✓ guardar_tabla_jpg\n")
@@ -201,7 +236,7 @@ cat("  - calcular_ccc_desagregacion(datos_censo, datos_comparacion, columnas_joi
 cat("  - calcular_ccc_detallado(datos_censo, datos_comparacion, columnas_join, nombre)\n")
 cat("  - calcular_ccc_temporal(datos_censo, datos_egresos, col_anio, col_pertenencia)\n")
 cat("  - crear_tabla_ccc(datos, titulo, subtitulo, aplicar_colores)\n")
-cat("\nPERFILES EPIDEMIOLOGICOS (8 funciones):\n")
+cat("\nPERFILES EPIDEMIOLOGICOS (9 funciones):\n")
 cat("  - calcular_perfil_diagnostico(datos, pertenencia, poblacion, total_egresos)\n")
 cat("  - comparar_perfiles_po_pg(datos, poblacion_po, poblacion_pg, egresos_po, egresos_pg)\n")
 cat("  - crear_tabla_perfil(datos, tipo, titulo)\n")
@@ -210,6 +245,7 @@ cat("  - graficar_diferencias_tasas(datos, top_n, titulo)\n")
 cat("  - crear_perfil_patologia(datos, codigos_base, nombre_patologia) [NUEVA]\n")
 cat("  - comparar_patologias(datos, lista_patologias, pob_po, pob_pg) [NUEVA]\n")
 cat("  - desglosar_por_subtipo(datos, clasificacion_fn, pob_po, pob_pg) [NUEVA]\n")
+cat("  - unificar_por_run(datos, modo, col_pertenencia, col_ano) [NUEVA]\n")
 cat("\nUTILIDADES (5 funciones):\n")
 cat("  - concatenar_diag_cie10(data, col_diag, col_destino, tabla_cie10)\n")
 cat("  - cargar_tabla_cie10_espanol(ruta_archivo)\n")
@@ -224,14 +260,14 @@ cat("  - guardar_tabla_html(tabla, nombre_archivo)\n")
 cat("  - guardar_como_jpg(tabla_ft, nombre_archivo)\n")
 
 cat("\n═══════════════════════════════════════════════════════════════\n")
-cat("- TODAS LAS FUNCIONES CARGADAS EXITOSAMENTE (56 funciones)\n")
+cat("- TODAS LAS FUNCIONES CARGADAS EXITOSAMENTE (57 funciones)\n")
 cat("═══════════════════════════════════════════════════════════════\n\n")
-cat("Total: 56 funciones cargadas (100% COMPLETO)\n")
+cat("Total: 57 funciones cargadas (100% COMPLETO)\n")
 cat("  * Gráficos: 13 funciones (+3 NUEVAS)\n")
 cat("  * Análisis: 10 funciones (+4 NUEVAS)\n")
 cat("  * Concordancia: 9 funciones\n")
-cat("  * Perfiles Epidemiológicos: 8 funciones (+3 NUEVAS)\n")
+cat("  * Perfiles Epidemiológicos: 9 funciones (+4 NUEVAS)\n")
 cat("  * Utilidades: 5 funciones\n")
 cat("  * Tablas: 5 funciones\n")
-cat("Para más información, consulte: R/README.md\n")
+cat("Para más información, consulte: README.md\n")
 cat("================================================================================\n\n")

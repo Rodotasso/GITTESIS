@@ -45,7 +45,7 @@ concatenar_diag_ciecl <- function(data,
   
   # Verificar que ciecl está disponible
   if (!requireNamespace("ciecl", quietly = TRUE)) {
-    stop("El paquete 'ciecl' es necesario. Instalar con: remotes::install_github('Rodotasso/ciecl')")
+    stop("El paquete 'ciecl' es necesario. Instalar con: install.packages('ciecl')")
   }
   
   # Verificar que exista la columna
@@ -100,12 +100,12 @@ concatenar_diag_ciecl <- function(data,
     
     # Crear tabla de lookup con código sin punto para hacer match
     tabla_lookup <- descripciones_cie %>%
-      dplyr::mutate(codigo_sin_punto = quitar_punto(codigo)) %>%
+      dplyr::mutate(codigo_sin_punto = gsub("X$", "", quitar_punto(codigo))) %>%
       dplyr::select(codigo_sin_punto, descripcion_concatenada = descripcion_completa)
     
     # Quitar punto de los códigos originales para hacer match
     data_resultado <- data %>%
-      dplyr::mutate(.codigo_temp = gsub("\\.", "", .data[[col_diag]])) %>%
+      dplyr::mutate(.codigo_temp = gsub("X$", "", gsub("\\.", "", .data[[col_diag]]))) %>%
       left_join(tabla_lookup, by = c(".codigo_temp" = "codigo_sin_punto")) %>%
       mutate(
         !!col_destino := ifelse(
@@ -183,7 +183,7 @@ obtener_descripciones_ciecl <- function(codigos,
   
   # Verificar que ciecl está disponible
   if (!requireNamespace("ciecl", quietly = TRUE)) {
-    stop("El paquete 'ciecl' es necesario. Instalar con: remotes::install_github('Rodotasso/ciecl')")
+    stop("El paquete 'ciecl' es necesario. Instalar con: install.packages('ciecl')")
   }
   
   # Eliminar NAs
@@ -235,7 +235,7 @@ validar_codigos_ciecl <- function(codigos, verbose = TRUE) {
   
   # Verificar que ciecl está disponible
   if (!requireNamespace("ciecl", quietly = TRUE)) {
-    stop("El paquete 'ciecl' es necesario. Instalar con: remotes::install_github('Rodotasso/ciecl')")
+    stop("El paquete 'ciecl' es necesario. Instalar con: install.packages('ciecl')")
   }
   
   # Eliminar NAs

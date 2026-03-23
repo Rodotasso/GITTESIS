@@ -40,14 +40,16 @@
 #
 # ==============================================================================
 
-guardar_tabla_html <- function(tabla, nombre_archivo) {
+guardar_tabla_html <- function(tabla, nombre_archivo, dir_salida = "resultados_tesis") {
   if(is.null(tabla)) {
     message("La tabla es NULL, no se puede guardar: ", nombre_archivo)
     return(invisible(NULL))
   }
-  
-  ruta_completa <- file.path("resultados_tesis", nombre_archivo)
-  
+
+  ruta_completa <- file.path(dir_salida, nombre_archivo)
+  dir_ruta <- dirname(ruta_completa)
+  if (!dir.exists(dir_ruta)) dir.create(dir_ruta, recursive = TRUE)
+
   tryCatch({
     flextable::save_as_html(tabla, path = ruta_completa)
     message("Tabla guardada como: ", ruta_completa)

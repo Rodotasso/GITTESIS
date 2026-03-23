@@ -1,0 +1,448 @@
+---
+title: "Indicadores Epidemiologicos - Protocolo Tabla 4 (excl. Cap. O y P)"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Indicadores epidemiologicos del protocolo (OPS 2018, Bonita 2006) desagregados por pertenencia, sexo, grupo etario y region, excluyendo capitulos O y P"
+format:
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Indicadores Epidemiologicos — Protocolo Tabla 4 (excl. Cap. O y P)
+
+Calculo de los indicadores epidemiologicos definidos en la Tabla 4 del protocolo
+de tesis, desagregados por pertenencia a Pueblos Originarios (Variable Enriquecida),
+sexo, grupo etario y region. Periodo 2010-2022. Se excluyen los capitulos O
+(Embarazo, parto y puerperio) y P (Afecciones perinatales).
+
+**Indicadores:**
+
+1. Tasa de egresos (x1000 persona-anos)
+2. Proporcion de egresos por causa (x1000 egresos)
+3. Proporcion de letalidad intrahospitalaria (x1000)
+4. Tasa de letalidad por causa (x1000)
+5. Dias de estada (promedio y mediana)
+
+**Notas metodologicas:**
+
+- Denominador censal: Censo 2017 como proxy de poblacion media del periodo
+- Region: solo proporciones y razones (region del establecimiento != residencia del paciente)
+- Estudio poblacional: sin intervalos de confianza (Flores et al., 2024)
+- "Tasa de letalidad" = proporcion (CFR) segun convencion epidemiologica
+- Persona-anos NO cambian por exclusion O/P (se excluyen diagnosticos, no personas)
+
+## 1. Configuracion
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(scales)
+  library(censo2017)
+  library(ciecl)
+})
+
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
+
+cat("Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+```
+
+## 2. Preparacion de datos (excl. Cap. O y P)
+
+```{r preparar_datos}
+cat("=== PREPARANDO DATOS (excl. Cap. O y P) ===\n\n")
+
+n_total <- nrow(datos_homologados)
+
+# Filtrar: DIAG1 valido, ano reportado, PERTENENCIA2 definida (0 o 1)
+datos_pre_filtro <- datos_homologados %>%
+  filter(
+    !is.na(DIAG1),
+    `AÑO` != "No reportado",
+    PERTENENCIA2 %in% c(0L, 1L)
+  ) %>%
+  mutate(
+    FECHA_INGRESO_FMT_DEIS = as.Date(FECHA_INGRESO_FMT_DEIS),
+    FECHA_EGRESO_FMT_DEIS  = as.Date(FECHA_EGRESO_FMT_DEIS),
+    DIAS_ESTADA = as.integer(FECHA_EGRESO_FMT_DEIS - FECHA_INGRESO_FMT_DEIS),
+    DIAS_ESTADA = ifelse(DIAS_ESTADA < 0 | DIAS_ESTADA > 365, NA_integer_, DIAS_ESTADA)
+  )
+
+n_antes_filtro <- nrow(datos_pre_filtro)
+
+# Excluir capitulos O (O00-O99) y P (P00-P96)
+datos_prep <- datos_pre_filtro %>%
+  filter(!str_detect(DIAG1, "^O|^P")) %>%
+  concatenar_diag_ciecl("DIAG1", "DIAG_COMPLETO", verbose = TRUE)
+
+n_validos   <- nrow(datos_prep)
+n_excl_op   <- n_antes_filtro - n_validos
+n_po        <- sum(datos_prep$PERTENENCIA2 == 1)
+n_pg        <- sum(datos_prep$PERTENENCIA2 == 0)
+
+cat("\nREGISTROS:\n")
+cat("  Total base original:       ", format(n_total, big.mark = ","), "\n")
+cat("  Con PERTENENCIA2 definida: ", format(n_antes_filtro, big.mark = ","),
+    sprintf("(%.1f%%)\n", n_antes_filtro / n_total * 100))
+cat("  Excluidos Cap. O y P:      ", format(n_excl_op, big.mark = ","),
+    sprintf("(%.1f%% de VE)\n", n_excl_op / n_antes_filtro * 100))
+cat("  Registros finales:         ", format(n_validos, big.mark = ","), "\n")
+cat("\nDISTRIBUCION:\n")
+cat("  PO (PERTENENCIA2 = 1):", format(n_po, big.mark = ","),
+    sprintf("(%.1f%%)\n", n_po / n_validos * 100))
+cat("  PG (PERTENENCIA2 = 0):", format(n_pg, big.mark = ","),
+    sprintf("(%.1f%%)\n", n_pg / n_validos * 100))
+
+# Validar DIAS_ESTADA
+cat("\nDIAS_ESTADA:\n")
+cat("  Validos:", format(sum(!is.na(datos_prep$DIAS_ESTADA)), big.mark = ","), "\n")
+cat("  NA:", format(sum(is.na(datos_prep$DIAS_ESTADA)), big.mark = ","), "\n")
+cat("  Promedio:", round(mean(datos_prep$DIAS_ESTADA, na.rm = TRUE), 1), "dias\n")
+cat("  Mediana:", median(datos_prep$DIAS_ESTADA, na.rm = TRUE), "dias\n")
+
+# Validar COND_EGR
+cat("\nCOND_EGR (letalidad):\n")
+cat("  Fallecidos (==2):", format(sum(datos_prep$COND_EGR == 2, na.rm = TRUE), big.mark = ","), "\n")
+cat("  Vivos (!=2):", format(sum(datos_prep$COND_EGR != 2, na.rm = TRUE), big.mark = ","), "\n")
+```
+
+## 3. Denominadores (Censo 2017)
+
+```{r denominadores_censo}
+cat("=== EXTRAYENDO DENOMINADORES DEL CENSO 2017 ===\n\n")
+
+# Denominadores nacionales
+pob_censo <- obtener_poblacion_censo(verbose = TRUE)
+
+# Denominadores desagregados
+datos_censo <- extraer_datos_censo(verbose = TRUE)
+
+cat("\n=== RESUMEN DENOMINADORES ===\n")
+cat("Nacional (NO cambian por exclusion O/P):\n")
+cat("  PO:", format(pob_censo$pob_po, big.mark = ","), "\n")
+cat("  PG:", format(pob_censo$pob_pg, big.mark = ","), "\n")
+
+cat("\nPor sexo:\n")
+print(datos_censo$por_sexo %>% select(sexo, total, pertenece))
+
+cat("\nPor grupo etario:\n")
+print(datos_censo$por_grupo_etario %>% select(grupo_etario, total, pertenece))
+
+cat("\nPor region (16 regiones + Nuble):\n")
+print(datos_censo$por_region %>% select(region, total, pertenece))
+```
+
+## 4. Indicadores globales PO vs PG (excl. Cap. O y P)
+
+```{r indicadores_globales}
+anos_estudio <- 13  # 2010-2022
+
+ind_global <- calcular_indicadores_globales(
+  datos = datos_prep,
+  poblacion_po = pob_censo$pob_po,
+  poblacion_pg = pob_censo$pob_pg,
+  anos_estudio = anos_estudio,
+  verbose = TRUE
+)
+
+# Tabla
+tabla_global <- crear_tabla_indicadores(
+  ind_global,
+  titulo = "Tabla 1. Indicadores globales PO vs PG (excl. Cap. O y P, 2010-2022)",
+  formato = "global"
+)
+tabla_global
+```
+
+```{r guardar_tabla_global}
+dir_salida <- file.path(directorio_base, "resultados_tesis", "indicadores_epidemiologicos_sin_op")
+if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
+
+guardar_tabla_png(tabla_global, "tabla_ind_global_sin_op", dir_salida = dir_salida)
+```
+
+```{r grafico_global, fig.width=8, fig.height=5}
+# Grafico comparativo de tasas de egresos
+p_global <- ind_global %>%
+  ggplot(aes(x = grupo, y = tasa_egresos_x1000, fill = grupo)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = sprintf("%.1f", tasa_egresos_x1000)),
+            vjust = -0.5, size = 4) +
+  scale_fill_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  labs(
+    title = "Tasa de egresos PO vs PG (excl. Cap. O y P)",
+    subtitle = sprintf("Por 1000 persona-anos. Periodo 2010-2022 (n = %s)",
+                        format(sum(ind_global$n_egresos), big.mark = ",")),
+    x = NULL, y = "Tasa x 1000 persona-anos"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none") +
+  coord_cartesian(ylim = c(0, max(ind_global$tasa_egresos_x1000) * 1.15))
+
+p_global
+guardar_multiformato(p_global, "tasas_global_sin_op", dir_salida = dir_salida)
+```
+
+## 5. Indicadores por Sexo (excl. Cap. O y P)
+
+```{r indicadores_sexo}
+ind_sexo <- calcular_indicadores_desagregados(
+  datos = datos_prep,
+  var_desglose = "GLOSA_SEXO",
+  denominadores_censo = datos_censo$por_sexo,
+  col_join_censo = "sexo",
+  anos_estudio = anos_estudio,
+  calcular_tasas = TRUE,
+  verbose = TRUE
+)
+
+tabla_sexo <- crear_tabla_indicadores(
+  ind_sexo,
+  titulo = "Tabla 2. Indicadores por sexo, PO vs PG (excl. Cap. O y P, 2010-2022)",
+  formato = "desagregado",
+  incluir_tasas = TRUE
+)
+tabla_sexo
+```
+
+```{r guardar_tabla_sexo}
+guardar_tabla_png(tabla_sexo, "tabla_ind_sexo_sin_op", dir_salida = dir_salida)
+```
+
+```{r grafico_sexo, fig.width=9, fig.height=5}
+p_sexo <- ind_sexo %>%
+  filter(!is.na(tasa_x1000)) %>%
+  ggplot(aes(x = categoria, y = tasa_x1000, fill = grupo)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  geom_text(aes(label = sprintf("%.1f", tasa_x1000)),
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3.5) +
+  scale_fill_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  labs(
+    title = "Tasa de egresos por sexo: PO vs PG (excl. Cap. O y P)",
+    subtitle = "Por 1000 persona-anos. Periodo 2010-2022",
+    x = NULL, y = "Tasa x 1000 persona-anos", fill = "Grupo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+p_sexo
+guardar_multiformato(p_sexo, "tasas_sexo_sin_op", dir_salida = dir_salida)
+```
+
+## 6. Indicadores por Grupo Etario (excl. Cap. O y P)
+
+```{r indicadores_edad}
+ind_edad <- calcular_indicadores_desagregados(
+  datos = datos_prep,
+  var_desglose = "GRUPO_ETARIO",
+  denominadores_censo = datos_censo$por_grupo_etario,
+  col_join_censo = "grupo_etario",
+  anos_estudio = anos_estudio,
+  calcular_tasas = TRUE,
+  verbose = TRUE
+)
+
+tabla_edad <- crear_tabla_indicadores(
+  ind_edad,
+  titulo = "Tabla 3. Indicadores por grupo etario, PO vs PG (excl. Cap. O y P, 2010-2022)",
+  formato = "desagregado",
+  incluir_tasas = TRUE
+)
+tabla_edad
+```
+
+```{r guardar_tabla_edad}
+guardar_tabla_png(tabla_edad, "tabla_ind_edad_sin_op", dir_salida = dir_salida)
+```
+
+```{r grafico_edad, fig.width=10, fig.height=6}
+p_edad <- ind_edad %>%
+  filter(!is.na(tasa_x1000)) %>%
+  ggplot(aes(x = categoria, y = tasa_x1000, color = grupo, group = grupo)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  labs(
+    title = "Tasa de egresos por grupo etario: PO vs PG (excl. Cap. O y P)",
+    subtitle = "Por 1000 persona-anos. Periodo 2010-2022",
+    x = "Grupo etario", y = "Tasa x 1000 persona-anos", color = "Grupo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+p_edad
+guardar_multiformato(p_edad, "tasas_edad_sin_op", dir_salida = dir_salida)
+```
+
+```{r heatmap_letalidad_edad, fig.width=10, fig.height=5}
+# Heatmap de letalidad por grupo etario
+p_let_edad <- ind_edad %>%
+  filter(!is.na(prop_letalidad_x1000)) %>%
+  select(categoria, grupo, prop_letalidad_x1000) %>%
+  ggplot(aes(x = categoria, y = grupo, fill = prop_letalidad_x1000)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = sprintf("%.1f", prop_letalidad_x1000)), size = 3.5) +
+  scale_fill_gradient(low = "#FFF5F0", high = "#CB181D",
+                      name = "Letalidad\n(x1000)") +
+  labs(
+    title = "Letalidad intrahospitalaria por grupo etario (excl. Cap. O y P)",
+    subtitle = "Por 1000 egresos. Periodo 2010-2022",
+    x = "Grupo etario", y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid = element_blank())
+
+p_let_edad
+guardar_multiformato(p_let_edad, "heatmap_letalidad_edad_sin_op", dir_salida = dir_salida)
+```
+
+## 7. Indicadores por Region (solo proporciones, excl. Cap. O y P)
+
+**Nota:** No se calculan tasas regionales porque la region del establecimiento
+(disponible en la BBDD) no corresponde necesariamente a la region de residencia
+del paciente. Solo se reportan proporciones y razones PO/PG.
+
+```{r indicadores_region}
+# Mapear CODIGO_REGION (chr) a region (int) para join con censo
+datos_prep_region <- datos_prep %>%
+  mutate(REGION_INT = as.integer(CODIGO_REGION)) %>%
+  filter(!is.na(REGION_INT))
+
+ind_region <- calcular_indicadores_desagregados(
+  datos = datos_prep_region,
+  var_desglose = "REGION_INT",
+  denominadores_censo = datos_censo$por_region,
+  col_join_censo = "region",
+  anos_estudio = anos_estudio,
+  calcular_tasas = FALSE,
+  verbose = TRUE
+)
+
+# Agregar nombre de region para la tabla
+nombres_region <- datos_prep_region %>%
+  distinct(REGION_INT, NOMBRE_REGION) %>%
+  mutate(categoria = as.character(REGION_INT))
+
+ind_region <- ind_region %>%
+  mutate(categoria = as.character(categoria)) %>%
+  left_join(nombres_region, by = "categoria") %>%
+  mutate(categoria = ifelse(!is.na(NOMBRE_REGION), NOMBRE_REGION, categoria)) %>%
+  select(-REGION_INT, -NOMBRE_REGION)
+
+tabla_region <- crear_tabla_indicadores(
+  ind_region,
+  titulo = "Tabla 4. Indicadores por region (excl. Cap. O y P, 2010-2022)",
+  formato = "desagregado",
+  incluir_tasas = FALSE
+)
+tabla_region
+```
+
+```{r guardar_tabla_region}
+guardar_tabla_png(tabla_region, "tabla_ind_region_sin_op", dir_salida = dir_salida)
+```
+
+```{r grafico_razon_region, fig.width=10, fig.height=7}
+# Razon PO/PG por region
+razon_region <- ind_region %>%
+  filter(grupo == "PO", !is.na(razon_po_pg)) %>%
+  arrange(desc(razon_po_pg))
+
+p_razon <- razon_region %>%
+  ggplot(aes(x = reorder(categoria, razon_po_pg), y = razon_po_pg)) +
+  geom_col(aes(fill = ifelse(razon_po_pg > 1, "Mayor PO", "Mayor PG")),
+           width = 0.7) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "grey40") +
+  geom_text(aes(label = sprintf("%.2f", razon_po_pg)),
+            hjust = ifelse(razon_region$razon_po_pg > 1, -0.1, 1.1),
+            size = 3) +
+  scale_fill_manual(values = c("Mayor PO" = "#C62828", "Mayor PG" = "#1565C0")) +
+  coord_flip() +
+  labs(
+    title = "Razon de proporcion PO/PG por region (excl. Cap. O y P)",
+    subtitle = "Valores > 1 indican mayor proporcion en PO. Periodo 2010-2022",
+    x = NULL, y = "Razon PO/PG", fill = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+p_razon
+guardar_multiformato(p_razon, "razon_region_sin_op", ancho = 10, alto = 7,
+                     dir_salida = dir_salida)
+```
+
+## 8. Indicadores por causa (Top 20, excl. Cap. O y P)
+
+```{r indicadores_causa}
+# Reutilizar funciones existentes de perfiles
+comparacion_causa <- comparar_perfiles_po_pg(
+  datos = datos_prep,
+  poblacion_po = pob_censo$pob_po,
+  poblacion_pg = pob_censo$pob_pg,
+  total_egresos_po = n_po,
+  total_egresos_pg = n_pg,
+  anos_estudio = anos_estudio,
+  min_casos_po = 100,
+  top_n = 20,
+  col_pertenencia = "PERTENENCIA2",
+  verbose = TRUE
+)
+
+tabla_causa <- crear_tabla_perfil(
+  comparacion_causa,
+  tipo = "comparacion",
+  titulo = "Tabla 5. Top 20 diagnosticos PO vs PG (excl. Cap. O y P, 2010-2022)",
+  incluir_rr = FALSE
+)
+tabla_causa
+```
+
+```{r guardar_tabla_causa}
+guardar_tabla_png(tabla_causa, "tabla_ind_causa_sin_op", dir_salida = dir_salida)
+```
+
+## 9. Resumen y limitaciones
+
+```{r resumen_final}
+cat("============================================================\n")
+cat("RESUMEN DE INDICADORES (excl. Cap. O y P)\n")
+cat("============================================================\n\n")
+
+cat("Periodo: 2010-2022 (13 anos)\n")
+cat("Fuente pertenencia: Variable Enriquecida (PERTENENCIA2)\n")
+cat("Denominador: Censo 2017\n")
+cat("Exclusion: Capitulos O (Embarazo/parto) y P (Perinatales)\n")
+cat("Registros excluidos:", format(n_excl_op, big.mark = ","),
+    sprintf("(%.1f%%)\n\n", n_excl_op / n_antes_filtro * 100))
+
+cat("INDICADORES GLOBALES:\n")
+for (i in seq_len(nrow(ind_global))) {
+  g <- ind_global$grupo[i]
+  cat(sprintf("  %s: Tasa=%.2f x1000 p-a | Letalidad=%.2f x1000 | Dias=%.1f (prom)\n",
+              g, ind_global$tasa_egresos_x1000[i],
+              ind_global$prop_letalidad_x1000[i],
+              ind_global$prom_dias_estada[i]))
+}
+
+cat("\nDESAGREGACIONES CALCULADAS:\n")
+cat("  - Por sexo: con tasas censales\n")
+cat("  - Por grupo etario: con tasas censales\n")
+cat("  - Por region: solo proporciones y razones (sin tasas)\n")
+cat("  - Por causa (Top 20): con tasas y diferencias\n")
+
+cat("\nLIMITACIONES:\n")
+cat("  1. Censo 2017 fijo como proxy de poblacion media del periodo 2010-2022\n")
+cat("  2. Region del establecimiento != region de residencia (sin tasas regionales)\n")
+cat("  3. Tasas crudas, sin estandarizacion por edad\n")
+cat("  4. 'Tasa de letalidad' = proporcion (CFR) segun convencion epidemiologica\n")
+cat("  5. Estudio poblacional: sin intervalos de confianza\n")
+cat("  6. Capitulos O y P excluidos: modifica distribucion proporcional de causas\n")
+
+cat("\nARCHIVOS GENERADOS:\n")
+archivos <- list.files(dir_salida, full.names = FALSE)
+for (a in archivos) cat("  -", a, "\n")
+```

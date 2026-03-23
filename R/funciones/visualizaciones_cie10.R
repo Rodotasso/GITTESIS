@@ -11,8 +11,9 @@
 #' @return Lista con datos preparados para visualizaciones
 preparar_datos_disparidades_cie10 <- function(datos_homologados, umbral = 1.5) {
 
-  # Calcular tendencia general de PERTENENCIA2 por año
+  requireNamespace("lubridate", quietly = TRUE)
 
+  # Calcular tendencia general de PERTENENCIA2 por año (para graficos)
   tendencia_general <- datos_homologados %>%
     filter(AÑO != "No reportado") %>%
     group_by(AÑO) %>%
@@ -25,7 +26,7 @@ preparar_datos_disparidades_cie10 <- function(datos_homologados, umbral = 1.5) {
 
   pct_variable_enriquecida <- mean(tendencia_general$pct_po, na.rm = TRUE)
 
-  # Calcular porcentaje de PO por grupo CIE-10 y año
+  # Calcular porcentaje de PO por grupo CIE-10 y año (para graficos)
   datos_cie10_anual <- datos_homologados %>%
     filter(AÑO != "No reportado", !is.na(Grupo_CIE10)) %>%
     group_by(AÑO, Grupo_CIE10) %>%
@@ -36,23 +37,57 @@ preparar_datos_disparidades_cie10 <- function(datos_homologados, umbral = 1.5) {
       .groups = "drop"
     )
 
-  # Calcular promedio y diferencia con tendencia general
+  # Calcular porcentaje de PO por grupo CIE-10 y mes (para IC)
+  datos_cie10_mensual <- datos_homologados %>%
+    filter(AÑO != "No reportado", !is.na(Grupo_CIE10),
+           !is.na(FECHA_EGRESO_FMT_DEIS)) %>%
+    mutate(
+      anio_mes = format(as.Date(FECHA_EGRESO_FMT_DEIS), "%Y-%m")
+    ) %>%
+    group_by(anio_mes, Grupo_CIE10) %>%
+    summarise(
+      pertenece = sum(PERTENENCIA2 == 1, na.rm = TRUE),
+      total = n(),
+      porcentaje = (pertenece / total) * 100,
+      .groups = "drop"
+    )
 
-  datos_cie10_resumen <- datos_cie10_anual %>%
+  # Tendencia general mensual para calcular diferencias
+  tendencia_mensual <- datos_homologados %>%
+    filter(AÑO != "No reportado", !is.na(FECHA_EGRESO_FMT_DEIS)) %>%
+    mutate(
+      anio_mes = format(as.Date(FECHA_EGRESO_FMT_DEIS), "%Y-%m")
+    ) %>%
+    group_by(anio_mes) %>%
+    summarise(
+      pct_po_mes = (sum(PERTENENCIA2 == 1, na.rm = TRUE) / n()) * 100,
+      .groups = "drop"
+    )
+
+  # Unir y calcular diferencia mensual por capitulo
+  datos_cie10_mensual <- datos_cie10_mensual %>%
+    left_join(tendencia_mensual, by = "anio_mes") %>%
+    mutate(diferencia_mes = porcentaje - pct_po_mes)
+
+  # Resumen: media y DE de las diferencias mensuales (n = meses disponibles)
+  n_meses <- n_distinct(datos_cie10_mensual$anio_mes)
+
+  datos_cie10_resumen <- datos_cie10_mensual %>%
     group_by(Grupo_CIE10) %>%
     summarise(
+      diferencia = mean(diferencia_mes, na.rm = TRUE),
+      porcentaje_sd = sd(diferencia_mes, na.rm = TRUE),
       porcentaje_promedio = mean(porcentaje, na.rm = TRUE),
       porcentaje_min = min(porcentaje, na.rm = TRUE),
       porcentaje_max = max(porcentaje, na.rm = TRUE),
-      porcentaje_sd = sd(porcentaje, na.rm = TRUE),
+      n_meses_obs = n(),
       n_total = sum(total),
       .groups = "drop"
     ) %>%
     mutate(
-      diferencia = porcentaje_promedio - pct_variable_enriquecida,
       tipo = case_when(
-        diferencia >= umbral ~ "Sobrerrepresentación",
-        diferencia <= -umbral ~ "Subrepresentación",
+        diferencia >= umbral ~ "Sobrerrepresentaci\u00f3n",
+        diferencia <= -umbral ~ "Subrepresentaci\u00f3n",
         TRUE ~ "Sin diferencia significativa"
       )
     ) %>%
@@ -63,7 +98,9 @@ preparar_datos_disparidades_cie10 <- function(datos_homologados, umbral = 1.5) {
     tendencia_general = tendencia_general,
     pct_variable_enriquecida = pct_variable_enriquecida,
     datos_cie10_anual = datos_cie10_anual,
+    datos_cie10_mensual = datos_cie10_mensual,
     datos_cie10_resumen = datos_cie10_resumen,
+    n_meses = n_meses,
     umbral = umbral
   )
 }
@@ -224,10 +261,8 @@ crear_forest_plot_cie10 <- function(datos, version_revista = FALSE) {
 
   df <- datos$datos_cie10_resumen %>%
     mutate(
-      # Calcular IC 95% usando SD y asumiendo distribución normal
-      # n = 156 meses (13 años × 12 meses) para mayor precisión estadística
-      n_obs = 156,
-      se = porcentaje_sd / sqrt(n_obs),
+      # IC 95% con DE de diferencias mensuales (n ~ 156 meses)
+      se = porcentaje_sd / sqrt(n_meses_obs),
       ic_inf = diferencia - 1.96 * se,
       ic_sup = diferencia + 1.96 * se,
       Grupo_CIE10_wrap = str_wrap(Grupo_CIE10, width = 35),
@@ -237,7 +272,8 @@ crear_forest_plot_cie10 <- function(datos, version_revista = FALSE) {
   # Colores según tipo
   colores_forest <- c(
     "Sobrerrepresentación" = "#C62828",
-    "Subrepresentación" = "#1565C0"
+    "Subrepresentación" = "#1565C0",
+    "Sin diferencia significativa" = "#757575"
   )
 
   p <- ggplot(df, aes(x = diferencia, y = Grupo_CIE10_wrap, color = tipo)) +
@@ -255,8 +291,8 @@ crear_forest_plot_cie10 <- function(datos, version_revista = FALSE) {
     scale_color_manual(values = colores_forest, name = NULL) +
     scale_x_continuous(
       labels = function(x) paste0(ifelse(x > 0, "+", ""), x, " pp"),
-      breaks = seq(-6, 8, by = 2),
-      limits = c(min(df$ic_inf) - 1, max(df$ic_sup) + 2)
+      breaks = seq(-4, 4, by = 2),
+      limits = c(min(df$ic_inf) - 0.5, max(df$ic_sup) + 1)
     ) +
     labs(
       x = "Diferencia respecto al promedio (puntos porcentuales) con IC 95%",

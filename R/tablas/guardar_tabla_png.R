@@ -56,13 +56,14 @@ guardar_tabla_png <- function(tabla_ft,
                               fondo = "white",
                               dir_salida = "resultados_tesis") {
   
-  # Crear directorio si no existe
-  if (!dir.exists(dir_salida)) {
-    dir.create(dir_salida, recursive = TRUE)
-  }
-  
   # Ruta del archivo de salida
   ruta_salida <- file.path(dir_salida, paste0(nombre_archivo, ".png"))
+
+  # Crear directorio completo (incluye subdirectorios en nombre_archivo)
+  dir_ruta <- dirname(ruta_salida)
+  if (!dir.exists(dir_ruta)) {
+    dir.create(dir_ruta, recursive = TRUE)
+  }
   
   # MÉTODO 1: save_as_image (MEJOR CALIDAD - Recomendado)
   exito <- tryCatch({

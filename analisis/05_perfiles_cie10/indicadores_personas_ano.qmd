@@ -1,0 +1,588 @@
+---
+title: "Indicadores Epidemiologicos - Personas-Ano (Un RUN por Ano)"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Indicadores epidemiologicos calculados sobre personas-ano (un registro por RUN por ano), eliminando hospitalizaciones repetidas dentro del mismo ano"
+format:
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Indicadores Epidemiologicos — Personas-Ano
+
+Calculo de indicadores epidemiologicos sobre **personas-ano** (un registro por
+RUN por ano). Dentro de cada ano, si un paciente tiene multiples hospitalizaciones,
+se conserva la primera por fecha de ingreso y se agregan los indicadores.
+
+**Diferencia con analisis global:** Aqui una persona puede contar una vez por
+cada ano en que fue hospitalizada. Esto permite analisis temporales manteniendo
+la unidad de analisis como persona-ano en lugar de egreso.
+
+**Notas metodologicas:**
+
+- La "tasa" (personas-ano / persona-anos x 1000) es epidemiologicamente mas
+  interpretable que en el modo global: refleja la proporcion anual promedio de
+  personas hospitalizadas. Es comparable con la tasa de egresos (que sera mayor
+  porque cuenta eventos multiples por persona-ano).
+- La letalidad reportada es **mortalidad intrahospitalaria dentro del ano**:
+  proporcion de personas que fallecieron en alguna hospitalizacion de ESE ano,
+  no necesariamente por el diagnostico asignado (primera atencion del ano).
+  Mas precisa que el modo global, pero sigue sin ser CFR causa-especifica.
+- Los dias de estada corresponden a la **primera hospitalizacion del ano**.
+- `min_casos_po = 50` (vs 100 en egresos) por la reduccion de n tras deduplicar.
+
+## 1. Configuracion
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(scales)
+  library(censo2017)
+  library(ciecl)
+})
+
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
+
+cat("Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+```
+
+## 2. Preparacion de datos
+
+```{r preparar_datos}
+cat("=== PREPARANDO DATOS ===\n\n")
+
+n_total <- nrow(datos_homologados)
+
+datos_prep <- datos_homologados %>%
+  filter(
+    !is.na(DIAG1),
+    `AÑO` != "No reportado",
+    PERTENENCIA2 %in% c(0L, 1L)
+  ) %>%
+  mutate(
+    FECHA_INGRESO_FMT_DEIS = as.Date(FECHA_INGRESO_FMT_DEIS),
+    FECHA_EGRESO_FMT_DEIS  = as.Date(FECHA_EGRESO_FMT_DEIS),
+    DIAS_ESTADA = as.integer(FECHA_EGRESO_FMT_DEIS - FECHA_INGRESO_FMT_DEIS),
+    DIAS_ESTADA = ifelse(DIAS_ESTADA < 0 | DIAS_ESTADA > 365, NA_integer_, DIAS_ESTADA)
+  ) %>%
+  concatenar_diag_ciecl("DIAG1", "DIAG_COMPLETO", verbose = TRUE)
+
+n_egresos <- nrow(datos_prep)
+cat("\nEgresos con PERTENENCIA2 definida:", format(n_egresos, big.mark = ","), "\n")
+```
+
+### 2.1. Unificacion por RUN + Ano
+
+```{r unificar}
+datos_personas_ano <- unificar_por_run(datos_prep, modo = "anual", verbose = TRUE)
+
+n_personas_ano <- nrow(datos_personas_ano)
+n_po <- sum(datos_personas_ano$PERTENENCIA2 == 1)
+n_pg <- sum(datos_personas_ano$PERTENENCIA2 == 0)
+
+cat("\n--- RESUMEN DEDUPLICACION ---\n")
+cat("  Egresos originales:", format(n_egresos, big.mark = ","), "\n")
+cat("  Personas-ano:      ", format(n_personas_ano, big.mark = ","), "\n")
+cat("  Reduccion:         ", sprintf("%.1f%%", (1 - n_personas_ano / n_egresos) * 100), "\n")
+cat("  PO:", format(n_po, big.mark = ","), sprintf("(%.1f%%)\n", n_po / n_personas_ano * 100))
+cat("  PG:", format(n_pg, big.mark = ","), sprintf("(%.1f%%)\n", n_pg / n_personas_ano * 100))
+
+# Distribucion temporal
+cat("\nPersonas-ano por periodo:\n")
+dist_ano <- datos_personas_ano %>%
+  count(`AÑO`, PERTENENCIA2) %>%
+  mutate(grupo = ifelse(PERTENENCIA2 == 1, "PO", "PG")) %>%
+  select(`AÑO`, grupo, n) %>%
+  pivot_wider(names_from = grupo, values_from = n, values_fill = 0)
+print(dist_ano, n = 20)
+```
+
+## 3. Denominadores (Censo 2017)
+
+```{r denominadores_censo}
+cat("=== DENOMINADORES POBLACIONALES ===\n\n")
+
+pob_censo <- obtener_poblacion_censo(verbose = TRUE)
+datos_censo <- extraer_datos_censo(verbose = TRUE)
+
+cat("\nNacional:\n")
+cat("  PO:", format(pob_censo$pob_po, big.mark = ","), "\n")
+cat("  PG:", format(pob_censo$pob_pg, big.mark = ","), "\n")
+```
+
+## 4. Indicadores globales PO vs PG (personas-ano)
+
+```{r indicadores_globales}
+anos_estudio <- 13  # 2010-2022
+
+total_pa_po <- sum(datos_personas_ano$PERTENENCIA2 == 1)
+total_pa_pg <- sum(datos_personas_ano$PERTENENCIA2 == 0)
+
+ind_global <- calcular_indicadores_globales(
+  datos = datos_personas_ano,
+  poblacion_po = pob_censo$pob_po,
+  poblacion_pg = pob_censo$pob_pg,
+  anos_estudio = anos_estudio,
+  verbose = TRUE
+)
+
+tabla_global <- crear_tabla_indicadores(
+  ind_global,
+  titulo = "Tabla 1. Indicadores globales - Personas-ano PO vs PG (2010-2022)",
+  formato = "global"
+)
+tabla_global
+```
+
+```{r guardar_tabla_global}
+dir_salida <- file.path(directorio_base, "resultados_tesis", "indicadores_personas_ano")
+if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
+
+guardar_tabla_png(tabla_global, "tabla_ind_global_pa", dir_salida = dir_salida)
+```
+
+```{r grafico_global, fig.width=8, fig.height=5}
+p_global <- ind_global %>%
+  ggplot(aes(x = grupo, y = tasa_egresos_x1000, fill = grupo)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = sprintf("%.1f", tasa_egresos_x1000)),
+            vjust = -0.5, size = 4) +
+  scale_fill_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  labs(
+    title = "Tasa anual promedio de personas hospitalizadas PO vs PG",
+    subtitle = sprintf("Personas-ano / persona-anos x 1000 (n = %s, periodo 2010-2022)",
+                        format(sum(ind_global$n_egresos), big.mark = ",")),
+    x = NULL, y = "Personas hospitalizadas x 1000 persona-anos"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none") +
+  coord_cartesian(ylim = c(0, max(ind_global$tasa_egresos_x1000) * 1.15))
+
+p_global
+guardar_multiformato(p_global, "tasas_global_pa", dir_salida = dir_salida)
+```
+
+## 5. Indicadores por Sexo
+
+```{r indicadores_sexo}
+ind_sexo <- calcular_indicadores_desagregados(
+  datos = datos_personas_ano,
+  var_desglose = "GLOSA_SEXO",
+  denominadores_censo = datos_censo$por_sexo,
+  col_join_censo = "sexo",
+  anos_estudio = anos_estudio,
+  calcular_tasas = TRUE,
+  verbose = TRUE
+)
+
+tabla_sexo <- crear_tabla_indicadores(
+  ind_sexo,
+  titulo = "Tabla 2. Indicadores por sexo - Personas-ano PO vs PG (2010-2022)",
+  formato = "desagregado",
+  incluir_tasas = TRUE
+)
+tabla_sexo
+```
+
+```{r guardar_tabla_sexo}
+guardar_tabla_png(tabla_sexo, "tabla_ind_sexo_pa", dir_salida = dir_salida)
+```
+
+```{r grafico_sexo, fig.width=9, fig.height=5}
+p_sexo <- ind_sexo %>%
+  filter(!is.na(tasa_x1000)) %>%
+  ggplot(aes(x = categoria, y = tasa_x1000, fill = grupo)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  geom_text(aes(label = sprintf("%.1f", tasa_x1000)),
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3.5) +
+  scale_fill_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  labs(
+    title = "Tasa anual promedio de personas hospitalizadas por sexo: PO vs PG",
+    subtitle = "Personas-ano / persona-anos x 1000 (2010-2022)",
+    x = NULL, y = "Personas hospitalizadas x 1000 persona-anos", fill = "Grupo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+p_sexo
+guardar_multiformato(p_sexo, "tasas_sexo_pa", dir_salida = dir_salida)
+```
+
+## 6. Indicadores por Grupo Etario
+
+```{r indicadores_edad}
+ind_edad <- calcular_indicadores_desagregados(
+  datos = datos_personas_ano,
+  var_desglose = "GRUPO_ETARIO",
+  denominadores_censo = datos_censo$por_grupo_etario,
+  col_join_censo = "grupo_etario",
+  anos_estudio = anos_estudio,
+  calcular_tasas = TRUE,
+  verbose = TRUE
+)
+
+tabla_edad <- crear_tabla_indicadores(
+  ind_edad,
+  titulo = "Tabla 3. Indicadores por grupo etario - Personas-ano PO vs PG (2010-2022)",
+  formato = "desagregado",
+  incluir_tasas = TRUE
+)
+tabla_edad
+```
+
+```{r guardar_tabla_edad}
+guardar_tabla_png(tabla_edad, "tabla_ind_edad_pa", dir_salida = dir_salida)
+```
+
+```{r grafico_edad, fig.width=10, fig.height=6}
+p_edad <- ind_edad %>%
+  filter(!is.na(tasa_x1000)) %>%
+  ggplot(aes(x = categoria, y = tasa_x1000, color = grupo, group = grupo)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  labs(
+    title = "Tasa anual promedio de personas hospitalizadas por grupo etario: PO vs PG",
+    subtitle = "Personas-ano / persona-anos x 1000 (2010-2022)",
+    x = "Grupo etario", y = "Personas hospitalizadas x 1000 persona-anos", color = "Grupo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+
+p_edad
+guardar_multiformato(p_edad, "tasas_edad_pa", dir_salida = dir_salida)
+```
+
+## 7. Indicadores por Region (solo proporciones)
+
+```{r indicadores_region}
+datos_pa_region <- datos_personas_ano %>%
+  mutate(REGION_INT = as.integer(CODIGO_REGION)) %>%
+  filter(!is.na(REGION_INT))
+
+ind_region <- calcular_indicadores_desagregados(
+  datos = datos_pa_region,
+  var_desglose = "REGION_INT",
+  denominadores_censo = datos_censo$por_region,
+  col_join_censo = "region",
+  anos_estudio = anos_estudio,
+  calcular_tasas = FALSE,
+  verbose = TRUE
+)
+
+nombres_region <- datos_pa_region %>%
+  distinct(REGION_INT, NOMBRE_REGION) %>%
+  mutate(categoria = as.character(REGION_INT))
+
+ind_region <- ind_region %>%
+  mutate(categoria = as.character(categoria)) %>%
+  left_join(nombres_region, by = "categoria") %>%
+  mutate(categoria = ifelse(!is.na(NOMBRE_REGION), NOMBRE_REGION, categoria)) %>%
+  select(-REGION_INT, -NOMBRE_REGION)
+
+tabla_region <- crear_tabla_indicadores(
+  ind_region,
+  titulo = "Tabla 4. Indicadores por region (proporciones) - Personas-ano (2010-2022)",
+  formato = "desagregado",
+  incluir_tasas = FALSE
+)
+tabla_region
+```
+
+```{r guardar_tabla_region}
+guardar_tabla_png(tabla_region, "tabla_ind_region_pa", dir_salida = dir_salida)
+```
+
+## 8. Evolucion temporal (ventaja del modo anual)
+
+```{r evolucion_temporal, fig.width=11, fig.height=6}
+cat("=== EVOLUCION TEMPORAL DE PERSONAS HOSPITALIZADAS ===\n\n")
+
+evol <- datos_personas_ano %>%
+  mutate(
+    grupo = ifelse(PERTENENCIA2 == 1, "PO", "PG"),
+    ano_num = as.integer(`AÑO`)
+  ) %>%
+  group_by(ano_num, grupo) %>%
+  summarise(
+    n_personas = n(),
+    n_fallecidos = sum(fallecio, na.rm = TRUE),
+    prom_atenciones = mean(n_atenciones),
+    prom_dias = mean(DIAS_ESTADA, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    poblacion = ifelse(grupo == "PO", pob_censo$pob_po, pob_censo$pob_pg),
+    tasa_anual = (n_personas / poblacion) * 1000,
+    letalidad_x1000 = (n_fallecidos / n_personas) * 1000
+  )
+
+# Grafico de tasas anuales
+p_evol <- evol %>%
+  ggplot(aes(x = ano_num, y = tasa_anual, color = grupo)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  scale_x_continuous(breaks = 2010:2022) +
+  labs(
+    title = "Evolucion de la tasa anual de personas hospitalizadas",
+    subtitle = "Por 1000 habitantes (Censo 2017). Un RUN por ano",
+    x = NULL, y = "Tasa x 1000 hab", color = "Grupo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p_evol
+guardar_multiformato(p_evol, "evolucion_tasas_pa", 11, 6, 300, dir_salida = dir_salida)
+```
+
+```{r evolucion_letalidad, fig.width=11, fig.height=6}
+p_let <- evol %>%
+  ggplot(aes(x = ano_num, y = letalidad_x1000, color = grupo)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = c("PO" = "#C62828", "PG" = "#1565C0")) +
+  scale_x_continuous(breaks = 2010:2022) +
+  labs(
+    title = "Mortalidad intrahospitalaria anual (todas las causas)",
+    subtitle = "Personas fallecidas / personas hospitalizadas x 1000 (por ano)",
+    x = NULL, y = "Letalidad x 1000", color = "Grupo"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+p_let
+guardar_multiformato(p_let, "evolucion_letalidad_pa", 11, 6, 300, dir_salida = dir_salida)
+```
+
+## 9. Perfiles diagnosticos (Top 20) — Personas-ano
+
+```{r perfil_po}
+cat("=== TOP 20 DIAGNOSTICOS - PO (PERSONAS-ANO) ===\n")
+
+perfil_po <- calcular_perfil_diagnostico(
+  datos          = datos_personas_ano,
+  pertenencia    = 1,
+  poblacion      = pob_censo$pob_po,
+  total_egresos  = total_pa_po,
+  anos_estudio   = anos_estudio,
+  top_n          = 20,
+  min_casos      = 1,
+  verbose        = TRUE
+)
+
+tabla_po <- crear_tabla_perfil(
+  datos            = perfil_po,
+  tipo             = "perfil",
+  titulo           = "Top 20 Dx primera hospitalizacion del ano - PO",
+  resaltar_umbral  = 5,
+  col_umbral       = "pct_total",
+  color_resaltado  = "#FFEBEE",
+  tamano_fuente    = 8
+)
+
+print(tabla_po)
+guardar_tabla_html(tabla_po, "tabla_perfil_po_top20.html", dir_salida = dir_salida)
+```
+
+```{r grafico_po, fig.width=12, fig.height=9}
+graf_po <- graficar_perfil_top(
+  datos             = perfil_po,
+  titulo            = "Top 20 Dx primera hospitalizacion del ano - PO",
+  subtitulo         = "Un RUN por ano, RM 2010-2022",
+  color_barras      = "#C62828",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas  = 2.5
+)
+
+print(graf_po)
+guardar_multiformato(graf_po, "perfil_po_top20_pa", 12, 9, 300, dir_salida = dir_salida)
+```
+
+```{r perfil_pg}
+cat("=== TOP 20 DIAGNOSTICOS - PG (PERSONAS-ANO) ===\n")
+
+perfil_pg <- calcular_perfil_diagnostico(
+  datos          = datos_personas_ano,
+  pertenencia    = 0,
+  poblacion      = pob_censo$pob_pg,
+  total_egresos  = total_pa_pg,
+  anos_estudio   = anos_estudio,
+  top_n          = 20,
+  min_casos      = 1,
+  verbose        = TRUE
+)
+
+tabla_pg <- crear_tabla_perfil(
+  datos            = perfil_pg,
+  tipo             = "perfil",
+  titulo           = "Top 20 Dx primera hospitalizacion del ano - PG",
+  resaltar_umbral  = 5,
+  col_umbral       = "pct_total",
+  color_resaltado  = "#E3F2FD",
+  tamano_fuente    = 8
+)
+
+print(tabla_pg)
+guardar_tabla_html(tabla_pg, "tabla_perfil_pg_top20.html", dir_salida = dir_salida)
+```
+
+```{r grafico_pg, fig.width=12, fig.height=9}
+graf_pg <- graficar_perfil_top(
+  datos             = perfil_pg,
+  titulo            = "Top 20 Dx primera hospitalizacion del ano - PG",
+  subtitulo         = "Un RUN por ano, RM 2010-2022",
+  color_barras      = "#1565C0",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas  = 2.5
+)
+
+print(graf_pg)
+guardar_multiformato(graf_pg, "perfil_pg_top20_pa", 12, 9, 300, dir_salida = dir_salida)
+```
+
+## 10. Comparacion PO vs PG (personas-ano)
+
+```{r comparacion}
+cat("=== COMPARACION PO vs PG (PERSONAS-ANO) ===\n")
+
+comparacion <- comparar_perfiles_po_pg(
+  datos              = datos_personas_ano,
+  poblacion_po       = pob_censo$pob_po,
+  poblacion_pg       = pob_censo$pob_pg,
+  total_egresos_po   = total_pa_po,
+  total_egresos_pg   = total_pa_pg,
+  anos_estudio       = anos_estudio,
+  min_casos_po       = 50,
+  top_n              = 20,
+  ordenar_por        = "dif_tasa",
+  verbose            = TRUE
+)
+
+tabla_comp <- crear_tabla_perfil(
+  datos    = comparacion,
+  tipo     = "comparacion",
+  titulo   = "Comparacion PO vs PG - Primera hospitalizacion por persona-ano (2010-2022)",
+  tamano_fuente = 8,
+  incluir_rr = FALSE
+)
+
+print(tabla_comp)
+guardar_tabla_html(tabla_comp, "tabla_comparacion_po_pg.html", dir_salida = dir_salida)
+```
+
+```{r grafico_diferencias, fig.width=13, fig.height=9}
+graf_dif <- graficar_diferencias_tasas(
+  datos             = comparacion,
+  top_n             = 15,
+  ordenar_por       = "abs",
+  titulo            = "Top 15 Diferencias - Primera hospitalizacion por persona-ano",
+  subtitulo         = "Diferencia en tasas anuales de personas hospitalizadas x 1000 (RM, 2010-2022)",
+  color_po          = "#C62828",
+  color_pg          = "#1565C0",
+  mostrar_etiquetas = TRUE,
+  tamano_etiquetas  = 2.3
+)
+
+print(graf_dif)
+guardar_multiformato(graf_dif, "diferencias_tasas_pa", 13, 9, 300, dir_salida = dir_salida)
+```
+
+## 11. Intensidad de uso hospitalario por ano
+
+```{r intensidad_uso}
+cat("=== INTENSIDAD DE USO HOSPITALARIO (POR ANO) ===\n\n")
+
+resumen_uso <- datos_personas_ano %>%
+  mutate(grupo = ifelse(PERTENENCIA2 == 1, "PO", "PG")) %>%
+  group_by(grupo) %>%
+  summarise(
+    n_personas_ano = n(),
+    total_atenciones = sum(n_atenciones),
+    prom_atenciones = mean(n_atenciones),
+    mediana_atenciones = median(n_atenciones),
+    max_atenciones = max(n_atenciones),
+    pct_multiples = mean(n_atenciones > 1) * 100,
+    prom_dias_total = mean(dias_estada_total, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+cat("ATENCIONES POR PERSONA-ANO:\n")
+for (i in seq_len(nrow(resumen_uso))) {
+  cat(sprintf("  %s: %.2f prom | %d mediana | %d max | %.1f%% con >1 atencion/ano\n",
+              resumen_uso$grupo[i],
+              resumen_uso$prom_atenciones[i],
+              resumen_uso$mediana_atenciones[i],
+              resumen_uso$max_atenciones[i],
+              resumen_uso$pct_multiples[i]))
+}
+```
+
+## 12. Resumen
+
+```{r resumen_final}
+cat("============================================================\n")
+cat("RESUMEN - INDICADORES PERSONAS-ANO\n")
+cat("============================================================\n\n")
+
+cat("METODOLOGIA:\n")
+cat("  Unificacion: primera atencion por RUN por ano\n")
+cat("  Una persona puede aparecer en multiples anos\n")
+cat("  Diagnostico: de la primera hospitalizacion del ano\n")
+cat("  Letalidad: si alguna atencion del ano termino en fallecimiento\n\n")
+
+cat("DATOS:\n")
+cat("  Egresos originales:", format(n_egresos, big.mark = ","), "\n")
+cat("  Personas-ano:      ", format(n_personas_ano, big.mark = ","), "\n")
+cat("  PO:", format(n_po, big.mark = ","), "\n")
+cat("  PG:", format(n_pg, big.mark = ","), "\n\n")
+
+cat("INDICADORES GLOBALES:\n")
+for (i in seq_len(nrow(ind_global))) {
+  g <- ind_global$grupo[i]
+  cat(sprintf("  %s: Tasa=%.2f x1000 p-a | Letalidad=%.2f x1000 | Dias=%.1f (prom)\n",
+              g, ind_global$tasa_egresos_x1000[i],
+              ind_global$prop_letalidad_x1000[i],
+              ind_global$prom_dias_estada[i]))
+}
+
+cat("\nINTERPRETACION DE INDICADORES:\n")
+cat("  - 'Tasa': proporcion anual promedio de personas hospitalizadas.\n")
+cat("    Mas interpretable que el modo global; comparable con tasa de egresos\n")
+cat("    (que sera mayor por contar eventos multiples por persona-ano).\n")
+cat("  - Letalidad: mortalidad intrahospitalaria dentro del ano,\n")
+cat("    NO tasa de letalidad causa-especifica.\n")
+cat("  - Diagnostico: primera hospitalizacion del ano, no la mas grave.\n")
+cat("  - Dias de estada: primera hospitalizacion del ano.\n")
+
+cat("\nVENTAJAS DEL MODO ANUAL:\n")
+cat("  - Permite analisis de tendencia temporal\n")
+cat("  - Menor sesgo en letalidad (limitada al ano, no acumulada)\n")
+cat("  - Menor reduccion que modo global (conserva mas datos)\n")
+
+cat("\nLIMITACIONES:\n")
+cat("  1. Letalidad no es causa-especifica; sesgo al 1er Dx del ano\n")
+cat("  2. Personas-ano NO son independientes (misma persona en multiples anos)\n")
+cat("  3. Censo 2017 fijo como proxy de poblacion media (2010-2022)\n")
+cat("  4. Region del establecimiento != residencia del paciente\n")
+cat("  5. Tasas crudas, sin estandarizacion por edad\n")
+cat("  6. min_casos_po = 50 (reducido por deduplicacion)\n")
+
+cat("\nARCHIVOS GENERADOS:\n")
+archivos <- list.files(dir_salida, full.names = FALSE)
+for (a in archivos) cat("  -", a, "\n")
+```
+
+---
+**Generado**: `r Sys.Date()` | **Unidad de analisis**: Personas-ano (1 RUN por ano) | **Autor**: Rodolfo Tasso

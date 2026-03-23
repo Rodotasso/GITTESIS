@@ -1,0 +1,218 @@
+---
+title: "Cuadro 3 y Figura - Egresos por Paciente"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+format:
+  html:
+    code-fold: true
+    toc: true
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(dplyr)
+library(flextable)
+library(ggplot2)
+library(scales)
+
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
+```
+
+```{r calcular}
+egresos_pac <- datos_homologados %>%
+  filter(!is.na(RUN)) %>%
+  count(RUN, name = "n_egresos")
+
+stats <- egresos_pac %>%
+  summarise(
+    N = n(),
+    Total_egresos = sum(n_egresos),
+    Media = mean(n_egresos),
+    DE = sd(n_egresos),
+    Mediana = median(n_egresos),
+    RIC = IQR(n_egresos),
+    P75 = quantile(n_egresos, 0.75),
+    P90 = quantile(n_egresos, 0.90),
+    P95 = quantile(n_egresos, 0.95),
+    P99 = quantile(n_egresos, 0.99),
+    Max = max(n_egresos)
+  )
+
+# Frecuencias por categoria
+freq <- egresos_pac %>%
+  mutate(
+    categoria = case_when(
+      n_egresos == 1 ~ "1",
+      n_egresos == 2 ~ "2",
+      n_egresos == 3 ~ "3",
+      n_egresos >= 4 & n_egresos <= 5 ~ "4-5",
+      n_egresos >= 6 & n_egresos <= 10 ~ "6-10",
+      n_egresos >= 11 & n_egresos <= 50 ~ "11-50",
+      n_egresos >= 51 & n_egresos <= 100 ~ "51-100",
+      n_egresos > 100 ~ ">100"
+    ),
+    categoria = factor(categoria, levels = c(
+      "1", "2", "3", "4-5", "6-10", "11-50", "51-100", ">100"
+    ))
+  ) %>%
+  count(categoria, name = "n_pacientes") %>%
+  mutate(
+    porcentaje = n_pacientes / sum(n_pacientes) * 100,
+    acumulado = cumsum(porcentaje)
+  )
+```
+
+# Cuadro 3
+
+```{r cuadro3}
+cuadro_data <- tibble(
+  Estadistico = c(
+    "Pacientes \u00fanicos, n",
+    "Total de egresos hospitalarios, n",
+    "Egresos por paciente, media (DE)",
+    "Egresos por paciente, mediana (RIC)",
+    "Pacientes con \u22645 egresos, n (%)",
+    "Pacientes con 6-10 egresos, n (%)",
+    "Pacientes con 11-100 egresos, n (%)",
+    "Pacientes con >100 egresos, n (%)",
+    "M\u00e1ximo de egresos por paciente"
+  ),
+  Valor = c(
+    format(stats$N, big.mark = "."),
+    format(stats$Total_egresos, big.mark = "."),
+    sprintf("%.2f (%.2f)", stats$Media, stats$DE),
+    sprintf("%.0f (%.0f)", stats$Mediana, stats$RIC),
+    sprintf("%s (%.1f)",
+            format(sum(freq$n_pacientes[freq$categoria %in% c("1","2","3","4-5")]),
+                   big.mark = "."),
+            sum(freq$porcentaje[freq$categoria %in% c("1","2","3","4-5")])),
+    sprintf("%s (%.1f)",
+            format(freq$n_pacientes[freq$categoria == "6-10"], big.mark = "."),
+            freq$porcentaje[freq$categoria == "6-10"]),
+    sprintf("%s (%.2f)",
+            format(sum(freq$n_pacientes[freq$categoria %in% c("11-50","51-100")]),
+                   big.mark = "."),
+            sum(freq$porcentaje[freq$categoria %in% c("11-50","51-100")])),
+    sprintf("%s (%.4f)",
+            format(freq$n_pacientes[freq$categoria == ">100"], big.mark = "."),
+            freq$porcentaje[freq$categoria == ">100"]),
+    format(stats$Max, big.mark = ".")
+  )
+)
+
+ft <- flextable(cuadro_data) %>%
+  set_header_labels(
+    Estadistico = "Egresos por paciente",
+    Valor = "Valor"
+  ) %>%
+  theme_vanilla() %>%
+  fontsize(size = 10, part = "all") %>%
+  width(j = 1, width = 3.5) %>%
+  width(j = 2, width = 2) %>%
+  align(j = 2, align = "right", part = "body") %>%
+  align(j = 2, align = "center", part = "header") %>%
+  bold(i = c(3, 4), part = "body") %>%
+  hline(i = 4, part = "body") %>%
+  add_footer_lines(
+    "Cuadro 3. Distribuci\u00f3n de egresos hospitalarios por paciente \u00fanico. Chile, 2010-2022. DE: desviaci\u00f3n est\u00e1ndar; RIC: rango intercuart\u00edlico. La elevada dispersi\u00f3n (DE=66,62 frente a una media de 2,17 y mediana de 1) se explica por la marcada asimetr\u00eda de la distribuci\u00f3n: la mayor\u00eda de los pacientes registr\u00f3 una \u00fanica hospitalizaci\u00f3n, mientras que un peque\u00f1o grupo con hospitalizaciones cr\u00f3nicas recurrentes concentra los valores extremos. Fuente: DEIS, MINSAL. Elaboraci\u00f3n propia."
+  ) %>%
+  fontsize(size = 8, part = "footer")
+
+ft
+```
+
+```{r guardar_cuadro3}
+guardar_tabla_png(ft, "cuadro3_descriptivo_egresos",
+                  dir_salida = "../../output_qmd")
+
+save_as_docx(
+  "Cuadro 3" = ft,
+  path = "../../resultados_tesis/final_resultados/Cuadro_3_Descriptivo_Egresos.docx",
+  pr_section = officer::prop_section(page_size = officer::page_size(orient = "portrait"))
+)
+cat("\n\u2713 Tabla guardada en: resultados_tesis/final_resultados/Cuadro_3_Descriptivo_Egresos.docx\n")
+```
+
+# Figura: Distribucion de egresos por paciente
+
+```{r figura, fig.width=10, fig.height=6, dpi=300}
+# Datos para el grafico
+plot_data <- freq %>%
+  mutate(
+    etiqueta_n = format(n_pacientes, big.mark = "."),
+    etiqueta_pct = sprintf("%.1f%%", porcentaje),
+    etiqueta = paste0(etiqueta_n, "\n(", etiqueta_pct, ")")
+  )
+
+# Colores: gradiente que muestra la concentracion vs la cola
+colores <- c(
+  "1" = "#1a5276",
+  "2" = "#2471a3",
+  "3" = "#2e86c1",
+  "4-5" = "#5dade2",
+  "6-10" = "#aed6f1",
+  "11-50" = "#f0b27a",
+  "51-100" = "#e67e22",
+  ">100" = "#c0392b"
+)
+
+p <- ggplot(plot_data, aes(x = categoria, y = n_pacientes, fill = categoria)) +
+  geom_col(width = 0.75, show.legend = FALSE) +
+  geom_text(
+    aes(label = etiqueta),
+    vjust = -0.3, size = 3, lineheight = 0.85
+  ) +
+  scale_fill_manual(values = colores) +
+  scale_y_continuous(
+    labels = label_number(big.mark = ".", decimal.mark = ","),
+    expand = expansion(mult = c(0, 0.18))
+  ) +
+  # Anotacion con estadisticos
+  annotate(
+    "label", x = 7, y = max(plot_data$n_pacientes) * 0.75,
+    label = paste0(
+      "Mediana = 1 egreso\n",
+      "Media = 2,17 egresos\n",
+      "DE = 66,62\n",
+      "M\u00e1x = ", format(stats$Max, big.mark = "."), " egresos"
+    ),
+    hjust = 0.5, size = 3.2, fontface = "italic",
+    lineheight = 1.3, fill = "white", alpha = 0.9,
+    label.size = 0.3
+  ) +
+  # Linea de corte P95
+  annotate(
+    "segment",
+    x = 4.5, xend = 4.5,
+    y = 0, yend = max(plot_data$n_pacientes) * 0.55,
+    linetype = "dashed", color = "#e74c3c", linewidth = 0.6
+  ) +
+  annotate(
+    "text", x = 4.7, y = max(plot_data$n_pacientes) * 0.57,
+    label = "P95: 95,2% de pacientes\ntiene \u22645 egresos",
+    hjust = 0, size = 2.8, color = "#e74c3c", fontface = "bold"
+  ) +
+  labs(
+    x = "N\u00famero de egresos hospitalarios por paciente",
+    y = "N\u00famero de pacientes"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(face = "bold"),
+    plot.margin = margin(15, 20, 10, 10)
+  )
+
+p
+```
+
+```{r guardar_figura}
+guardar_multiformato(p, "figura_distribucion_egresos",
+                     ancho = 10, alto = 6, dpi = 300,
+                     dir_salida = "../../output_qmd")
+```

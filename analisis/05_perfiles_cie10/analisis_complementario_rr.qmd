@@ -1,0 +1,177 @@
+---
+title: "Analisis Complementario - Riesgo Relativo Crudo"
+author: "Rodolfo Tasso"
+date: "`r Sys.Date()`"
+description: "Analisis complementario de RR crudo PO vs PG. No forma parte de los resultados principales del protocolo."
+format:
+    html:
+        embed-resources: true
+        self-contained: true
+        toc: true
+        toc-depth: 3
+---
+
+# Analisis Complementario: Riesgo Relativo Crudo
+
+::: {.callout-warning}
+## Nota metodologica
+
+Este analisis **no forma parte de los resultados principales** del protocolo de tesis.
+El RR crudo presentado aqui:
+
+- **No esta ajustado por edad**, sexo ni otros confusores
+- **No aparece en la Tabla 4 del protocolo** (indicadores definidos: tasa de egresos,
+  proporcion por causa, letalidad intrahospitalaria, letalidad por causa, dias de estada)
+- Debe interpretarse con cautela como medida exploratoria
+- Usa denominador censal fijo (Censo 2017) para todo el periodo
+
+Para conclusiones sobre disparidades, referirse a los indicadores del protocolo
+(diferencias de tasas, proporciones y letalidad).
+:::
+
+## 1. Configuracion
+
+```{r setup, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(scales)
+  library(censo2017)
+  library(ciecl)
+})
+
+source("../../R/cargar_funciones.R")
+load("../../BBDD_homologados.RData")
+
+cat("Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
+```
+
+## 2. Preparacion de datos
+
+```{r preparar_datos}
+# Filtrar: DIAG1 valido, ano reportado, PERTENENCIA2 definida (0 o 1)
+datos_prep <- datos_homologados %>%
+  filter(
+    !is.na(DIAG1),
+    `AÑO` != "No reportado",
+    PERTENENCIA2 %in% c(0L, 1L)
+  ) %>%
+  mutate(
+    FECHA_INGRESO_FMT_DEIS = as.Date(FECHA_INGRESO_FMT_DEIS),
+    FECHA_EGRESO_FMT_DEIS  = as.Date(FECHA_EGRESO_FMT_DEIS),
+    DIAS_ESTADA = as.integer(FECHA_EGRESO_FMT_DEIS - FECHA_INGRESO_FMT_DEIS),
+    DIAS_ESTADA = ifelse(DIAS_ESTADA < 0 | DIAS_ESTADA > 365, NA_integer_, DIAS_ESTADA)
+  ) %>%
+  concatenar_diag_ciecl("DIAG1", "DIAG_COMPLETO", verbose = TRUE)
+
+n_po <- sum(datos_prep$PERTENENCIA2 == 1)
+n_pg <- sum(datos_prep$PERTENENCIA2 == 0)
+
+cat("Registros validos:", format(nrow(datos_prep), big.mark = ","), "\n")
+cat("  PO:", format(n_po, big.mark = ","), "\n")
+cat("  PG:", format(n_pg, big.mark = ","), "\n")
+```
+
+## 3. Denominadores censales
+
+```{r denominadores}
+poblacion_censo <- obtener_poblacion_censo(verbose = TRUE)
+pob_po <- poblacion_censo$pob_po
+pob_pg <- poblacion_censo$pob_pg
+anos_estudio <- 13  # 2010-2022
+```
+
+## 4. RR global crudo
+
+```{r rr_global}
+persona_anos_po <- pob_po * anos_estudio
+persona_anos_pg <- pob_pg * anos_estudio
+
+tasa_po <- (n_po / persona_anos_po) * 1000
+tasa_pg <- (n_pg / persona_anos_pg) * 1000
+rr_global <- tasa_po / tasa_pg
+
+cat("TASAS ANUALES PROMEDIO (x1000 persona-anos):\n")
+cat("  PO:", sprintf("%.2f", tasa_po), "\n")
+cat("  PG:", sprintf("%.2f", tasa_pg), "\n")
+cat("  RR global crudo (PO/PG):", sprintf("%.2f", rr_global), "\n\n")
+
+cat("ADVERTENCIA: Este RR NO esta ajustado por edad.\n")
+cat("La estructura etaria diferente entre PO y PG puede\n")
+cat("explicar parte de la diferencia observada.\n")
+```
+
+## 5. RR crudo por diagnostico (Top 20)
+
+```{r comparacion_rr}
+comparacion <- comparar_perfiles_po_pg(
+  datos              = datos_prep,
+  poblacion_po       = pob_po,
+  poblacion_pg       = pob_pg,
+  total_egresos_po   = n_po,
+  total_egresos_pg   = n_pg,
+  anos_estudio       = anos_estudio,
+  min_casos_po       = 100,
+  top_n              = 20,
+  ordenar_por        = "dif_tasa",
+  col_pertenencia    = "PERTENENCIA2",
+  verbose            = TRUE
+)
+
+# Tabla con RR visible (default incluir_rr = TRUE)
+tabla_rr <- crear_tabla_perfil(
+  datos  = comparacion,
+  tipo   = "comparacion",
+  titulo = "Analisis complementario: RR crudo por diagnostico, PO vs PG (2010-2022)"
+)
+
+tabla_rr
+```
+
+```{r guardar_tabla_rr}
+dir_salida <- file.path(directorio_base, "resultados_tesis", "analisis_complementario")
+if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
+
+guardar_tabla_png(tabla_rr, "tabla_rr_crudo_top20", dir_salida = dir_salida)
+guardar_tabla_html(tabla_rr, "analisis_complementario/tabla_rr_crudo_top20.html")
+```
+
+## 6. Diagnosticos con RR extremos
+
+```{r rr_extremos}
+cat("=== DIAGNOSTICOS CON RR >= 1.5 (sobrerrepresentacion PO) ===\n\n")
+sobre <- comparacion %>% filter(rr_crudo >= 1.5) %>% arrange(desc(rr_crudo))
+if (nrow(sobre) > 0) {
+  for (i in seq_len(nrow(sobre))) {
+    cat(sprintf("  %s: RR=%.2f (tasa PO=%.2f vs PG=%.2f)\n",
+                sobre$DIAG_COMPLETO[i], sobre$rr_crudo[i],
+                sobre$tasa_anual_po[i], sobre$tasa_anual_pg[i]))
+  }
+} else {
+  cat("  Ninguno\n")
+}
+
+cat("\n=== DIAGNOSTICOS CON RR <= 0.67 (subrepresentacion PO) ===\n\n")
+sub <- comparacion %>% filter(rr_crudo <= 0.67) %>% arrange(rr_crudo)
+if (nrow(sub) > 0) {
+  for (i in seq_len(nrow(sub))) {
+    cat(sprintf("  %s: RR=%.2f (tasa PO=%.2f vs PG=%.2f)\n",
+                sub$DIAG_COMPLETO[i], sub$rr_crudo[i],
+                sub$tasa_anual_po[i], sub$tasa_anual_pg[i]))
+  }
+} else {
+  cat("  Ninguno\n")
+}
+```
+
+## 7. Limitaciones
+
+- **Sin ajuste por edad:** Las diferencias en estructura etaria entre PO y PG
+  (PO tiene distribucion mas joven) pueden inflar o deflactar el RR crudo
+- **Denominador censal fijo:** Se usa Censo 2017 como proxy para todo 2010-2022
+- **Sin intervalos de confianza:** Estudio poblacional (no muestral)
+- **Confusion residual:** No se controla por sexo, prevision, region ni otros factores
+- **No protocolar:** Este indicador no fue incluido en la Tabla 4 del protocolo
+
+---
+**Generado**: `r Sys.Date()` | **Tipo**: Analisis complementario (no protocolar) | **Autor**: Rodolfo Tasso

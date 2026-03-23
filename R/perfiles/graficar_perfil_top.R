@@ -7,7 +7,7 @@
 #' @param datos Tibble con columnas DIAG_COMPLETO y n_casos
 #' @param titulo Título del gráfico
 #' @param subtitulo Subtítulo del gráfico
-#' @param color_barras Color de las barras (default: "#0A2351" azul oscuro)
+#' @param color_barras Color de las barras (default: colores_pertenencia[["PO"]])
 #' @param mostrar_etiquetas Mostrar valores en barras (default: TRUE)
 #' @param tamano_etiquetas Tamaño de etiquetas (default: 2.5)
 #' @param caption Pie de gráfico (default: NULL, se calcula automático)
@@ -25,7 +25,7 @@
 graficar_perfil_top <- function(datos,
                                 titulo,
                                 subtitulo = NULL,
-                                color_barras = "#0A2351",
+                                color_barras = colores_pertenencia[["PO"]],
                                 mostrar_etiquetas = TRUE,
                                 tamano_etiquetas = 2.5,
                                 caption = NULL) {

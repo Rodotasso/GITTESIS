@@ -27,8 +27,10 @@
 #
 # ==============================================================================
 
-guardar_multiformato <- function(grafico, nombre_base, ancho = 10, alto = 6, dpi = 300) {
-  # Guardar solo en JPG (con fondo blanco)
-  ggsave(paste0("resultados_tesis/", nombre_base, ".jpg"), 
-         grafico, width = ancho, height = alto, dpi = dpi, bg = "white")
+guardar_multiformato <- function(grafico, nombre_base, ancho = 10, alto = 6, dpi = 300,
+                                 dir_salida = "resultados_tesis") {
+  ruta <- file.path(dir_salida, paste0(nombre_base, ".jpg"))
+  dir_ruta <- dirname(ruta)
+  if (!dir.exists(dir_ruta)) dir.create(dir_ruta, recursive = TRUE)
+  ggsave(ruta, grafico, width = ancho, height = alto, dpi = dpi, bg = "white")
 }
