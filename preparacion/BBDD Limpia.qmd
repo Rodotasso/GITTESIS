@@ -5,7 +5,8 @@ format: html
 
 
 ```{r}
-setwd("D:/MAGISTER/aa TESIS/BBDD NUEVA")
+# NOTA: Configurar la ruta al directorio con los datos crudos antes de ejecutar
+# setwd("/ruta/al/directorio/con/datos/crudos")
 library(tidyverse)
 library(dplyr)
 library(data.table)

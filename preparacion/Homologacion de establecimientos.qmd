@@ -23,8 +23,7 @@ library(scales)
 library(ggpubr)
 library(readxl) # Agregado para leer archivos Excel
 
-# Establecer el directorio de trabajo
-setwd("D:/MAGISTER/aa TESIS/rtsppoo")
+# Directorio de trabajo: abrir desde el archivo .Rproj del proyecto
 
 # Limpiar ambiente y liberar memoria
 rm(list = ls())
