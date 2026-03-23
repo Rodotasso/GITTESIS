@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-## Estructura del Articulo
+## Estructura del Analisis
 
 Este proyecto implementa el analisis para la tesis:
 
@@ -28,12 +28,12 @@ La estructura del repositorio sigue la organizacion del articulo academico:
 | Seccion del Articulo | Figura/Cuadro | Carpeta | QMD Principal |
 |---------------------|---------------|---------|---------------|
 | Material y Metodos | - | `preparacion/` | `BBDD Limpia.qmd` |
-| Completitud | Cuadro I | `articulo/01_descriptivos/` | `E_descriptiva_modular.qmd` |
-| Tendencia temporal | Figura 1 | `articulo/02_tendencias/` | `grafico_pertenencia_modular.qmd` |
-| Concordancia Kappa | Cuadro II-A | `articulo/03_concordancia/` | `Concord_nuevas_modular.qmd` |
-| Concordancia CCC | Cuadro II-B | `articulo/03_concordancia/` | `Concord_nuevas_modular.qmd` |
-| Prevision | Figura 2 | `articulo/04_sociodemografico/` | `graf_cie_prev_modular.qmd` |
-| Perfiles CIE-10 | Figura 3 | `articulo/05_perfiles_cie10/` | `perfiles_diagnosticos_modular.qmd` |
+| Completitud | Cuadro I | `analisis/01_descriptivos/` | `E_descriptiva_modular.qmd` |
+| Tendencia temporal | Figura 1 | `analisis/02_tendencias/` | `grafico_pertenencia_modular.qmd` |
+| Concordancia Kappa | Cuadro II-A | `analisis/03_concordancia/` | `Concord_nuevas_modular.qmd` |
+| Concordancia CCC | Cuadro II-B | `analisis/03_concordancia/` | `Concord_nuevas_modular.qmd` |
+| Prevision | Figura 2 | `analisis/04_sociodemografico/` | `graf_cie_prev_modular.qmd` |
+| Perfiles CIE-10 | Figura 3 | `analisis/05_perfiles_cie10/` | `perfiles_diagnosticos_modular.qmd` |
 
 ## Flujo de Ejecucion
 
@@ -52,6 +52,10 @@ PREPARACION
 +---------------------------+
     |
     +---> ANALISIS PARALELOS
+          |
+          +---> 00_descriptivos/
+          |         |
+          |         +---> cuadro_descriptivo_egresos.qmd
           |
           +---> 01_descriptivos/
           |         |
@@ -73,7 +77,8 @@ PREPARACION
           +---> 05_perfiles_cie10/
                     |
                     +---> perfiles_diagnosticos_modular.qmd
-                    +---> top_patologias_po_ciecl.qmd
+                    +---> indicadores_epidemiologicos.qmd
+                    +---> top20_patologias_desgloses.qmd
 ```
 
 ## Funciones Principales
@@ -113,6 +118,9 @@ PREPARACION
 | `comparar_perfiles_po_pg()` | Compara PO vs Poblacion General |
 | `crear_tabla_perfil()` | Tabla de perfil diagnostico |
 | `graficar_diferencias_tasas()` | Grafico de diferencias en tasas |
+| `calcular_indicadores_protocolo()` | Indicadores epidemiologicos |
+| `calcular_top_patologias_desglose()` | Top patologias con desglose |
+| `unificar_por_run()` | Deduplicacion por RUN |
 
 ### Tablas (`R/tablas/`)
 
@@ -124,25 +132,12 @@ PREPARACION
 
 ## Outputs Generados
 
-### Graficos
-
-Los graficos se guardan en `output_qmd/` en tres formatos:
+Los graficos y tablas se guardan en `output_qmd/` (gitignoreado):
 
 ```
 output_qmd/
 ├── figura_1_tendencia.png
 ├── figura_1_tendencia.pdf
-├── figura_1_tendencia.svg
-├── figura_2_prevision.png
-...
-```
-
-### Tablas
-
-Las tablas se exportan como PNG para inclusion directa en documentos:
-
-```
-output_qmd/
 ├── cuadro_I_completitud.png
 ├── cuadro_II_concordancia.png
 ...
@@ -171,10 +166,11 @@ Ver documentacion completa en: https://github.com/Rodotasso/ciecl
 
 Para reproducir los analisis:
 
-1. Clonar repositorio
-2. Restaurar dependencias: `renv::restore()`
-3. Cargar funciones: `source("R/cargar_funciones.R")`
-4. Ejecutar QMDs en orden
+1. Clonar repositorio: `git clone https://github.com/Rodotasso/GITTESIS.git`
+2. Abrir `GITTESIS.Rproj` en RStudio
+3. Restaurar dependencias: `renv::restore()`
+4. Cargar funciones: `source("R/cargar_funciones.R")`
+5. Ejecutar QMDs en orden (ver seccion Flujo de Ejecucion)
 
 **Nota:** Los datos originales no estan incluidos por razones de privacidad.
 

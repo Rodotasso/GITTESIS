@@ -1,12 +1,16 @@
 Package: GITTESIS
-Title: Compendio Tesis RTS
-Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Author: Rodo <rtasso@uchile.cl>
-Description: Compendio tesis de Rodolfo sobre PPOO
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Title: Analisis Epidemiologico de Pueblos Originarios en Egresos Hospitalarios de Chile
+Version: 0.1.0
+Authors@R:
+    person("Rodolfo Jose", "Tasso Suazo", , "rtasso@uchile.cl", role = c("aut", "cre"),
+           comment = c(ORCID = ""))
+Description: Compendio de codigo y analisis para la tesis de Magister en Salud Publica
+    de la Universidad de Chile. Implementa el pipeline de analisis epidemiologico de
+    Pueblos Originarios (PO) en egresos hospitalarios de Chile (2012-2022), incluyendo
+    evaluacion de concordancia entre fuentes de datos de pertenencia etnica (Egresos
+    Hospitalarios, RSH, CONADI, Censo 2017) y construccion de perfiles diagnosticos
+    CIE-10 comparativos entre PO y Poblacion General.
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2

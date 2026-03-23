@@ -41,7 +41,7 @@ renv::restore()
 
 ## Carga de Funciones
 
-El proyecto contiene 56 funciones modulares organizadas en carpetas tematicas. Para cargarlas todas:
+El proyecto contiene 61 funciones modulares organizadas en carpetas tematicas. Para cargarlas todas:
 
 ```{r}
 source("R/cargar_funciones.R")
@@ -52,9 +52,10 @@ Este script carga automaticamente las funciones de:
 - `R/graficos/` - 13 funciones de visualizacion
 - `R/analisis/` - 10 funciones estadisticas
 - `R/concordancias/` - 9 funciones CCC/Kappa
-- `R/perfiles/` - 8 funciones epidemiologicas
-- `R/tablas/` - 5 funciones de exportacion
-- `R/utilidades/` - 5 funciones auxiliares
+- `R/perfiles/` - 9 funciones epidemiologicas
+- `R/tablas/` - 6 funciones de exportacion
+- `R/utilidades/` - 5 funciones auxiliares (+paleta_colores)
+- `R/funciones/` - funciones adicionales (ordenar_regiones, visualizaciones_cie10)
 
 ## Carga de Datos
 
@@ -72,12 +73,15 @@ head(datos_homologados)
 
 | Variable | Descripcion |
 |----------|-------------|
-| `GLOSA_PUEBLO_ORIGINARIO` | Pertenencia declarada |
-| `GLOSA_SEXO` | Sexo biologico |
-| `GLOSA_REGION_RESIDENCIA` | Region de residencia |
-| `GLOSA_PREVISION` | Sistema de salud |
-| `DIAG_PPAL` | Diagnostico principal CIE-10 |
-| `ANO_EGRESO` | Ano del egreso |
+| `EGRESO_label` | Pertenencia declarada en EH ("Pertenece"/"No pertenece"/"No reportado") |
+| `RSH_label` | Pertenencia segun RSH |
+| `CONADI_label` | Pertenencia segun CONADI |
+| `GLOSA_SEXO` | Sexo biologico ("HOMBRE"/"MUJER") |
+| `NOMBRE_REGION` | Region del establecimiento |
+| `GLOSA_PREVISION` | Sistema de salud ("FONASA A", "ISAPRE", etc.) |
+| `DIAG1` | Diagnostico principal CIE-10 |
+| `AÑO` | Ano del egreso (character "2012"-"2022") |
+| `GRUPO_ETARIO` | Grupo etario ("0-4","5-14","15-24","25-44","45-64","65-74","75+") |
 
 ## Ejemplo Basico de Analisis
 
@@ -87,16 +91,16 @@ head(datos_homologados)
 library(dplyr)
 library(ggplot2)
 
-# Distribucion por pertenencia a PO
+# Distribucion por pertenencia a PO (fuente EH)
 datos_homologados %>%
-  count(GLOSA_PUEBLO_ORIGINARIO) %>%
+  count(EGRESO_label) %>%
   mutate(pct = n / sum(n) * 100)
 
 # Tendencia temporal
 datos_homologados %>%
-  filter(GLOSA_PUEBLO_ORIGINARIO == "Pertenece") %>%
-  count(ANO_EGRESO) %>%
-  ggplot(aes(x = ANO_EGRESO, y = n)) +
+  filter(EGRESO_label == "Pertenece") %>%
+  count(AÑO) %>%
+  ggplot(aes(x = AÑO, y = n, group = 1)) +
   geom_line() +
   geom_point() +
   labs(title = "Egresos de Pueblos Originarios por Ano",
@@ -109,7 +113,7 @@ datos_homologados %>%
 # Analizar pertenencia por variable
 resultado <- analizar_pertenencia(
   data = datos_homologados,
-  var = "GLOSA_REGION_RESIDENCIA",
+  var = "NOMBRE_REGION",
   etiqueta = "Region"
 )
 
@@ -125,30 +129,30 @@ guardar_multiformato(
 
 ## Renderizado de QMDs
 
-Los documentos Quarto estan organizados en `articulo/`:
+Los documentos Quarto estan organizados en `analisis/`:
 
 ```{r}
 # Renderizar un documento especifico
-quarto::quarto_render("articulo/01_descriptivos/E_descriptiva_modular.qmd")
+quarto::quarto_render("analisis/01_descriptivos/E_descriptiva_modular.qmd")
 
 # O desde terminal:
-# quarto render articulo/01_descriptivos/E_descriptiva_modular.qmd
+# quarto render analisis/01_descriptivos/E_descriptiva_modular.qmd
 ```
 
 ### Orden Recomendado de Ejecucion
 
 1. `preparacion/BBDD Limpia.qmd` - Limpieza inicial
-2. `articulo/01_descriptivos/` - Estadistica descriptiva
-3. `articulo/02_tendencias/` - Tendencias temporales
-4. `articulo/03_concordancia/` - Analisis de concordancia
-5. `articulo/04_sociodemografico/` - Analisis por prevision
-6. `articulo/05_perfiles_cie10/` - Perfiles diagnosticos
+2. `analisis/00_descriptivos/` - Cuadro descriptivo de egresos
+3. `analisis/01_descriptivos/` - Estadistica descriptiva
+4. `analisis/02_tendencias/` - Tendencias temporales
+5. `analisis/03_concordancia/` - Analisis de concordancia
+6. `analisis/04_sociodemografico/` - Analisis por prevision
+7. `analisis/05_perfiles_cie10/` - Perfiles diagnosticos
 
 ## Recursos Adicionales
 
 - **README.md** - Descripcion completa del proyecto
-- **CLAUDE.md** - Instrucciones detalladas para desarrollo
-- **articulo/README.md** - Indice de secciones del articulo
+- **analisis/README.md** - Indice de documentos de analisis
 
 ## Contacto
 
