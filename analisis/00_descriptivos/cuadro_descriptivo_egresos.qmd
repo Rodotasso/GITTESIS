@@ -18,8 +18,21 @@ library(flextable)
 library(ggplot2)
 library(scales)
 
-source("../../R/cargar_funciones.R")
-load("../../BBDD_homologados.RData")
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
+load(file.path(project_root, "BBDD_homologados.RData"))
+
+# Reparación temporal de IDate corruptos (double -> integer)
+if (inherits(datos_homologados$FECHA_INGRESO_FMT_DEIS, "IDate") && typeof(datos_homologados$FECHA_INGRESO_FMT_DEIS) == "double") {
+  datos_homologados$FECHA_INGRESO_FMT_DEIS <- as.integer(datos_homologados$FECHA_INGRESO_FMT_DEIS)
+  class(datos_homologados$FECHA_INGRESO_FMT_DEIS) <- c("IDate", "Date")
+}
+if (inherits(datos_homologados$FECHA_EGRESO_FMT_DEIS, "IDate") && typeof(datos_homologados$FECHA_EGRESO_FMT_DEIS) == "double") {
+  datos_homologados$FECHA_EGRESO_FMT_DEIS <- as.integer(datos_homologados$FECHA_EGRESO_FMT_DEIS)
+  class(datos_homologados$FECHA_EGRESO_FMT_DEIS) <- c("IDate", "Date")
+}
 ```
 
 ```{r calcular}
@@ -127,11 +140,11 @@ ft
 
 ```{r guardar_cuadro3}
 guardar_tabla_png(ft, "cuadro3_descriptivo_egresos",
-                  dir_salida = "../../output_qmd")
+                  dir_salida = file.path(project_root, "output_qmd"))
 
 save_as_docx(
   "Cuadro 3" = ft,
-  path = "../../resultados_tesis/final_resultados/Cuadro_3_Descriptivo_Egresos.docx",
+  path = file.path(project_root, "resultados_tesis/final_resultados/Cuadro_3_Descriptivo_Egresos.docx"),
   pr_section = officer::prop_section(page_size = officer::page_size(orient = "portrait"))
 )
 cat("\n\u2713 Tabla guardada en: resultados_tesis/final_resultados/Cuadro_3_Descriptivo_Egresos.docx\n")
@@ -214,5 +227,5 @@ p
 ```{r guardar_figura}
 guardar_multiformato(p, "figura_distribucion_egresos",
                      ancho = 10, alto = 6, dpi = 300,
-                     dir_salida = "../../output_qmd")
+                     dir_salida = file.path(project_root, "output_qmd"))
 ```

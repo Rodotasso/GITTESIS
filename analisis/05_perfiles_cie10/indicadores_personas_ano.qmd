@@ -45,8 +45,12 @@ suppressPackageStartupMessages({
   library(ciecl)
 })
 
-source("../../R/cargar_funciones.R")
-load("../../BBDD_homologados.RData")
+# Cargar funciones y datos
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
+load(file.path(project_root, "BBDD_homologados.RData"))
 
 cat("Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
 ```
@@ -140,7 +144,7 @@ tabla_global
 ```
 
 ```{r guardar_tabla_global}
-dir_salida <- file.path(directorio_base, "resultados_tesis", "indicadores_personas_ano")
+dir_salida <- file.path(project_root, "resultados_tesis", "indicadores_personas_ano")
 if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
 
 guardar_tabla_png(tabla_global, "tabla_ind_global_pa", dir_salida = dir_salida)

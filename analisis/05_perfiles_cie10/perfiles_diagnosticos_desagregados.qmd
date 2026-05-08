@@ -1,0 +1,255 @@
+---
+title: "Perfiles Diagnósticos Desagregados"
+subtitle: "Análisis Epidemiológico Multidimensional: Sexo, Edad y Región"
+author: "Rodolfo Tasso"
+format:
+  html:
+    toc: true
+    toc-title: "Índice"
+    theme: cosmo
+    code-fold: true
+    fig-width: 12
+    fig-height: 8
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+# Ecosistema Tidyverse y r-lib
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cli)
+library(rlang)
+library(stringr)
+library(forcats)
+
+project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+setwd(project_root)
+
+# Cargar ecosistema completo del proyecto
+source("R/cargar_funciones.R")
+source("R/perfiles/calcular_indicadores_desagregados.R")
+source("R/funciones/ordenar_regiones.R")
+
+# Estilos de r-lib para el reporte
+cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional")
+
+# Cargar Datos
+load("BBDD_homologados.RData")
+censo_lista <- extraer_datos_censo(verbose = FALSE)
+
+# --- FUNCIONES DE VISUALIZACIÓN AVANZADA ---
+
+#' Gráfico de Disparidades Facetado (Expert Version)
+graficar_disparidades_facet <- function(datos_ind, var_facet, titulo) {
+  df_plot <- datos_ind %>%
+    group_by(!!sym(var_facet)) %>%
+    arrange(desc(abs(BPP))) %>%
+    slice_head(n = 10) %>%
+    ungroup() %>%
+    mutate(
+      color_brecha = ifelse(BPP > 0, "Sobre-representación PI", "Sub-representación PI"),
+      Capitulo_wrap = stringr::str_wrap(Capitulo, width = 35)
+    )
+  
+  ggplot(df_plot, aes(x = reorder(Capitulo_wrap, BPP), y = BPP, fill = color_brecha)) +
+    geom_col() +
+    facet_wrap(as.formula(paste("~", var_facet)), scales = "free_y") +
+    coord_flip() +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    scale_fill_manual(values = c("Sobre-representación PI" = colores_pertenencia[["PO"]], 
+                                "Sub-representación PI" = colores_pertenencia[["PG"]])) +
+    labs(
+      title = titulo, 
+      subtitle = "Brecha de Perfil Proporcional (BPP): Diferencia en puntos porcentuales entre PI y PG", 
+      x = NULL, y = "Diferencia (Puntos Porcentuales)", 
+      fill = "Interpretación",
+      caption = "BPP > 0: El capítulo tiene mayor peso relativo en el perfil indígena.\nAnálisis por Evento Hospitalario. Chile 2010-2022."
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom", strip.text = element_text(face = "bold", size = 11))
+}
+
+#' Heatmap Regional de Carga de Enfermedad (TBE)
+graficar_heatmap_regional <- function(datos_ind, titulo) {
+  # Obtener nombres cortos de regiones ordenados geográficamente
+  tabla_regiones <- obtener_tabla_regiones()
+  
+  df_plot <- datos_ind %>%
+    filter(grupo == "PI") %>%
+    mutate(
+      nombre_region = codigo_a_nombre_region(region, tipo = "corto"),
+      nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto),
+      Capitulo_wrap = stringr::str_wrap(Capitulo, width = 30)
+    )
+  
+  # Seleccionar capítulos con mayor variabilidad o carga para no saturar el mapa
+  top_caps <- df_plot %>% 
+    group_by(Capitulo_wrap) %>% 
+    summarise(m = mean(TBE, na.rm = TRUE), .groups = "drop") %>% 
+    arrange(desc(m)) %>% 
+    head(18) %>% 
+    pull(Capitulo_wrap)
+  
+  df_plot %>%
+    filter(Capitulo_wrap %in% top_caps) %>%
+    ggplot(aes(x = nombre_region, y = Capitulo_wrap, fill = TBE)) +
+    geom_tile(color = "white") +
+    scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "TBE x 10k", na.value = "grey90") +
+    labs(
+      title = titulo, 
+      subtitle = "Tasa Bruta de Egresos (TBE) por 10.000 hab. en Población Indígena", 
+      x = NULL, 
+      y = NULL,
+      caption = "Regiones ordenadas de Norte a Sur. La TBE mide la carga de enfermedad relativa a la población indígena regional."
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9), 
+      panel.grid = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+}
+```
+
+## 1. Introducción y resumen general
+
+Este documento presenta un **análisis epidemiológico multidimensional** que estratifica los perfiles diagnósticos CIE-10 de la población hospitalizada en Chile (2010–2022) según **sexo**, **grupo etario** y **región**, comparando Pueblos Indígenas (PI) con la Población General (PG).
+
+La unidad de análisis es el **egreso hospitalario** (no la persona única), y la identificación de PI se realiza con la **variable enriquecida `PERTENENCIA2`**, que integra autodeclaración en egresos, RSH y CONADI.
+
+**Qué encontrará el lector al renderizar este documento:**
+
+- (i) **Brechas por sexo**: comparación de la composición de causas CIE-10 entre hombres y mujeres dentro de PI y PG.
+- (ii) **Brechas por ciclo vital**: perfiles diagnósticos por grupo etario para detectar inequidades a lo largo del curso de vida.
+- (iii) **Heatmap regional**: carga de enfermedad expresada como Tasa Bruta de Egresos por 10.000 habitantes (TBE) por región y capítulo CIE-10.
+- (iv) **Combinación sexo × región**: estratificación cruzada para identificar territorios y subgrupos con mayores disparidades.
+
+**Métricas utilizadas:**
+
+- **BPP (Brecha de Puntos Porcentuales)**: diferencia absoluta entre el porcentaje que un capítulo CIE-10 representa en PI versus PG. Un **BPP positivo** indica **sobrerrepresentación** del capítulo en PI; un **BPP negativo** indica **sub-representación**.
+- **TBE (Tasa Bruta de Egresos por 10.000 habitantes)**: número de egresos por capítulo CIE-10 ajustado por la población base, permitiendo comparar magnitud absoluta entre regiones y subgrupos.
+
+## 2. Preparación de Datos (Unidad de Análisis: Egreso)
+
+Siguiendo la decisión metodológica de la tesis, la unidad de análisis es el **Egreso Hospitalario**.
+
+```{r preparacion-datos}
+# Asegurar que sea data.table para usar sintaxis optimizada
+library(data.table)
+setDT(datos_homologados)
+
+cols_necesarias <- c("PERTENENCIA2", "COND_EGR", "FECHA_EGRESO_FMT_DEIS", "FECHA_INGRESO_FMT_DEIS", "Grupo_CIE10", "AÑO", "CODIGO_REGION", "GLOSA_SEXO", "EDAD_ANOS")
+
+datos_analisis <- datos_homologados[, cols_necesarias, with = FALSE] %>%
+  as_tibble() %>%
+  mutate(
+    DIAS_ESTADA = as.numeric(as.Date(FECHA_EGRESO_FMT_DEIS) - as.Date(FECHA_INGRESO_FMT_DEIS)),
+    Capitulo = Grupo_CIE10,
+    sexo = GLOSA_SEXO,
+    grupo_etario = case_when(
+      EDAD_ANOS < 5 ~ "0-4",
+      EDAD_ANOS < 15 ~ "5-14",
+      EDAD_ANOS < 25 ~ "15-24",
+      EDAD_ANOS < 45 ~ "25-44",
+      EDAD_ANOS < 65 ~ "45-64",
+      EDAD_ANOS < 75 ~ "65-74",
+      EDAD_ANOS >= 75 ~ "75+",
+      TRUE ~ NA_character_
+    ),
+    region = as.numeric(CODIGO_REGION)
+  ) %>%
+  filter(!is.na(Capitulo), !is.na(sexo), !is.na(grupo_etario), !is.na(region))
+```
+
+
+## 3. Disparidades de Género: Hombres vs Mujeres
+
+Analizamos si las brechas diagnósticas de la población indígena se manifiestan de igual forma entre sexos.
+
+```{r sexo}
+denominador_sexo <- preparar_denominador_estrato(censo_lista$por_sexo)
+
+ind_sexo <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_sexo,
+  var_estrato = "sexo"
+)
+
+graficar_disparidades_facet(ind_sexo, "sexo", "Comparativa de Brechas Diagnósticas por Sexo (PI vs PG)")
+```
+
+## 4. Disparidades por Ciclo Vital
+
+```{r edad}
+denominador_edad <- censo_lista$por_grupo_etario %>%
+  preparar_denominador_estrato()
+
+ind_edad <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_edad,
+  var_estrato = "grupo_etario"
+)
+
+graficar_disparidades_facet(ind_edad, "grupo_etario", "Brechas Diagnósticas por Grupo Etario")
+```
+
+## 5. Análisis Geográfico Nacional: Todas las Regiones
+
+Este mapa de calor permite identificar en qué regiones la carga de enfermedad de ciertos capítulos CIE-10 es crítica para los Pueblos Originarios.
+
+```{r regional}
+denominador_region <- preparar_denominador_estrato(censo_lista$por_region)
+
+ind_region <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_region,
+  var_estrato = "region"
+)
+
+graficar_heatmap_regional(ind_region, "Distribución Regional de la Carga de Enfermedad (PI)")
+```
+
+## 6. Combinación Compleja: Sexo y Región en PI
+
+¿Existen regiones donde las mujeres indígenas tengan una carga significativamente mayor que los hombres indígenas?
+
+```{r sexo-region}
+# Usar el estrato correcto 'region_sexo' devuelto por extraer_datos_censo
+denominador_sexo_reg <- censo_lista$region_sexo %>%
+  preparar_denominador_estrato()
+
+ind_sexo_reg <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_sexo_reg,
+  var_estrato = c("sexo", "region")
+)
+
+# Visualizar TBE comparativa por Sexo en las regiones (Ordenadas de N a S)
+tabla_regiones <- obtener_tabla_regiones()
+
+ind_sexo_reg %>%
+  filter(grupo == "PI") %>%
+  group_by(region, sexo) %>%
+  summarise(TBE_global = sum(TBE), .groups = "drop") %>%
+  mutate(
+    nombre_region = codigo_a_nombre_region(region, tipo = "corto"),
+    nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto)
+  ) %>%
+  ggplot(aes(x = nombre_region, y = TBE_global, fill = sexo)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("HOMBRE" = colores_sexo[["HOMBRE"]], "MUJER" = colores_sexo[["MUJER"]])) +
+  labs(
+    title = "Carga Total de Egresos (TBE) por Región y Sexo en Población Indígena", 
+    subtitle = "Tasas Brutas por 10.000 habitantes pertenecientes a PI",
+    x = NULL, 
+    y = "TBE x 10k hab.",
+    caption = "Regiones ordenadas de Norte a Sur. Permite identificar disparidades territoriales."
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+

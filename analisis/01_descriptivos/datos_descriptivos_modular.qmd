@@ -25,8 +25,12 @@ Este documento calcula las estadísticas descriptivas básicas utilizadas en el 
 ```{r setup, message=FALSE, warning=FALSE}
 library(tidyverse)
 
-# Cargar datos
-load("../../BBDD_homologados.RData")
+# Cargar funciones y datos
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
+load(file.path(project_root, "BBDD_homologados.RData"))
 datos <- datos_homologados
 
 cat("Base de datos cargada correctamente\n")

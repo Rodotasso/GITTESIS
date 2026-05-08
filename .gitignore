@@ -15,6 +15,7 @@ Meta/
 *.csv
 *.xlsx
 *.xls
+*.docx
 *.RData
 
 # Generated output
@@ -67,3 +68,4 @@ test_*.R
 
 # Windows null device
 nul
+html/

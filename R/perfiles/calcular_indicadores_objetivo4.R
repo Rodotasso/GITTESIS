@@ -1,0 +1,145 @@
+# ==============================================================================
+# FUNCIONES: Indicadores epidemiológicos actualizados (Objetivo 4)
+# ==============================================================================
+# 
+# Implementa los 5 indicadores técnicos definidos en la propuesta final:
+# 1. Tasa Bruta de Egreso (TBE) - Utilización poblacional
+# 2. Tasa de Letalidad Intrahospitalaria (TLI) - Severidad/Efectividad
+# 3. Proporción de Egresos por Causa (PEC) - Peso relativo CIE-10
+# 4. Brecha de Puntos Porcentuales (BPP) - Disparidad aritmética
+# 5. Promedio Días de Estada (PDE) - Intensidad de uso
+#
+# Unidad de análisis: Evento Hospitalario (Egreso)
+# Metodología: OMS 2025, OPS 2018
+# ==============================================================================
+
+#' Calcular Indicadores Técnicos del Objetivo 4
+#'
+#' @param datos Data frame con PERTENENCIA2, COND_EGR, DIAS_ESTADA, Capitulo (CIE-10)
+#' @param denominadores_censo Tibble con columnas: grupo ("PI", "PG"), poblacion
+#' @param col_pertenencia Columna de pertenencia (default: "PERTENENCIA2" = Variable Enriquecida)
+#' @param anos_estudio Número de años del período (default: 13 para 2010-2022)
+#' @param verbose Mostrar mensajes (default: TRUE)
+#'
+#' @return Tibble con TBE, TLI, PEC, BPP y PDE por grupo y capítulo
+#' @export
+calcular_indicadores_objetivo4 <- function(datos,
+                                           denominadores_censo,
+                                           col_pertenencia = "PERTENENCIA2",
+                                           anos_estudio = 13,
+                                           verbose = TRUE) {
+
+  if (verbose) cat("\n═══ CALCULANDO INDICADORES TÉCNICOS (OBJETIVO 4) ═══\n")
+  if (verbose) cat("Unidad de análisis: Evento (Egreso)\n")
+
+  # 1. Preparar Totales por Grupo (PI/PG) para Denominadores
+  totales_grupo <- datos %>%
+    dplyr::mutate(grupo = ifelse(!is.na(.data[[col_pertenencia]]) & .data[[col_pertenencia]] == 1, "PI", "PG")) %>%
+    dplyr::group_by(grupo) %>%
+    dplyr::summarise(
+      Et = dplyr::n(), # Total egresos del grupo
+      F_total = sum(COND_EGR == 2, na.rm = TRUE), # Total fallecidos del grupo
+      Sum_dias = sum(DIAS_ESTADA, na.rm = TRUE),
+      n_validos_dias = sum(!is.na(DIAS_ESTADA)),
+      .groups = "drop"
+    ) %>%
+    dplyr::left_join(denominadores_censo, by = "grupo") %>%
+    dplyr::mutate(
+      TBE = (Et / poblacion) * 1000,
+      TLI_global = (F_total / Et) * 100,
+      PDE_global = Sum_dias / n_validos_dias
+    )
+
+  # 2. Calcular Indicadores por Capítulo CIE-10
+  indicadores_capitulo <- datos %>%
+    dplyr::mutate(grupo = ifelse(!is.na(.data[[col_pertenencia]]) & .data[[col_pertenencia]] == 1, "PI", "PG")) %>%
+    dplyr::group_by(grupo, Capitulo) %>%
+    dplyr::summarise(
+      Ec = dplyr::n(), # Egresos por causa
+      Fc = sum(COND_EGR == 2, na.rm = TRUE), # Fallecidos por causa
+      Sum_dias_c = sum(DIAS_ESTADA, na.rm = TRUE),
+      n_validos_c = sum(!is.na(DIAS_ESTADA)),
+      .groups = "drop"
+    ) %>%
+    dplyr::left_join(totales_grupo %>% dplyr::select(grupo, Et, TBE), by = "grupo") %>%
+    dplyr::mutate(
+      PEC = (Ec / Et) * 100,
+      TLI = (Fc / Ec) * 100,
+      PDE = Sum_dias_c / n_validos_c
+    )
+
+  # 3. Calcular Brecha de Puntos Porcentuales (BPP)
+  brechas <- indicadores_capitulo %>%
+    dplyr::select(Capitulo, grupo, PEC) %>%
+    tidyr::pivot_wider(names_from = grupo, values_from = PEC, names_prefix = "PEC_") %>%
+    dplyr::mutate(
+      BPP = PEC_PI - PEC_PG
+    ) %>%
+    dplyr::select(Capitulo, BPP)
+
+  # 4. Ensamblar Resultado Final
+  resultado <- indicadores_capitulo %>%
+    dplyr::left_join(brechas, by = "Capitulo") %>%
+    dplyr::select(grupo, Capitulo, Ec, Et, PEC, BPP, TLI, PDE, TBE) %>%
+    dplyr::arrange(Capitulo, desc(grupo))
+
+  if (verbose) {
+    cat(sprintf("  \u2713 %d capítulos CIE-10 procesados\n", length(unique(resultado$Capitulo))))
+    cat("  \u2713 Indicadores TBE, TLI, PEC, BPP y PDE generados.\n")
+  }
+
+  return(resultado)
+}
+
+#' Crear Tabla Maestra de Perfiles (Objetivo 4)
+#'
+#' @param datos_resultado Resultado de calcular_indicadores_objetivo4
+#' @param titulo Título de la tabla
+#' @param tamano_fuente Tamaño de fuente (default: 8)
+#'
+#' @return Objeto flextable con formato académico
+#' @export
+crear_tabla_maestra_perfiles <- function(datos_resultado, titulo, tamano_fuente = 8) {
+  
+  # Preparar para tabla horizontal (PI vs PG)
+  tabla_df <- datos_resultado %>%
+    dplyr::select(Capitulo, grupo, TBE, PEC, TLI, PDE, BPP) %>%
+    tidyr::pivot_wider(
+      names_from = grupo,
+      values_from = c(TBE, PEC, TLI, PDE)
+    ) %>%
+    dplyr::select(
+      Capitulo, 
+      TBE_PI, TBE_PG,
+      PEC_PI, PEC_PG, BPP,
+      TLI_PI, TLI_PG,
+      PDE_PI, PDE_PG
+    ) %>%
+    dplyr::arrange(desc(abs(BPP))) # Ordenar por magnitud de la brecha
+
+  ft <- flextable::flextable(tabla_df) %>%
+    flextable::set_header_labels(
+      Capitulo = "Capítulo CIE-10",
+      TBE_PI = "Tasa Bruta de Egreso\nPueblos Indígenas (x10.000)",
+      TBE_PG = "Tasa Bruta de Egreso\nPoblación General (x10.000)",
+      PEC_PI = "Proporción de Egresos por Causa\nPueblos Indígenas (%)",
+      PEC_PG = "Proporción de Egresos por Causa\nPoblación General (%)",
+      BPP = "Brecha de Puntos\nPorcentuales (BPP)",
+      TLI_PI = "Tasa de Letalidad Intrahospitalaria\nPueblos Indígenas (%)",
+      TLI_PG = "Tasa de Letalidad Intrahospitalaria\nPoblación General (%)",
+      PDE_PI = "Estada\nPueblos Indígenas (días)",
+      PDE_PG = "Estada\nPoblación General (días)"
+    ) %>%
+    flextable::colformat_double(j = 2:10, digits = 2) %>%
+    flextable::color(i = ~ BPP > 1, j = "BPP", color = "#D32F2F") %>%
+    flextable::color(i = ~ BPP < -1, j = "BPP", color = "#1976D2") %>%
+    flextable::bold(i = ~ abs(BPP) > 1, j = "BPP") %>%
+    flextable::align(align = "center", part = "all") %>%
+    flextable::align(j = 1, align = "left", part = "all") %>%
+    flextable::fontsize(size = tamano_fuente, part = "all") %>%
+    flextable::set_caption(titulo) %>%
+    flextable::theme_booktabs() %>%
+    flextable::autofit()
+
+  return(ft)
+}

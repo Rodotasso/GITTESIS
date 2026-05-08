@@ -1,0 +1,468 @@
+---
+title: "Cuadro 3 - Concordancia entre fuentes (formato artículo SPM)"
+format: docx
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(flextable)
+  library(officer)
+  library(DescTools)
+  library(censo2017)
+  library(DBI)
+  library(dbplyr)
+})
+
+project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+setwd(project_root)
+source(file.path(project_root, "R/cargar_funciones.R"))
+load(file.path(project_root, "BBDD_homologados.RData"))
+```
+
+```{r calcular_kappa}
+# --- KAPPA ---
+datos_kappa <- datos_homologados %>%
+  select(PERTENENCIA2, RSH, CONADI, PUEBLO_ORIGINARIO_BIN) %>%
+  mutate(
+    RSH = ifelse(is.na(RSH), 0, RSH),
+    CONADI = ifelse(is.na(CONADI), 0, CONADI),
+    Egresos_Hospitalarios = ifelse(is.na(PUEBLO_ORIGINARIO_BIN), 0, PUEBLO_ORIGINARIO_BIN)
+  ) %>%
+  filter(!is.na(PERTENENCIA2))
+
+kappa_eh <- calcular_concordancia_desctools(datos_kappa, "PERTENENCIA2", "Egresos_Hospitalarios", "Egresos Hospitalarios")
+kappa_rsh <- calcular_concordancia_desctools(datos_kappa, "PERTENENCIA2", "RSH", "RSH")
+kappa_conadi <- calcular_concordancia_desctools(datos_kappa, "PERTENENCIA2", "CONADI", "CONADI")
+```
+
+```{r preparar_datos_ccc}
+# --- Datos sin duplicados para CCC ---
+datos_sin_duplicados <- datos_homologados %>%
+  arrange(RUN, desc(AÑO)) %>%
+  distinct(RUN, .keep_all = TRUE)
+
+# --- Extraer proporciones ---
+datos_censo <- extraer_datos_censo()
+datos_pert2 <- extraer_datos_variable_enriquecida(datos_sin_duplicados)
+datos_egresos <- extraer_datos_egresos_hospitalarios(datos_sin_duplicados)
+```
+
+```{r calcular_ccc}
+# --- CCC GLOBAL por nivel (corregido con calcular_ccc_desagregacion) ---
+global_region_ve <- calcular_ccc_desagregacion(
+  datos_censo$por_region, datos_pert2$por_region,
+  columnas_join = "region", nombre_desagregacion = "Por Region", verbose = FALSE)
+
+global_edad_ve <- calcular_ccc_desagregacion(
+  datos_censo$por_grupo_etario, datos_pert2$por_grupo_etario,
+  columnas_join = "grupo_etario", nombre_desagregacion = "Por Grupo Etario", verbose = FALSE)
+
+global_region_egr <- calcular_ccc_desagregacion(
+  datos_censo$por_region, datos_egresos$por_region,
+  columnas_join = "region", nombre_desagregacion = "Por Region",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+
+global_edad_egr <- calcular_ccc_desagregacion(
+  datos_censo$por_grupo_etario, datos_egresos$por_grupo_etario,
+  columnas_join = "grupo_etario", nombre_desagregacion = "Por Grupo Etario",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+
+# --- CCC por combinaciones ---
+comb_region_sexo_ve <- calcular_ccc_desagregacion(
+  datos_censo$region_sexo, datos_pert2$region_sexo,
+  columnas_join = c("region", "sexo"), nombre_desagregacion = "Reg x Sexo", verbose = FALSE)
+comb_region_edad_ve <- calcular_ccc_desagregacion(
+  datos_censo$region_edad, datos_pert2$region_edad,
+  columnas_join = c("region", "grupo_etario"), nombre_desagregacion = "Reg x Edad", verbose = FALSE)
+comb_sexo_edad_ve <- calcular_ccc_desagregacion(
+  datos_censo$sexo_edad, datos_pert2$sexo_edad,
+  columnas_join = c("sexo", "grupo_etario"), nombre_desagregacion = "Sexo x Edad", verbose = FALSE)
+comb_triple_ve <- calcular_ccc_desagregacion(
+  datos_censo$region_sexo_edad, datos_pert2$region_sexo_edad,
+  columnas_join = c("region", "sexo", "grupo_etario"), nombre_desagregacion = "Triple", verbose = FALSE)
+
+comb_region_sexo_egr <- calcular_ccc_desagregacion(
+  datos_censo$region_sexo, datos_egresos$region_sexo,
+  columnas_join = c("region", "sexo"), nombre_desagregacion = "Reg x Sexo",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+comb_region_edad_egr <- calcular_ccc_desagregacion(
+  datos_censo$region_edad, datos_egresos$region_edad,
+  columnas_join = c("region", "grupo_etario"), nombre_desagregacion = "Reg x Edad",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+comb_sexo_edad_egr <- calcular_ccc_desagregacion(
+  datos_censo$sexo_edad, datos_egresos$sexo_edad,
+  columnas_join = c("sexo", "grupo_etario"), nombre_desagregacion = "Sexo x Edad",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+comb_triple_egr <- calcular_ccc_desagregacion(
+  datos_censo$region_sexo_edad, datos_egresos$region_sexo_edad,
+  columnas_join = c("region", "sexo", "grupo_etario"), nombre_desagregacion = "Triple",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+
+# --- CCC detallado por categoria individual ---
+det_region_ve <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad, datos_pert2$region_sexo_edad,
+  columnas_categoria = "region", columnas_subcategoria = c("sexo", "grupo_etario"),
+  nombre_desagregacion = "Por Region", verbose = FALSE)
+det_region_egr <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad, datos_egresos$region_sexo_edad,
+  columnas_categoria = "region", columnas_subcategoria = c("sexo", "grupo_etario"),
+  nombre_desagregacion = "Por Region",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+
+det_sexo_ve <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad, datos_pert2$region_sexo_edad,
+  columnas_categoria = "sexo", columnas_subcategoria = c("region", "grupo_etario"),
+  nombre_desagregacion = "Por Sexo", verbose = FALSE)
+det_sexo_egr <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad, datos_egresos$region_sexo_edad,
+  columnas_categoria = "sexo", columnas_subcategoria = c("region", "grupo_etario"),
+  nombre_desagregacion = "Por Sexo",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+
+det_edad_ve <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad, datos_pert2$region_sexo_edad,
+  columnas_categoria = "grupo_etario", columnas_subcategoria = c("region", "sexo"),
+  nombre_desagregacion = "Por Grupo Etario", verbose = FALSE)
+det_edad_egr <- calcular_ccc_detallado(
+  datos_censo$region_sexo_edad, datos_egresos$region_sexo_edad,
+  columnas_categoria = "grupo_etario", columnas_subcategoria = c("region", "sexo"),
+  nombre_desagregacion = "Por Grupo Etario",
+  col_porcentaje_comparacion = "porcentaje_egresos", verbose = FALSE)
+```
+
+```{r construir_tabla}
+# Orden geografico norte a sur
+orden_regiones <- c(15, 1, 2, 3, 4, 5, 13, 6, 7, 16, 8, 9, 14, 10, 11, 12)
+nombres_regiones <- c(
+  "15" = "Arica y Parinacota", "1" = "Tarapac\u00e1", "2" = "Antofagasta",
+  "3" = "Atacama", "4" = "Coquimbo", "5" = "Valpara\u00edso",
+  "13" = "Metropolitana", "6" = "O'Higgins", "7" = "Maule",
+  "16" = "\u00d1uble", "8" = "Biob\u00edo", "9" = "La Araucan\u00eda",
+  "14" = "Los R\u00edos", "10" = "Los Lagos", "11" = "Ays\u00e9n",
+  "12" = "Magallanes"
+)
+
+# Helper para formatear IC
+fmt_ic <- function(inf, sup) {
+  ifelse(is.na(inf) | is.na(sup), "--",
+         sprintf("[%.3f-%.3f]", inf, sup))
+}
+
+fmt_ccc <- function(val) {
+  ifelse(is.na(val), "--", sprintf("%.4f", val))
+}
+
+# Interpretacion segun Landis & Koch
+interpretar <- function(val) {
+  dplyr::case_when(
+    is.na(val) ~ "--",
+    val > 0.80 ~ "Casi perfecta",
+    val > 0.61 ~ "Sustancial",
+    val > 0.41 ~ "Moderada",
+    val > 0.21 ~ "Aceptable",
+    TRUE ~ "Leve"
+  )
+}
+
+# =============================================
+# CONSTRUIR FILAS
+# =============================================
+filas <- list()
+
+# --- SECCION 1: KAPPA ---
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "Concordancia Interna (Kappa)",
+  Categoria = "Egresos Hospitalarios",
+  Kappa_IC = sprintf("%.4f [%.3f-%.3f]", kappa_eh$`Valor Kappa`, kappa_eh$`IC 95% Inf`, kappa_eh$`IC 95% Sup`),
+  CCC_VE = "--", CCC_EGR = "--",
+  Interpretacion = interpretar(kappa_eh$`Valor Kappa`))
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "", Categoria = "RSH",
+  Kappa_IC = sprintf("%.4f [%.3f-%.3f]", kappa_rsh$`Valor Kappa`, kappa_rsh$`IC 95% Inf`, kappa_rsh$`IC 95% Sup`),
+  CCC_VE = "--", CCC_EGR = "--",
+  Interpretacion = interpretar(kappa_rsh$`Valor Kappa`))
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "", Categoria = "CONADI",
+  Kappa_IC = sprintf("%.4f [%.3f-%.3f]", kappa_conadi$`Valor Kappa`, kappa_conadi$`IC 95% Inf`, kappa_conadi$`IC 95% Sup`),
+  CCC_VE = "--", CCC_EGR = "--",
+  Interpretacion = interpretar(kappa_conadi$`Valor Kappa`))
+
+# --- SECCION 2: POR REGION ---
+# Global region (corregido)
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "Por Regi\u00f3n (Norte a Sur)",
+  Categoria = sprintf("Lin's CCC GLOBAL - (%d regiones)", global_region_ve$N),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", global_region_ve$`Lin's CCC`,
+                    global_region_ve$`IC 95% Inferior`, global_region_ve$`IC 95% Superior`),
+  CCC_EGR = sprintf("%.4f [%.4f-%.4f]", global_region_egr$`Lin's CCC`,
+                     global_region_egr$`IC 95% Inferior`, global_region_egr$`IC 95% Superior`),
+  Interpretacion = "")
+
+# Regiones individuales
+for (reg in orden_regiones) {
+  reg_chr <- as.character(reg)
+  nombre <- nombres_regiones[reg_chr]
+
+  fila_ve <- det_region_ve$tabla_detalle %>% filter(region == reg)
+  fila_egr <- det_region_egr$tabla_detalle %>% filter(region == reg)
+
+  ve_ccc <- if (nrow(fila_ve) > 0) fila_ve$`Lin's CCC` else NA
+  ve_inf <- if (nrow(fila_ve) > 0) fila_ve$`IC 95% Inferior` else NA
+  ve_sup <- if (nrow(fila_ve) > 0) fila_ve$`IC 95% Superior` else NA
+  egr_ccc <- if (nrow(fila_egr) > 0) fila_egr$`Lin's CCC` else NA
+  egr_inf <- if (nrow(fila_egr) > 0) fila_egr$`IC 95% Inferior` else NA
+  egr_sup <- if (nrow(fila_egr) > 0) fila_egr$`IC 95% Superior` else NA
+
+  filas[[length(filas) + 1]] <- tibble(
+    Estrato = "",
+    Categoria = nombre,
+    Kappa_IC = "--",
+    CCC_VE = sprintf("%.4f %s", ve_ccc, fmt_ic(ve_inf, ve_sup)),
+    CCC_EGR = sprintf("%.4f %s", egr_ccc, fmt_ic(egr_inf, egr_sup)),
+    Interpretacion = interpretar(ve_ccc))
+}
+
+# --- SECCION 3: POR SEXO ---
+# Global sexo (N=2, insuficiente para CCC propio — usar triple como referencia)
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "Por Sexo",
+  Categoria = sprintf("Lin's CCC GLOBAL - (2 categor\u00edas)"),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", comb_triple_ve$`Lin's CCC`,
+                    comb_triple_ve$`IC 95% Inferior`, comb_triple_ve$`IC 95% Superior`),
+  CCC_EGR = "-",
+  Interpretacion = "")
+
+# Sexo individual
+sexo_orden <- c("HOMBRE", "MUJER")
+for (sx in sexo_orden) {
+  fila_ve <- det_sexo_ve$tabla_detalle %>% filter(sexo == sx)
+  fila_egr <- det_sexo_egr$tabla_detalle %>% filter(sexo == sx)
+
+  ve_ccc <- if (nrow(fila_ve) > 0) fila_ve$`Lin's CCC` else NA
+  ve_inf <- if (nrow(fila_ve) > 0) fila_ve$`IC 95% Inferior` else NA
+  ve_sup <- if (nrow(fila_ve) > 0) fila_ve$`IC 95% Superior` else NA
+  egr_ccc <- if (nrow(fila_egr) > 0) fila_egr$`Lin's CCC` else NA
+  egr_inf <- if (nrow(fila_egr) > 0) fila_egr$`IC 95% Inferior` else NA
+  egr_sup <- if (nrow(fila_egr) > 0) fila_egr$`IC 95% Superior` else NA
+
+  filas[[length(filas) + 1]] <- tibble(
+    Estrato = "",
+    Categoria = sx,
+    Kappa_IC = "--",
+    CCC_VE = sprintf("%.4f %s", ve_ccc, fmt_ic(ve_inf, ve_sup)),
+    CCC_EGR = sprintf("%.4f %s", egr_ccc, fmt_ic(egr_inf, egr_sup)),
+    Interpretacion = interpretar(ve_ccc))
+}
+
+# --- SECCION 4: POR GRUPO ETARIO ---
+# Global edad (corregido)
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "Por Grupo Etario",
+  Categoria = sprintf("Lin's CCC GLOBAL - (%d grupos)", global_edad_ve$N),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", global_edad_ve$`Lin's CCC`,
+                    global_edad_ve$`IC 95% Inferior`, global_edad_ve$`IC 95% Superior`),
+  CCC_EGR = sprintf("%.4f [%.4f-%.4f]", global_edad_egr$`Lin's CCC`,
+                     global_edad_egr$`IC 95% Inferior`, global_edad_egr$`IC 95% Superior`),
+  Interpretacion = "")
+
+# Grupos etarios individuales
+edad_orden <- c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+for (ge in edad_orden) {
+  fila_ve <- det_edad_ve$tabla_detalle %>% filter(grupo_etario == ge)
+  fila_egr <- det_edad_egr$tabla_detalle %>% filter(grupo_etario == ge)
+
+  ve_ccc <- if (nrow(fila_ve) > 0) fila_ve$`Lin's CCC` else NA
+  ve_inf <- if (nrow(fila_ve) > 0) fila_ve$`IC 95% Inferior` else NA
+  ve_sup <- if (nrow(fila_ve) > 0) fila_ve$`IC 95% Superior` else NA
+  egr_ccc <- if (nrow(fila_egr) > 0) fila_egr$`Lin's CCC` else NA
+  egr_inf <- if (nrow(fila_egr) > 0) fila_egr$`IC 95% Inferior` else NA
+  egr_sup <- if (nrow(fila_egr) > 0) fila_egr$`IC 95% Superior` else NA
+
+  filas[[length(filas) + 1]] <- tibble(
+    Estrato = "",
+    Categoria = ge,
+    Kappa_IC = "--",
+    CCC_VE = sprintf("%.4f %s", ve_ccc, fmt_ic(ve_inf, ve_sup)),
+    CCC_EGR = sprintf("%.4f %s", egr_ccc, fmt_ic(egr_inf, egr_sup)),
+    Interpretacion = interpretar(ve_ccc))
+}
+
+# --- SECCION 5: COMBINACIONES ---
+crear_fila_comb <- function(nombre, res_ve, res_egr) {
+  tibble(
+    Estrato = ifelse(nombre == sprintf("Regi\u00f3n \u00d7 Sexo (%d combinaciones)", res_ve$N),
+                     "Combinaciones", ""),
+    Categoria = nombre,
+    Kappa_IC = "--",
+    CCC_VE = sprintf("%.4f [%.3f-%.3f]", res_ve$`Lin's CCC`,
+                      res_ve$`IC 95% Inferior`, res_ve$`IC 95% Superior`),
+    CCC_EGR = sprintf("%.4f [%.3f-%.3f]", res_egr$`Lin's CCC`,
+                       res_egr$`IC 95% Inferior`, res_egr$`IC 95% Superior`),
+    Interpretacion = interpretar(res_ve$`Lin's CCC`))
+}
+
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "Combinaciones",
+  Categoria = sprintf("Regi\u00f3n \u00d7 Sexo (%d combinaciones)", comb_region_sexo_ve$N),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", comb_region_sexo_ve$`Lin's CCC`,
+                    comb_region_sexo_ve$`IC 95% Inferior`, comb_region_sexo_ve$`IC 95% Superior`),
+  CCC_EGR = sprintf("%.4f [%.3f-%.3f]", comb_region_sexo_egr$`Lin's CCC`,
+                     comb_region_sexo_egr$`IC 95% Inferior`, comb_region_sexo_egr$`IC 95% Superior`),
+  Interpretacion = interpretar(comb_region_sexo_ve$`Lin's CCC`))
+
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "",
+  Categoria = sprintf("Regi\u00f3n \u00d7 Grupo Etario (%d combinaciones)", comb_region_edad_ve$N),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", comb_region_edad_ve$`Lin's CCC`,
+                    comb_region_edad_ve$`IC 95% Inferior`, comb_region_edad_ve$`IC 95% Superior`),
+  CCC_EGR = sprintf("%.4f [%.3f-%.3f]", comb_region_edad_egr$`Lin's CCC`,
+                     comb_region_edad_egr$`IC 95% Inferior`, comb_region_edad_egr$`IC 95% Superior`),
+  Interpretacion = interpretar(comb_region_edad_ve$`Lin's CCC`))
+
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "",
+  Categoria = sprintf("Sexo \u00d7 Grupo Etario (%d combinaciones)", comb_sexo_edad_ve$N),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", comb_sexo_edad_ve$`Lin's CCC`,
+                    comb_sexo_edad_ve$`IC 95% Inferior`, comb_sexo_edad_ve$`IC 95% Superior`),
+  CCC_EGR = sprintf("%.4f [%.3f-%.3f]", comb_sexo_edad_egr$`Lin's CCC`,
+                     comb_sexo_edad_egr$`IC 95% Inferior`, comb_sexo_edad_egr$`IC 95% Superior`),
+  Interpretacion = interpretar(comb_sexo_edad_ve$`Lin's CCC`))
+
+filas[[length(filas) + 1]] <- tibble(
+  Estrato = "",
+  Categoria = sprintf("Regi\u00f3n \u00d7 Sexo \u00d7 Grupo Etario (%d combinaciones)", comb_triple_ve$N),
+  Kappa_IC = "--",
+  CCC_VE = sprintf("%.4f [%.3f-%.3f]", comb_triple_ve$`Lin's CCC`,
+                    comb_triple_ve$`IC 95% Inferior`, comb_triple_ve$`IC 95% Superior`),
+  CCC_EGR = sprintf("%.4f [%.3f-%.3f]", comb_triple_egr$`Lin's CCC`,
+                     comb_triple_egr$`IC 95% Inferior`, comb_triple_egr$`IC 95% Superior`),
+  Interpretacion = interpretar(comb_triple_ve$`Lin's CCC`))
+
+# =============================================
+# UNIR TODO
+# =============================================
+tabla_datos <- bind_rows(filas)
+```
+
+```{r crear_flextable}
+# Renombrar columnas al formato del cuadro
+names(tabla_datos) <- c(
+  "Estrato", "Categoria",
+  "Kappa [IC95%]",
+  "CCC Var.Enriq. [IC95%]",
+  "CCC Egresos [IC95%]",
+  "Interpretacion"
+)
+
+# Detectar posiciones dinamicamente buscando en los datos
+n_total <- nrow(tabla_datos)
+
+# Encontrar filas GLOBAL (contienen "Lin's CCC GLOBAL")
+filas_global <- grep("Lin's CCC GLOBAL", tabla_datos$Categoria)
+
+# Encontrar secciones por el campo Estrato (no vacio)
+filas_estrato <- which(tabla_datos$Estrato != "")
+# filas_estrato: [1] Kappa, [2] Por Region, [3] Por Sexo, [4] Por Grupo Etario, [5] Combinaciones
+
+# Posiciones de separacion (ultima fila antes de cada seccion nueva)
+separadores <- filas_estrato[-1] - 1  # fila anterior a cada nuevo estrato
+
+cat("Total filas:", n_total, "\n")
+cat("Filas GLOBAL:", paste(filas_global, collapse = ", "), "\n")
+cat("Filas estrato:", paste(filas_estrato, collapse = ", "), "\n")
+cat("Separadores:", paste(separadores, collapse = ", "), "\n")
+
+# Filtrar separadores validos (dentro del rango)
+separadores <- separadores[separadores >= 1 & separadores <= n_total]
+
+ft <- flextable(tabla_datos) %>%
+  # Encabezado compuesto
+  add_header_row(
+    values = c("", "", "Concordancia Interna", "Concordancia externa", ""),
+    colwidths = c(1, 1, 1, 2, 1),
+    top = TRUE
+  ) %>%
+  # Alineacion
+  align(j = 1:2, align = "left", part = "body") %>%
+  align(j = 3:6, align = "center", part = "body") %>%
+  align(part = "header", align = "center") %>%
+  align(j = 1:2, align = "left", part = "header") %>%
+  # Negrita en header y filas GLOBAL
+  bold(part = "header") %>%
+  merge_v(j = "Estrato") %>%
+  valign(j = "Estrato", valign = "top") %>%
+  # Fuente y tamano
+  font(fontname = "Times New Roman", part = "all") %>%
+  fontsize(size = 9, part = "body") %>%
+  fontsize(size = 9, part = "header") %>%
+  # Bordes exterior
+  hline_top(border = fp_border(color = "black", width = 1.5), part = "header") %>%
+  hline_bottom(border = fp_border(color = "black", width = 1.5), part = "body") %>%
+  # Padding compacto
+  padding(padding.top = 1, padding.bottom = 1, part = "all") %>%
+  line_spacing(space = 1, part = "all") %>%
+  # Ancho de columnas
+  autofit() %>%
+  # Notas al pie
+  add_footer_lines(c(
+    "Kappa: concordancia interna fuentes vs Variable Enriquecida. Lin\u2019s CCC: concordancia externa vs Censo 2017.",
+    "Var.Enriq.: Variable Enriquecida (RSH+CONADI+Egresos). Egresos: solo autodeclaraci\u00f3n hospitalaria.",
+    "Interpretaci\u00f3n: Landis & Koch (1977): casi perfecta (>0,80), sustancial (0,61-0,80), moderada (0,41-0,60), aceptable (0,21-0,40), leve (<0,21).",
+    "Fuente: DEIS; RSH; CONADI; Censo 2017, INE. Elaboraci\u00f3n propia."
+  )) %>%
+  fontsize(size = 8, part = "footer") %>%
+  italic(part = "footer")
+
+# Aplicar negrita a filas GLOBAL
+for (fg in filas_global) {
+  ft <- bold(ft, i = fg, part = "body")
+}
+
+# Aplicar lineas separadoras entre secciones
+for (sep in separadores) {
+  borde <- if (sep == separadores[1]) {
+    fp_border(color = "black", width = 1.5)
+  } else {
+    fp_border(color = "black", width = 0.5)
+  }
+  ft <- hline(ft, i = sep, border = borde, part = "body")
+}
+
+# Caption como titulo
+ft <- set_caption(ft, caption = as_paragraph(
+  as_chunk("Cuadro 3. ", props = fp_text(bold = TRUE, italic = TRUE, font.size = 10, font.family = "Times New Roman")),
+  as_chunk("Concordancia entre fuentes de datos sobre pertenencia a pueblos originarios. Chile, 2010-2022.",
+           props = fp_text(italic = TRUE, font.size = 10, font.family = "Times New Roman"))
+))
+
+ft
+```
+
+```{r guardar_extra}
+# Guardar tambien como docx independiente en resultados_tesis
+dir_final <- file.path(project_root, "resultados_tesis/final_resultados")
+if (!dir.exists(dir_final)) dir.create(dir_final, recursive = TRUE)
+
+seccion_h <- prop_section(
+  page_size = page_size(orient = "landscape"),
+  page_margins = page_mar(bottom = 0.5, top = 0.5, right = 0.5, left = 0.5, gutter = 0)
+)
+
+save_as_docx(
+  `Cuadro 3` = ft,
+  path = file.path(dir_final, "Cuadro_3_Concordancias.docx"),
+  pr_section = seccion_h
+)
+cat("Guardado en:", file.path(dir_final, "Cuadro_3_Concordancias.docx"), "\n")
+```

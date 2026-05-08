@@ -27,8 +27,11 @@ suppressPackageStartupMessages({
 })
 
 # Cargar funciones y datos
-source("../../R/cargar_funciones.R")
-load("../../BBDD_homologados.RData")
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
+load(file.path(project_root, "BBDD_homologados.RData"))
 
 cat("═══════════════════════════════════════════════════\n")
 cat("  SISTEMA DE PERFILES EPIDEMIOLÓGICOS - v2.0\n")

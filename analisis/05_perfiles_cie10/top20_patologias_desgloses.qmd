@@ -28,7 +28,10 @@ library(scales)
 library(flextable)
 library(forcats)
 
-source("../../R/cargar_funciones.R")
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
 ```
 
 ## 1. Carga de datos
@@ -36,7 +39,7 @@ source("../../R/cargar_funciones.R")
 ```{r}
 #| label: cargar-datos
 
-load("../../BBDD_homologados.RData")
+load(file.path(project_root, "BBDD_homologados.RData"))
 
 cat("Dimensiones:", format(nrow(datos_homologados), big.mark = ","), "x",
     ncol(datos_homologados), "\n")
@@ -121,7 +124,7 @@ datos_top <- resultado_top$datos_top
 #| label: tabla-top20-global
 
 # Crear directorio de salida
-dir_salida <- "../../resultados_tesis/top20_desgloses"
+dir_salida <- file.path(project_root, "resultados_tesis", "top20_desgloses")
 if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
 
 ft_global <- top_global %>%

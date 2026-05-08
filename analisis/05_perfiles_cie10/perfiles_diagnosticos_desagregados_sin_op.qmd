@@ -1,0 +1,252 @@
+---
+title: "Perfiles Diagnósticos Desagregados (Sin Salud Materna)"
+subtitle: "Análisis Epidemiológico Excluyendo Embarazo, Parto y Puerperio"
+author: "Rodolfo Tasso"
+format:
+  html:
+    toc: true
+    toc-title: "Índice"
+    theme: cosmo
+    code-fold: true
+    fig-width: 12
+    fig-height: 8
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+# Ecosistema Tidyverse y r-lib
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cli)
+library(rlang)
+library(stringr)
+library(forcats)
+
+project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+setwd(project_root)
+
+# Cargar ecosistema completo del proyecto
+source("R/cargar_funciones.R")
+source("R/perfiles/calcular_indicadores_desagregados.R")
+source("R/funciones/ordenar_regiones.R")
+
+# Estilos de r-lib para el reporte
+cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional (Filtro Sin Salud Materna)")
+
+# Cargar Datos
+load("BBDD_homologados.RData")
+censo_lista <- extraer_datos_censo(verbose = FALSE)
+
+# --- FUNCIONES DE VISUALIZACIÓN AVANZADA ---
+
+#' Gráfico de Disparidades Facetado (Expert Version)
+graficar_disparidades_facet <- function(datos_ind, var_facet, titulo) {
+  df_plot <- datos_ind %>%
+    group_by(!!sym(var_facet)) %>%
+    arrange(desc(abs(BPP))) %>%
+    slice_head(n = 10) %>%
+    ungroup() %>%
+    mutate(
+      color_brecha = ifelse(BPP > 0, "Sobre-representación PI", "Sub-representación PI"),
+      Capitulo_wrap = stringr::str_wrap(Capitulo, width = 35)
+    )
+  
+  ggplot(df_plot, aes(x = reorder(Capitulo_wrap, BPP), y = BPP, fill = color_brecha)) +
+    geom_col() +
+    facet_wrap(as.formula(paste("~", var_facet)), scales = "free_y") +
+    coord_flip() +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    scale_fill_manual(values = c("Sobre-representación PI" = colores_pertenencia[["PO"]], 
+                                "Sub-representación PI" = colores_pertenencia[["PG"]])) +
+    labs(
+      title = titulo, 
+      subtitle = "Brecha de Perfil Proporcional (BPP): Diferencia en puntos porcentuales entre PI y PG", 
+      x = NULL, y = "Diferencia (Puntos Porcentuales)", 
+      fill = "Interpretación",
+      caption = "BPP > 0: El capítulo tiene mayor peso relativo en el perfil indígena.\nAnálisis por Evento Hospitalario. Chile 2010-2022. Excluye Cap. XV."
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom", strip.text = element_text(face = "bold", size = 11))
+}
+
+#' Heatmap Regional de Carga de Enfermedad (TBE)
+graficar_heatmap_regional <- function(datos_ind, titulo) {
+  # Obtener nombres cortos de regiones ordenados geográficamente
+  tabla_regiones <- obtener_tabla_regiones()
+  
+  df_plot <- datos_ind %>%
+    filter(grupo == "PI") %>%
+    mutate(
+      nombre_region = codigo_a_nombre_region(region, tipo = "corto"),
+      nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto),
+      Capitulo_wrap = stringr::str_wrap(Capitulo, width = 30)
+    )
+  
+  # Seleccionar capítulos con mayor variabilidad o carga para no saturar el mapa
+  top_caps <- df_plot %>% 
+    group_by(Capitulo_wrap) %>% 
+    summarise(m = mean(TBE, na.rm = TRUE), .groups = "drop") %>% 
+    arrange(desc(m)) %>% 
+    head(18) %>% 
+    pull(Capitulo_wrap)
+  
+  df_plot %>%
+    filter(Capitulo_wrap %in% top_caps) %>%
+    ggplot(aes(x = nombre_region, y = Capitulo_wrap, fill = TBE)) +
+    geom_tile(color = "white") +
+    scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "TBE x 10k", na.value = "grey90") +
+    labs(
+      title = titulo, 
+      subtitle = "Tasa Bruta de Egresos (TBE) por 10.000 hab. en Población Indígena", 
+      x = NULL, 
+      y = NULL,
+      caption = "Excluye Cap. XV. Regiones ordenadas de Norte a Sur. La TBE mide la carga regional."
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9), 
+      panel.grid = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+}
+```
+
+## 1. Introducción y resumen general
+
+Este documento presenta un **análisis epidemiológico multidimensional** que estratifica los perfiles diagnósticos CIE-10 de la población hospitalizada en Chile (2010–2022) según **sexo**, **grupo etario** y **región**, comparando Pueblos Indígenas (PI) con la Población General (PG).
+
+La unidad de análisis es el **egreso hospitalario** (no la persona única), y la identificación de PI se realiza con la **variable enriquecida `PERTENENCIA2`**, que integra autodeclaración en egresos, RSH y CONADI.
+
+**Particularidad de este documento:** se **excluye el capítulo XV (Embarazo, parto y puerperio)** del análisis. Dado que la salud materna concentra una proporción muy alta de egresos —especialmente en mujeres en edad reproductiva—, su presencia tiende a dominar los perfiles y a ocultar disparidades relevantes en otras causas. Excluirla permite **revelar inequidades en patologías que de otro modo quedarían enmascaradas**.
+
+**Qué encontrará el lector al renderizar este documento:**
+
+- (i) **Brechas por sexo** (sin salud materna): comparación de causas CIE-10 entre hombres y mujeres dentro de PI y PG.
+- (ii) **Brechas por ciclo vital**: perfiles diagnósticos por grupo etario para detectar inequidades a lo largo del curso de vida.
+- (iii) **Heatmap regional**: carga de enfermedad expresada como Tasa Bruta de Egresos por 10.000 habitantes (TBE) por región y capítulo CIE-10.
+- (iv) **Combinación sexo × región**: estratificación cruzada para identificar territorios y subgrupos con mayores disparidades.
+
+**Métricas utilizadas:**
+
+- **BPP (Brecha de Puntos Porcentuales)**: diferencia absoluta entre el porcentaje que un capítulo CIE-10 representa en PI versus PG. Un **BPP positivo** indica **sobrerrepresentación** del capítulo en PI; un **BPP negativo** indica **sub-representación**.
+- **TBE (Tasa Bruta de Egresos por 10.000 habitantes)**: número de egresos por capítulo CIE-10 ajustado por la población base, permitiendo comparar magnitud absoluta entre regiones y subgrupos.
+
+## 2. Preparación de Datos (Excluyendo Salud Materna)
+
+Se excluye el capítulo **XV. Embarazo, parto y puerperio** para observar mejor las disparidades en otras causas de morbilidad que suelen quedar ocultas por el alto volumen de este grupo.
+
+```{r preparacion-datos}
+# Asegurar que sea data.table para usar sintaxis optimizada
+library(data.table)
+setDT(datos_homologados)
+
+cols_necesarias <- c("PERTENENCIA2", "COND_EGR", "FECHA_EGRESO_FMT_DEIS", "FECHA_INGRESO_FMT_DEIS", "Grupo_CIE10", "AÑO", "CODIGO_REGION", "GLOSA_SEXO", "EDAD_ANOS")
+
+datos_analisis <- datos_homologados[, cols_necesarias, with = FALSE] %>%
+  as_tibble() %>%
+  mutate(
+    DIAS_ESTADA = as.numeric(as.Date(FECHA_EGRESO_FMT_DEIS) - as.Date(FECHA_INGRESO_FMT_DEIS)),
+    Capitulo = Grupo_CIE10,
+    sexo = GLOSA_SEXO,
+    grupo_etario = case_when(
+      EDAD_ANOS < 5 ~ "0-4",
+      EDAD_ANOS < 15 ~ "5-14",
+      EDAD_ANOS < 25 ~ "15-24",
+      EDAD_ANOS < 45 ~ "25-44",
+      EDAD_ANOS < 65 ~ "45-64",
+      EDAD_ANOS < 75 ~ "65-74",
+      EDAD_ANOS >= 75 ~ "75+",
+      TRUE ~ NA_character_
+    ),
+    region = as.numeric(CODIGO_REGION)
+  ) %>%
+  # EXCLUSIÓN CRÍTICA: Capítulo XV
+  filter(!stringr::str_detect(Capitulo, "Embarazo, parto y puerperio")) %>%
+  filter(!is.na(Capitulo), !is.na(sexo), !is.na(grupo_etario), !is.na(region))
+```
+
+
+## 3. Disparidades de Género: Hombres vs Mujeres (Sin Salud Materna)
+
+Al eliminar el capítulo de embarazo y parto, podemos observar con mayor claridad las disparidades en enfermedades crónicas e infecciosas entre sexos.
+
+```{r sexo}
+denominador_sexo <- preparar_denominador_estrato(censo_lista$por_sexo)
+
+ind_sexo <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_sexo,
+  var_estrato = "sexo"
+)
+
+graficar_disparidades_facet(ind_sexo, "sexo", "Disparidades por Sexo (Excluyendo Salud Materna)")
+```
+
+## 4. Disparidades por Ciclo Vital (Sin Salud Materna)
+
+```{r edad}
+denominador_edad <- censo_lista$por_grupo_etario %>%
+  preparar_denominador_estrato()
+
+ind_edad <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_edad,
+  var_estrato = "grupo_etario"
+)
+
+graficar_disparidades_facet(ind_edad, "grupo_etario", "Brechas por Grupo Etario (Sin Salud Materna)")
+```
+
+## 5. Análisis Geográfico Nacional: Todas las Regiones (Sin Salud Materna)
+
+```{r regional}
+denominador_region <- preparar_denominador_estrato(censo_lista$por_region)
+
+ind_region <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_region,
+  var_estrato = "region"
+)
+
+graficar_heatmap_regional(ind_region, "Carga de Enfermedad por Región (Sin Salud Materna)")
+```
+
+## 6. Combinación Compleja: Sexo y Región en PI (Sin Salud Materna)
+
+```{r sexo-region}
+denominador_sexo_reg <- censo_lista$region_sexo %>%
+  preparar_denominador_estrato()
+
+ind_sexo_reg <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_sexo_reg,
+  var_estrato = c("sexo", "region")
+)
+
+# Visualizar TBE comparativa por Sexo en las regiones (Ordenadas de N a S)
+tabla_regiones <- obtener_tabla_regiones()
+
+ind_sexo_reg %>%
+  filter(grupo == "PI") %>%
+  group_by(region, sexo) %>%
+  summarise(TBE_global = sum(TBE), .groups = "drop") %>%
+  mutate(
+    nombre_region = codigo_a_nombre_region(region, tipo = "corto"),
+    nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto)
+  ) %>%
+  ggplot(aes(x = nombre_region, y = TBE_global, fill = sexo)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("HOMBRE" = colores_sexo[["HOMBRE"]], "MUJER" = colores_sexo[["MUJER"]])) +
+  labs(
+    title = "TBE por Región y Sexo en PI (Sin Salud Materna)", 
+    subtitle = "Tasas Brutas por 10.000 habitantes pertenecientes a PI",
+    x = NULL, 
+    y = "TBE x 10k hab.",
+    caption = "Regiones ordenadas de Norte a Sur. Permite ver disparidades de género territoriales 'limpias'."
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```

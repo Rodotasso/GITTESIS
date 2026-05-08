@@ -77,6 +77,7 @@ source(file.path(directorio_r, "graficos", "grafico_promedio_prevision_po.R"))
 source(file.path(directorio_r, "graficos", "crear_paleta_disparidad.R"))
 source(file.path(directorio_r, "graficos", "crear_tamanios_linea.R"))
 source(file.path(directorio_r, "graficos", "grafico_evolucion_disparidades.R"))
+source(file.path(directorio_r, "graficos", "graficos_objetivo4.R"))
 cat("  ✓ guardar_multiformato\n")
 cat("  ✓ grafico_comparativo_fuentes\n")
 cat("  ✓ grafico_tendencia_pertenencia\n")
@@ -90,6 +91,7 @@ cat("  ✓ grafico_promedio_prevision_po\n")
 cat("  ✓ crear_paleta_disparidad (NUEVA)\n")
 cat("  ✓ crear_tamanios_linea (NUEVA)\n")
 cat("  ✓ grafico_evolucion_disparidades (NUEVA)\n")
+cat("  ✓ graficos_objetivo4 (NUEVA)\n")
 
 # ------------------------------------------------------------------------------
 # FUNCIONES DE ANALISIS
@@ -154,6 +156,7 @@ source(file.path(directorio_r, "perfiles", "funciones_patologias.R"))
 source(file.path(directorio_r, "perfiles", "calcular_top_patologias_desglose.R"))
 source(file.path(directorio_r, "perfiles", "calcular_indicadores_protocolo.R"))
 source(file.path(directorio_r, "perfiles", "unificar_por_run.R"))
+source(file.path(directorio_r, "perfiles", "calcular_indicadores_objetivo4.R"))
 cat("  ✓ calcular_perfil_diagnostico\n")
 cat("  ✓ comparar_perfiles_po_pg\n")
 cat("  ✓ crear_tabla_perfil\n")
@@ -168,6 +171,7 @@ cat("  ✓ calcular_indicadores_globales (NUEVA)\n")
 cat("  ✓ calcular_indicadores_desagregados (NUEVA)\n")
 cat("  ✓ crear_tabla_indicadores (NUEVA)\n")
 cat("  ✓ unificar_por_run (NUEVA)\n")
+cat("  ✓ calcular_indicadores_objetivo4 (NUEVA)\n")
 
 # ------------------------------------------------------------------------------
 # FUNCIONES DE UTILIDADES

@@ -30,8 +30,11 @@ suppressPackageStartupMessages({
   library(ciecl)
 })
 
-source("../../R/cargar_funciones.R")
-load("../../BBDD_homologados.RData")
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
+load(file.path(project_root, "BBDD_homologados.RData"))
 
 cat("Base de datos cargada:", format(nrow(datos_homologados), big.mark = ","), "registros\n")
 ```
@@ -147,7 +150,7 @@ tabla_po <- crear_tabla_perfil(
   tamano_fuente    = 8
 )
 
-dir_salida <- file.path(directorio_base, "resultados_tesis", "perfiles_simples_ve_sin_op")
+dir_salida <- file.path(project_root, "resultados_tesis", "perfiles_simples_ve_sin_op")
 if (!dir.exists(dir_salida)) dir.create(dir_salida, recursive = TRUE)
 
 print(tabla_po)

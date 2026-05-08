@@ -1,0 +1,164 @@
+---
+title: "Perfiles de Diagnósticos de Egresos Hospitalarios (Objetivo 4)"
+subtitle: "Análisis con Variable Enriquecida e Indicadores Estandarizados"
+author: "Rodolfo Tasso"
+format:
+  html:
+    toc: true
+    toc-title: "Índice"
+    theme: cosmo
+    code-fold: true
+    fig-width: 10
+    fig-height: 8
+execute:
+  warning: false
+  message: false
+---
+
+## 1. Introducción y Configuración
+
+Este documento implementa el análisis final del **Objetivo 4** de la tesis, utilizando la **Variable Enriquecida (`PERTENENCIA2`)** y la unidad de análisis centrada en el **Evento Hospitalario (Egreso)**. 
+
+El objetivo es caracterizar y comparar los perfiles de morbilidad hospitalaria entre la **población perteneciente a pueblos indígenas** y la **población general**, analizando diferencias en prevalencia de causas, severidad y uso de recursos.
+
+**Qué encontrará en este documento:**
+
+- La **tabla maestra** consolidada de capítulos CIE-10 con todos los indicadores PI vs PG calculados a nivel de egreso hospitalario.
+- Los **5 indicadores técnicos** validados: porcentajes relativos, BPP (Brecha de Puntos Porcentuales), TBE (Tasa Bruta de Egresos por 10.000 hab), Razón de Tasas (RT) y diferencia absoluta de tasas.
+- **Gráfico 1**: top de causas CIE-10 más frecuentes en PI y PG (comparación lado a lado).
+- **Gráfico 2**: barras divergentes de BPP que muestran sobre y sub-representación de capítulos en PI.
+- **Gráfico 3**: dumbbell plot que conecta los porcentajes de PI y PG por capítulo, evidenciando las brechas.
+- **Gráfico 4**: cuadrantes severidad–frecuencia que clasifican los capítulos CIE-10 según su carga combinada para PI.
+
+Se emplean 5 indicadores técnicos validados:
+
+1. **Tasa Bruta de Egreso (TBE):** Mide el riesgo de hospitalización por cada 10.000 habitantes.
+2. **Tasa de Letalidad Intrahospitalaria (TLI):** Porcentaje de egresos que terminan en fallecimiento. Actúa como proxy de severidad del cuadro clínico al momento del ingreso.
+3. **Proporción de Egresos por Causa (PEC):** Peso relativo (%) de un capítulo diagnóstico sobre el total de egresos de un grupo específico. Permite entender la estructura interna de la carga de morbilidad.
+4. **Brecha de Puntos Porcentuales (BPP):** Diferencia aritmética absoluta entre la PEC de la población indígena y la PEC de la población general. Valores positivos indican sobrerrepresentación en pueblos indígenas, y negativos sobrerrepresentación en población general.
+5. **Promedio Días de Estada (PDE):** Tiempo medio de hospitalización (en días), indicando intensidad de uso de recursos e impacto en la red de camas.
+
+```{r setup}
+library(tidyverse)
+library(flextable)
+library(ciecl)
+library(ggrepel)
+
+# Ubicar raíz del proyecto
+project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+setwd(project_root)
+
+# Cargar funciones
+source("R/cargar_funciones.R")
+
+# Cargar bases de datos
+load("BBDD_homologados.RData")
+
+# Obtener denominadores del Censo 2017 usando la función optimizada
+censo_lista <- obtener_poblacion_censo(verbose = FALSE)
+censo_df <- tibble(
+  grupo = c("PI", "PG"),
+  poblacion = c(censo_lista$pob_po, censo_lista$pob_pg)
+)
+```
+
+## 2. Preparación de Datos y Tabla Maestra de Indicadores
+
+En esta sección se clasifica la causa principal de egreso según el Capítulo CIE-10 y se calculan los indicadores consolidados.
+
+La **Tabla 1** reúne el perfil epidemiológico hospitalario completo. Esta tabla permite observar rápidamente la carga de la enfermedad (**Proporción de Egresos por Causa**), la severidad (**Tasa de Letalidad Intrahospitalaria**) y el uso de la infraestructura (**Promedio Días de Estada**) para cada uno de los grupos poblacionales, presentados en orden descendente según la magnitud de su brecha estructural (**BPP**). Adicionalmente, incluye como primera métrica la **Tasa Bruta de Egreso (TBE)** para dimensionar el nivel poblacional de utilización y riesgo de hospitalización.
+
+```{r calculo-indicadores}
+# 1. Preparar datos con Capítulos CIE-10
+# Seleccionamos y convertimos fechas a formato estándar usando R Base
+# para evadir el bug de corrupción de IDate en vctrs/dplyr
+cols_necesarias <- c("PERTENENCIA2", "COND_EGR", "FECHA_EGRESO_FMT_DEIS", "FECHA_INGRESO_FMT_DEIS", "Grupo_CIE10")
+datos_base <- datos_homologados[, cols_necesarias, with = FALSE]
+datos_base$FECHA_EGRESO_FMT_DEIS <- as.Date(datos_base$FECHA_EGRESO_FMT_DEIS)
+datos_base$FECHA_INGRESO_FMT_DEIS <- as.Date(datos_base$FECHA_INGRESO_FMT_DEIS)
+
+datos_analisis <- datos_base %>%
+  as_tibble() %>%
+  mutate(DIAS_ESTADA = as.numeric(FECHA_EGRESO_FMT_DEIS - FECHA_INGRESO_FMT_DEIS)) %>%
+  rename(Capitulo = Grupo_CIE10) %>%
+  filter(!is.na(Capitulo))
+
+# 2. Calcular los indicadores maestros del Objetivo 4
+resultados_obj4 <- calcular_indicadores_objetivo4(
+  datos = datos_analisis,
+  denominadores_censo = censo_df,
+  col_pertenencia = "PERTENENCIA2",
+  anos_estudio = 13,
+  verbose = FALSE
+)
+
+# 3. Visualizar y exportar tabla maestra
+tabla_maestra <- crear_tabla_maestra_perfiles(
+  resultados_obj4, 
+  "Tabla 1. Perfil Epidemiológico de Egresos Hospitalarios (2010-2022) según Capítulo CIE-10 y Pertenencia a Pueblos Indígenas."
+)
+
+# Guardar la tabla en formato PNG de alta calidad
+guardar_tabla_png(tabla_maestra, "tabla_1_perfiles_diagnosticos_obj4", dir_salida = "resultados_tesis/tablas")
+
+tabla_maestra
+```
+
+## 3. Top Causas de Hospitalización (Gráficos Convencionales)
+
+Antes de enfocarse en las diferencias o inequidades, es fundamental visualizar las causas absolutas que generan mayor demanda de hospitalización en cada grupo, medidas a través de su Proporción de Egresos por Causa (PEC).
+
+### Top 10 Causas - Pertenecientes a Pueblos Indígenas
+La **Figura 1** destaca la estructura de morbilidad hospitalaria para la población indígena. Se evidencia de forma clara la enorme concentración relativa de egresos relacionados a la salud materna ("Embarazo, parto y puerperio"), que ocupa el primer lugar con diferencia, desplazando causas crónicas hacia escalones inferiores.
+
+```{r barras-pi}
+#| fig-cap: "Figura 1. Causas principales de egreso en población perteneciente a pueblos indígenas."
+p_barras_pi <- grafico_barras_top_pec(resultados_obj4, grupo_obj = "PI", top_n = 10)
+guardar_multiformato(p_barras_pi, "figura_1_top_causas_indigena", dir_salida = "resultados_tesis/figuras")
+p_barras_pi
+```
+
+### Top 10 Causas - Población General
+La **Figura 2** muestra el comportamiento en la población general. Aunque el "Embarazo, parto y puerperio" sigue siendo altamente prevalente, las enfermedades del sistema digestivo, respiratorio, y circulatorio tienen un peso relativo significativamente mayor y más parejo en el tope de la lista.
+
+```{r barras-pg}
+#| fig-cap: "Figura 2. Causas principales de egreso en población general."
+p_barras_pg <- grafico_barras_top_pec(resultados_obj4, grupo_obj = "PG", top_n = 10)
+guardar_multiformato(p_barras_pg, "figura_2_top_causas_general", dir_salida = "resultados_tesis/figuras")
+p_barras_pg
+```
+
+## 4. Análisis Epidemiológico de Inequidades
+
+El cruce de proporciones entre ambos grupos permite observar el tamaño y dirección de las brechas estructurales. 
+
+### Gráfico Divergente de Brechas (BPP)
+La **Figura 3** muestra el contraste de la carga de enfermedad expresado a través de la Brecha de Puntos Porcentuales (BPP). Valores hacia la derecha (rojo) indican patologías donde la población indígena tiene una carga proporcionalmente mayor que sus contrapartes no indígenas. La sobrerrepresentación de causas obstétricas contrasta agudamente con la subrepresentación (exceso en población general, azul) en enfermedades circulatorias, tumores y crónicas.
+
+```{r grafico-divergente}
+#| fig-cap: "Figura 3. Brecha de Puntos Porcentuales (BPP) en la distribución de causas de hospitalización."
+p_divergente <- grafico_divergente_bpp(resultados_obj4, umbral_bpp = 0.1)
+guardar_multiformato(p_divergente, "figura_3_brecha_divergente", dir_salida = "resultados_tesis/figuras")
+p_divergente
+```
+
+### Dumbbell Plot (Proporciones Absolutas)
+La **Figura 4** (Gráfico de mancuernas) complementa el gráfico divergente mostrando simultáneamente la magnitud absoluta de las proporciones. La distancia entre ambos puntos representa la brecha. Esto es crítico porque evidencia que problemas como el "Embarazo, parto y puerperio" no solo tienen una brecha inmensa, sino que dominan abrumadoramente el total de las hospitalizaciones indígenas, acercándose al 30% del volumen total.
+
+```{r grafico-dumbbell}
+#| fig-cap: "Figura 4. Proporción de Egresos por Causa (PEC) comparada (Dumbbell plot)."
+p_dumbbell <- grafico_dumbbell_pec(resultados_obj4, top_n = 15)
+guardar_multiformato(p_dumbbell, "figura_4_dumbbell_proporciones", dir_salida = "resultados_tesis/figuras")
+p_dumbbell
+```
+
+### Scatterplot de Cuadrantes (Severidad vs Frecuencia)
+La **Figura 5** cruza la frecuencia relativa de la hospitalización (PEC en el eje X) frente a su severidad (TLI en el eje Y). 
+Este diagrama ayuda a identificar prioridades de intervención: patologías de alta frecuencia pero baja mortalidad (abajo a la derecha), frente a patologías de menor frecuencia relativa pero alta mortalidad (arriba a la izquierda, como Tumores o Enfermedades Circulatorias). Permite contrastar si los perfiles poblacionales difieren significativamente frente a la severidad de egreso.
+
+```{r grafico-cuadrantes}
+#| fig-cap: "Figura 5. Frecuencia vs. Severidad Intrahospitalaria."
+p_cuadrantes <- grafico_cuadrantes_severidad(resultados_obj4)
+guardar_multiformato(p_cuadrantes, "figura_5_cuadrantes_severidad", dir_salida = "resultados_tesis/figuras")
+p_cuadrantes
+```

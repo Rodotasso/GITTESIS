@@ -26,10 +26,13 @@ library(censo2017)
 library(ciecl)
 
 # Cargar funciones modulares (sin concatenar_diag_cie10)
-source("../../R/cargar_funciones.R")
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
 
 # Cargar datos
-load("../../BBDD_homologados.RData")
+load(file.path(project_root, "BBDD_homologados.RData"))
 
 cat("═══════════════════════════════════════════════════\n")
 cat("  PERFILES EPIDEMIOLÓGICOS - VERSIÓN CIECL\n")
