@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "Si usa este software, por favor cítelo usando los siguientes metadatos."
+title: "Evaluación de la calidad del registro de la variable pertenencia a pueblos indígenas en Chile (2010-2022): completitud, representatividad y perfiles de diagnósticos de egreso hospitalario"
+type: software
+authors:
+  - family-names: "Tasso Suazo"
+    given-names: "Rodolfo"
+    orcid: "https://orcid.org/0000-0002-1264-4933"
+    affiliation: "Escuela de Salud Pública, Universidad de Chile"
+    email: "rtasso@uchile.cl"
+version: "v1.0.0"
+date-released: "2026-06-03"
+doi: "10.5281/zenodo.20518201"
+url: "https://github.com/Rodotasso/GITTESIS"
+repository-code: "https://github.com/Rodotasso/GITTESIS"
+license: MIT
+keywords:
+  - Etnia
+  - Ethnicity
+  - Chile
+  - MINSAL
+  - DEIS
+  - epidemiología
+  - salud pública
+  - R
+  - códigos diagnósticos

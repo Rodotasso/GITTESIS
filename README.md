@@ -1,5 +1,6 @@
 # GITTESIS — Análisis Epidemiológico de Pueblos Originarios en Egresos Hospitalarios de Chile
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20518201.svg)](https://doi.org/10.5281/zenodo.20518201)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R](https://img.shields.io/badge/R-%3E%3D4.0-blue?logo=r)](https://www.r-project.org/)
 [![Quarto](https://img.shields.io/badge/Quarto-1.4+-purple?logo=quarto)](https://quarto.org/)
