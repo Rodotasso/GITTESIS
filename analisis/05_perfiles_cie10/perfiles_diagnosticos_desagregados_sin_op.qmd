@@ -33,6 +33,13 @@ source("R/cargar_funciones.R")
 source("R/perfiles/calcular_indicadores_desagregados.R")
 source("R/funciones/ordenar_regiones.R")
 
+library(flextable)
+library(readr)
+
+# Directorio de exportacion de tablas/CSV de este informe
+dir_salida_datos <- file.path(project_root, "analisis/05_perfiles_cie10/resultados_tesis/datos_desagregados_sin_op")
+if (!dir.exists(dir_salida_datos)) dir.create(dir_salida_datos, recursive = TRUE)
+
 # Estilos de r-lib para el reporte
 cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional (Filtro Sin Salud Materna)")
 
@@ -40,31 +47,79 @@ cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional (Filtro Sin Sal
 load("BBDD_homologados.RData")
 censo_lista <- extraer_datos_censo(verbose = FALSE)
 
+#' Tabla flextable estandar para indicadores estratificados (sin Cap. XV)
+tabla_indicadores <- function(df, var_estrato, titulo = NULL) {
+  cols_orden <- intersect(
+    c(
+      var_estrato, "grupo", "Capitulo", "n", "TBE", "prop", "BPP",
+      "prop_PI", "prop_PG", "n_PI", "n_PG", "TBE_PI", "TBE_PG"
+    ),
+    names(df)
+  )
+  df_ord <- df %>% dplyr::select(dplyr::all_of(cols_orden))
+  ft <- flextable::flextable(df_ord) %>%
+    flextable::colformat_double(digits = 2) %>%
+    flextable::autofit() %>%
+    flextable::theme_booktabs()
+  if (!is.null(titulo)) ft <- flextable::set_caption(ft, caption = titulo)
+  ft
+}
+
 # --- FUNCIONES DE VISUALIZACIÓN AVANZADA ---
 
 #' Gráfico de Disparidades Facetado (Expert Version)
-graficar_disparidades_facet <- function(datos_ind, var_facet, titulo) {
-  df_plot <- datos_ind %>%
-    group_by(!!sym(var_facet)) %>%
-    arrange(desc(abs(BPP))) %>%
-    slice_head(n = 10) %>%
-    ungroup() %>%
+#'
+#' @param n_pos,n_neg Si se especifican, selecciona top n_pos sobrerrepresentaciones
+#'   y top n_neg subrepresentaciones por faceta (asegura simetría visual entre paneles).
+#'   Si NULL, mantiene comportamiento legacy: top 10 por magnitud absoluta.
+graficar_disparidades_facet <- function(datos_ind, var_facet, titulo,
+                                        n_pos = NULL, n_neg = NULL) {
+  # BPP está duplicado por grupo (PI y PG con mismo valor); deduplicar a una fila por capítulo×faceta
+  datos_unicos <- datos_ind %>%
+    dplyr::distinct(!!sym(var_facet), Capitulo, BPP, .keep_all = TRUE)
+  if (!is.null(n_pos) || !is.null(n_neg)) {
+    n_pos <- n_pos %||% 3
+    n_neg <- n_neg %||% 3
+    df_plot <- datos_unicos %>%
+      group_by(!!sym(var_facet)) %>%
+      group_modify(~ {
+        pos <- .x %>%
+          filter(BPP > 0) %>%
+          arrange(desc(BPP)) %>%
+          slice_head(n = n_pos)
+        neg <- .x %>%
+          filter(BPP < 0) %>%
+          arrange(BPP) %>%
+          slice_head(n = n_neg)
+        dplyr::bind_rows(pos, neg)
+      }) %>%
+      ungroup()
+  } else {
+    df_plot <- datos_unicos %>%
+      group_by(!!sym(var_facet)) %>%
+      arrange(desc(abs(BPP))) %>%
+      slice_head(n = 10) %>%
+      ungroup()
+  }
+  df_plot <- df_plot %>%
     mutate(
       color_brecha = ifelse(BPP > 0, "Sobre-representación PI", "Sub-representación PI"),
       Capitulo_wrap = stringr::str_wrap(Capitulo, width = 35)
     )
-  
+
   ggplot(df_plot, aes(x = reorder(Capitulo_wrap, BPP), y = BPP, fill = color_brecha)) +
     geom_col() +
     facet_wrap(as.formula(paste("~", var_facet)), scales = "free_y") +
     coord_flip() +
     geom_hline(yintercept = 0, linetype = "dashed") +
-    scale_fill_manual(values = c("Sobre-representación PI" = colores_pertenencia[["PO"]], 
-                                "Sub-representación PI" = colores_pertenencia[["PG"]])) +
+    scale_fill_manual(values = c(
+      "Sobre-representación PI" = colores_pertenencia[["PO"]],
+      "Sub-representación PI" = colores_pertenencia[["PG"]]
+    )) +
     labs(
-      title = titulo, 
-      subtitle = "Brecha de Perfil Proporcional (BPP): Diferencia en puntos porcentuales entre PI y PG", 
-      x = NULL, y = "Diferencia (Puntos Porcentuales)", 
+      title = titulo,
+      subtitle = "Brecha de Perfil Proporcional (BPP): Diferencia en puntos porcentuales entre PI y PG",
+      x = NULL, y = "Diferencia (Puntos Porcentuales)",
       fill = "Interpretación",
       caption = "BPP > 0: El capítulo tiene mayor peso relativo en el perfil indígena.\nAnálisis por Evento Hospitalario. Chile 2010-2022. Excluye Cap. XV."
     ) +
@@ -76,7 +131,7 @@ graficar_disparidades_facet <- function(datos_ind, var_facet, titulo) {
 graficar_heatmap_regional <- function(datos_ind, titulo) {
   # Obtener nombres cortos de regiones ordenados geográficamente
   tabla_regiones <- obtener_tabla_regiones()
-  
+
   df_plot <- datos_ind %>%
     filter(grupo == "PI") %>%
     mutate(
@@ -84,30 +139,30 @@ graficar_heatmap_regional <- function(datos_ind, titulo) {
       nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto),
       Capitulo_wrap = stringr::str_wrap(Capitulo, width = 30)
     )
-  
+
   # Seleccionar capítulos con mayor variabilidad o carga para no saturar el mapa
-  top_caps <- df_plot %>% 
-    group_by(Capitulo_wrap) %>% 
-    summarise(m = mean(TBE, na.rm = TRUE), .groups = "drop") %>% 
-    arrange(desc(m)) %>% 
-    head(18) %>% 
+  top_caps <- df_plot %>%
+    group_by(Capitulo_wrap) %>%
+    summarise(m = mean(TBE, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(m)) %>%
+    head(18) %>%
     pull(Capitulo_wrap)
-  
+
   df_plot %>%
     filter(Capitulo_wrap %in% top_caps) %>%
     ggplot(aes(x = nombre_region, y = Capitulo_wrap, fill = TBE)) +
     geom_tile(color = "white") +
     scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "TBE x 10k", na.value = "grey90") +
     labs(
-      title = titulo, 
-      subtitle = "Tasa Bruta de Egresos (TBE) por 10.000 hab. en Población Indígena", 
-      x = NULL, 
+      title = titulo,
+      subtitle = "Tasa Bruta de Egresos (TBE) por 10.000 hab. en Población Indígena",
+      x = NULL,
       y = NULL,
       caption = "Excluye Cap. XV. Regiones ordenadas de Norte a Sur. La TBE mide la carga regional."
     ) +
     theme_minimal() +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 9), 
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
       panel.grid = element_blank(),
       plot.title = element_text(face = "bold")
     )
@@ -182,7 +237,19 @@ ind_sexo <- calcular_indicadores_estratificados(
   var_estrato = "sexo"
 )
 
-graficar_disparidades_facet(ind_sexo, "sexo", "Disparidades por Sexo (Excluyendo Salud Materna)")
+graficar_disparidades_facet(ind_sexo, "sexo",
+  "Disparidades por Sexo (Excluyendo Salud Materna)",
+  n_pos = 3, n_neg = 3
+)
+```
+
+### Tabla 3.1. Indicadores por sexo y capítulo CIE-10 (sin Cap. XV)
+
+```{r tabla-sexo}
+readr::write_csv(ind_sexo, file.path(dir_salida_datos, "ind_sexo.csv"))
+tabla_indicadores(ind_sexo, "sexo",
+  titulo = "Tabla 3.1. Indicadores por sexo (PI vs PG), excluyendo Cap. XV, Chile 2010-2022"
+)
 ```
 
 ## 4. Disparidades por Ciclo Vital (Sin Salud Materna)
@@ -195,9 +262,55 @@ ind_edad <- calcular_indicadores_estratificados(
   datos = datos_analisis,
   denominador_df = denominador_edad,
   var_estrato = "grupo_etario"
-)
+) %>%
+  dplyr::mutate(
+    grupo_etario = factor(
+      grupo_etario,
+      levels = c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+    )
+  )
 
-graficar_disparidades_facet(ind_edad, "grupo_etario", "Brechas por Grupo Etario (Sin Salud Materna)")
+graficar_disparidades_facet(ind_edad, "grupo_etario",
+  "Brechas por Grupo Etario (Sin Salud Materna)",
+  n_pos = 3, n_neg = 3
+)
+```
+
+### Tabla 4.1. Indicadores por grupo etario y capítulo CIE-10 (sin Cap. XV)
+
+```{r tabla-edad}
+readr::write_csv(ind_edad, file.path(dir_salida_datos, "ind_edad.csv"))
+tabla_indicadores(ind_edad, "grupo_etario",
+  titulo = "Tabla 4.1. Indicadores por grupo etario (PI vs PG), excluyendo Cap. XV, Chile 2010-2022"
+)
+```
+
+### Figura 4.2. Heatmap edad × capítulo CIE-10 (BPP, sin Cap. XV)
+
+```{r heatmap-edad}
+orden_edad <- c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+ind_edad %>%
+  dplyr::mutate(
+    grupo_etario = factor(grupo_etario, levels = orden_edad),
+    Capitulo_wrap = stringr::str_wrap(Capitulo, width = 30)
+  ) %>%
+  ggplot(aes(x = grupo_etario, y = reorder(Capitulo_wrap, BPP, FUN = function(x) mean(x, na.rm = TRUE)), fill = BPP)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = colores_pertenencia[["PG"]], mid = "white", high = colores_pertenencia[["PO"]],
+    midpoint = 0, name = "BPP (pp)"
+  ) +
+  labs(
+    title = "Brecha de Perfil Proporcional por grupo etario y capítulo CIE-10 (sin Cap. XV)",
+    subtitle = "Rojo: sobrerrepresentación en PI. Azul: subrepresentación en PI.",
+    x = "Grupo etario", y = NULL,
+    caption = "Análisis por Evento Hospitalario. Chile 2010-2022. Excluye Cap. XV."
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8), panel.grid = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
 ```
 
 ## 5. Análisis Geográfico Nacional: Todas las Regiones (Sin Salud Materna)
@@ -212,6 +325,47 @@ ind_region <- calcular_indicadores_estratificados(
 )
 
 graficar_heatmap_regional(ind_region, "Carga de Enfermedad por Región (Sin Salud Materna)")
+```
+
+### Tabla 5.1. Indicadores por región y capítulo CIE-10 (sin Cap. XV)
+
+```{r tabla-region}
+ind_region_etiquetado <- ind_region %>%
+  dplyr::mutate(nombre_region = codigo_a_nombre_region(region, tipo = "corto"))
+readr::write_csv(ind_region_etiquetado, file.path(dir_salida_datos, "ind_region.csv"))
+tabla_indicadores(ind_region_etiquetado, c("nombre_region", "region"),
+  titulo = "Tabla 5.1. Indicadores por región (PI vs PG), excluyendo Cap. XV, Chile 2010-2022"
+)
+```
+
+### Figura 5.2. Heatmap regional de BPP (sin Cap. XV)
+
+```{r heatmap-bpp-region}
+tabla_regiones <- obtener_tabla_regiones()
+ind_region %>%
+  dplyr::mutate(
+    nombre_region = codigo_a_nombre_region(region, tipo = "corto"),
+    nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto),
+    Capitulo_wrap = stringr::str_wrap(Capitulo, width = 30)
+  ) %>%
+  ggplot(aes(x = nombre_region, y = reorder(Capitulo_wrap, BPP, FUN = function(x) mean(x, na.rm = TRUE)), fill = BPP)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = colores_pertenencia[["PG"]], mid = "white", high = colores_pertenencia[["PO"]],
+    midpoint = 0, name = "BPP (pp)"
+  ) +
+  labs(
+    title = "Disparidad regional PI vs PG por capítulo CIE-10 (sin Cap. XV)",
+    subtitle = "Rojo: sobrerrepresentación en PI. Azul: subrepresentación en PI.",
+    x = NULL, y = NULL,
+    caption = "Regiones ordenadas de Norte a Sur. Excluye Cap. XV."
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+    axis.text.y = element_text(size = 8), panel.grid = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
 ```
 
 ## 6. Combinación Compleja: Sexo y Región en PI (Sin Salud Materna)
@@ -241,12 +395,34 @@ ind_sexo_reg %>%
   geom_col(position = "dodge") +
   scale_fill_manual(values = c("HOMBRE" = colores_sexo[["HOMBRE"]], "MUJER" = colores_sexo[["MUJER"]])) +
   labs(
-    title = "TBE por Región y Sexo en PI (Sin Salud Materna)", 
+    title = "TBE por Región y Sexo en PI (Sin Salud Materna)",
     subtitle = "Tasas Brutas por 10.000 habitantes pertenecientes a PI",
-    x = NULL, 
+    x = NULL,
     y = "TBE x 10k hab.",
     caption = "Regiones ordenadas de Norte a Sur. Permite ver disparidades de género territoriales 'limpias'."
   ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Tabla 6.1. Indicadores por sexo × región y capítulo CIE-10 (sin Cap. XV)
+
+```{r tabla-sexo-region}
+ind_sexo_reg_etiquetado <- ind_sexo_reg %>%
+  dplyr::mutate(nombre_region = codigo_a_nombre_region(region, tipo = "corto"))
+readr::write_csv(ind_sexo_reg_etiquetado, file.path(dir_salida_datos, "ind_sexo_region.csv"))
+
+resumen_sexo_region <- ind_sexo_reg_etiquetado %>%
+  dplyr::filter(grupo == "PI") %>%
+  dplyr::group_by(nombre_region, region, sexo) %>%
+  dplyr::summarise(TBE_total_PI = sum(TBE, na.rm = TRUE), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = sexo, values_from = TBE_total_PI, names_prefix = "TBE_PI_") %>%
+  dplyr::mutate(
+    diferencia_M_H = .data[["TBE_PI_MUJER"]] - .data[["TBE_PI_HOMBRE"]]
+  ) %>%
+  dplyr::arrange(region)
+
+tabla_indicadores(resumen_sexo_region, c("nombre_region", "region"),
+  titulo = "Tabla 6.1. TBE total (PI) por región y sexo, sin Cap. XV, Chile 2010-2022"
+)
 ```

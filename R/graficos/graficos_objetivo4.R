@@ -103,7 +103,7 @@ grafico_cuadrantes_severidad <- function(datos_obj4) {
   library(dplyr)
   library(stringr)
   library(ggrepel)
-  
+
   p <- ggplot(datos_obj4, aes(x = PEC, y = TLI, color = grupo)) +
     geom_point(alpha = 0.7, size = 4) +
     ggrepel::geom_text_repel(

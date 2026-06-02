@@ -1,0 +1,39 @@
+{
+  "title": "Evaluación de la calidad del registro de la variable pertenencia a pueblos indígenas en Chile (2010 - 2022): completitud, representatividad y perfiles de diagnósticos de egreso hospitalario.",
+  "description": "Repositorio del análisis de datos sobre Tesis de Magíster en Salud Pública de Rodolfo Tasso",
+  "creators": [
+    {
+      "name": "Tasso Suazo, Rodolfo",
+      "affiliation": "Escuela de Salud Pública, Universidad de Chile",
+      "orcid": "0000-0002-1264-4933"
+    }
+  ],
+  "keywords": [
+    "Etnia",
+    "Ethnicity",
+    "Grupos etnicos",
+    "Etnical groups",
+    "Chile",
+    "MINSAL",
+    "DEIS",
+    "epidemiologia",
+    "salud publica",
+    "R",
+    "codigos diagnosticos"
+  ],
+  "license": "MIT",
+  "upload_type": "software",
+  "version": "v1.0.0",
+  "language": "spa",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "relation": "isSupplementTo",
+      "identifier": "https://github.com/Rodotasso/GITTESIS",
+      "scheme": "url"
+    }
+  ],
+  "references": [
+    "Escuela de Salud Pública, Universidad de Chile: https://saludpublica.uchile.cl/"
+  ]
+}

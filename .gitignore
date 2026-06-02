@@ -69,3 +69,13 @@ test_*.R
 # Windows null device
 nul
 html/
+
+# Archivos temporales de trabajo (checks, scripts auxiliares, volcados)
+temp_*
+temp_read/
+_*.R
+_*.py
+*_check.md
+.adversarial_report.json
+.gemini_diagnostic.json
+gemini.md
