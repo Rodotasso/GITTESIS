@@ -10,7 +10,7 @@ authors:
     email: "rtasso@uchile.cl"
 version: "v1.1.0"
 date-released: "2026-08-02"
-doi: "10.5281/zenodo.20518201"
+doi: "10.5281/zenodo.20518200"
 url: "https://github.com/Rodotasso/GITTESIS"
 repository-code: "https://github.com/Rodotasso/GITTESIS"
 license: MIT
