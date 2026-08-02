@@ -354,13 +354,30 @@ guardar_figura_revista <- function(plot, nombre_base, dir_salida,
   ggsave(file.path(dir_salida, paste0(nombre_base, ".tiff")), plot,
          width = width, height = height, dpi = dpi, bg = "white", compression = "lzw")
 
-  # EPS (vectorial para revistas)
-  tryCatch({
-    ggsave(file.path(dir_salida, paste0(nombre_base, ".eps")), plot,
-           width = width, height = height, dpi = dpi, bg = "white", device = "eps")
-  }, error = function(e) {
-    message("No se pudo generar EPS: ", e$message)
-  })
+  # EPS vectorial editable (requisito de la Revista Panamericana de Salud
+  # Publica / OPS). Se usa cairo_ps porque el device postscript clasico
+  # descarta la semitransparencia (alpha); cairo_ps la preserva, de modo que
+  # el EPS queda vectorial Y visualmente identico al PNG/TIFF.
+  eps_ok <- FALSE
+  if (isTRUE(capabilities("cairo"))) {
+    tryCatch({
+      ggsave(file.path(dir_salida, paste0(nombre_base, ".eps")), plot,
+             width = width, height = height, dpi = dpi, bg = "white",
+             device = cairo_ps, fallback_resolution = dpi)
+      eps_ok <- TRUE
+    }, error = function(e) {
+      message("No se pudo generar EPS con cairo_ps: ", e$message)
+    })
+  }
+  if (!eps_ok) {
+    # Fallback: postscript clasico (vectorial, pero sin transparencia)
+    tryCatch({
+      ggsave(file.path(dir_salida, paste0(nombre_base, ".eps")), plot,
+             width = width, height = height, dpi = dpi, bg = "white", device = "eps")
+    }, error = function(e) {
+      message("No se pudo generar EPS: ", e$message)
+    })
+  }
 
-  cat("✓", nombre_base, "guardado (JPG, PNG, TIFF a", dpi, "dpi)\n")
+  cat("✓", nombre_base, "guardado (JPG, PNG, TIFF, EPS a", dpi, "dpi)\n")
 }

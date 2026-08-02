@@ -1,0 +1,23 @@
+"brazo","operacion","n","elapsed_s"
+"tradicional","carga catalogo xlsx (readxl)",39873,0.31
+"ciecl","carga catalogo embebido",39877,0
+"tradicional","normalizacion manual (regex)",1e+06,1.44
+"tradicional","validacion %in% + regex",1e+06,0.14
+"tradicional","enriquecimiento match()",1e+06,0.02
+"ciecl","cie_norm()",1e+06,3.3
+"ciecl","cie_validate_vector()",1e+06,2.96
+"ciecl","cie_lookup() lotes + join",1e+06,3.08
+"tradicional","normalizacion manual (regex)",5e+06,7.2
+"tradicional","validacion %in% + regex",5e+06,0.72
+"tradicional","enriquecimiento match()",5e+06,0.12
+"ciecl","cie_norm()",5e+06,16.31
+"ciecl","cie_validate_vector()",5e+06,15.03
+"ciecl","cie_lookup() lotes + join",5e+06,3.52
+"tradicional","normalizacion manual (regex)",2e+07,29.28
+"tradicional","validacion %in% + regex",2e+07,2.86
+"tradicional","enriquecimiento match()",2e+07,0.52
+"ciecl","cie_norm()",2e+07,65.05
+"ciecl","cie_validate_vector()",2e+07,59.5
+"ciecl","cie_lookup() lotes + join",2e+07,5.5
+"tradicional","escritura xlsx 1M filas (writexl)",1e+06,3.46
+"tradicional","lectura xlsx 1M filas (readxl)",1e+06,1.44

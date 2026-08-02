@@ -17,6 +17,10 @@ Meta/
 *.xls
 *.docx
 *.RData
+*.pdf
+
+# Excepcion: resultados agregados del benchmark ciecl (sin datos sensibles)
+!benchmark/*.csv
 
 # Generated output
 /output_qmd/

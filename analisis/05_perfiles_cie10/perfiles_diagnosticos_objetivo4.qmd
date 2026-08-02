@@ -108,36 +108,27 @@ tabla_maestra
 
 Antes de enfocarse en las diferencias o inequidades, es fundamental visualizar las causas absolutas que generan mayor demanda de hospitalización en cada grupo, medidas a través de su Proporción de Egresos por Causa (PEC).
 
-### Top 10 Causas - Pertenecientes a Pueblos Indígenas
-La **Figura 1** destaca la estructura de morbilidad hospitalaria para la población indígena. Se evidencia de forma clara la enorme concentración relativa de egresos relacionados a la salud materna ("Embarazo, parto y puerperio"), que ocupa el primer lugar con diferencia, desplazando causas crónicas hacia escalones inferiores.
+### Top 10 Causas de Hospitalización (Pueblos Indígenas y Población General)
+La **Figura 2.1** consolida en dos paneles la estructura de morbilidad hospitalaria: el panel A corresponde a la población indígena (donde "Embarazo, parto y puerperio" concentra el mayor peso relativo) y el panel B a la población general (donde digestivo, respiratorio y circulatorio tienen un peso más parejo en el tope de la lista).
 
-```{r barras-pi}
-#| fig-cap: "Figura 1. Causas principales de egreso en población perteneciente a pueblos indígenas."
-p_barras_pi <- grafico_barras_top_pec(resultados_obj4, grupo_obj = "PI", top_n = 10)
-guardar_multiformato(p_barras_pi, "figura_1_top_causas_indigena", dir_salida = "resultados_tesis/figuras")
-p_barras_pi
-```
-
-### Top 10 Causas - Población General
-La **Figura 2** muestra el comportamiento en la población general. Aunque el "Embarazo, parto y puerperio" sigue siendo altamente prevalente, las enfermedades del sistema digestivo, respiratorio, y circulatorio tienen un peso relativo significativamente mayor y más parejo en el tope de la lista.
-
-```{r barras-pg}
-#| fig-cap: "Figura 2. Causas principales de egreso en población general."
-p_barras_pg <- grafico_barras_top_pec(resultados_obj4, grupo_obj = "PG", top_n = 10)
-guardar_multiformato(p_barras_pg, "figura_2_top_causas_general", dir_salida = "resultados_tesis/figuras")
-p_barras_pg
+```{r barras-panel}
+#| fig-cap: "Figura 2.1. Principales causas de egreso hospitalario por capítulo CIE-10, según pertenencia a pueblos indígenas (panel A) y población general (panel B). Chile, 2010-2022."
+#| fig-width: 14
+#| fig-height: 7
+p_barras_panel <- grafico_barras_top_pec_panel(resultados_obj4, top_n = 10)
+guardar_multiformato(p_barras_panel, "figura_2_1_top_causas_panel", ancho = 14, alto = 7, dir_salida = "resultados_tesis/figuras")
+p_barras_panel
 ```
 
 ## 4. Análisis Epidemiológico de Inequidades
 
 El cruce de proporciones entre ambos grupos permite observar el tamaño y dirección de las brechas estructurales. 
 
-### Gráfico Divergente de Brechas (BPP)
-La **Figura 3** muestra el contraste de la carga de enfermedad expresado a través de la Brecha de Puntos Porcentuales (BPP). Valores hacia la derecha (rojo) indican patologías donde la población indígena tiene una carga proporcionalmente mayor que sus contrapartes no indígenas. La sobrerrepresentación de causas obstétricas contrasta agudamente con la subrepresentación (exceso en población general, azul) en enfermedades circulatorias, tumores y crónicas.
+### Gráfico Divergente (Diferencias en el Perfil Diagnóstico)
 
 ```{r grafico-divergente}
-#| fig-cap: "Figura 3. Brecha de Puntos Porcentuales (BPP) en la distribución de causas de hospitalización."
-p_divergente <- grafico_divergente_bpp(resultados_obj4, umbral_bpp = 0.1)
+#| fig-cap: "Figura 3. Diferencia de Puntos Porcentuales (DPP) por capítulo CIE-10 entre Pueblos Indígenas y Población General. Chile, 2010-2022."
+p_divergente <- grafico_divergente_bpp(resultados_obj4)
 guardar_multiformato(p_divergente, "figura_3_brecha_divergente", dir_salida = "resultados_tesis/figuras")
 p_divergente
 ```

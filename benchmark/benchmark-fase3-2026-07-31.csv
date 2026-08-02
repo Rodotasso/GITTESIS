@@ -1,0 +1,8 @@
+"brazo","operacion","elapsed_s"
+"tradicional","validacion cruda (%in%)",0.46
+"tradicional","normalizacion manual (regex)",22.63
+"tradicional","validacion post-normalizacion",0.38
+"tradicional","enriquecimiento match()",0.56
+"ciecl","cie_norm()",66.03
+"ciecl","cie_validate_vector()",58.59
+"ciecl","cie_lookup() lotes + join",4.16

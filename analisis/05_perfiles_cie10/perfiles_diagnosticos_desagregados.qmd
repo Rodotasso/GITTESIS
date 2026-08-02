@@ -65,7 +65,7 @@ tabla_indicadores <- function(df, var_estrato, titulo = NULL) {
 # --- FUNCIONES DE VISUALIZACIÓN AVANZADA ---
 
 #' Gráfico de Disparidades Facetado (Expert Version)
-graficar_disparidades_facet <- function(datos_ind, var_facet, titulo) {
+graficar_disparidades_facet <- function(datos_ind, var_facet, titulo, ncol = NULL, text_size = 9) {
   df_plot <- datos_ind %>%
     group_by(!!sym(var_facet)) %>%
     arrange(desc(abs(BPP))) %>%
@@ -78,20 +78,24 @@ graficar_disparidades_facet <- function(datos_ind, var_facet, titulo) {
   
   ggplot(df_plot, aes(x = reorder(Capitulo_wrap, BPP), y = BPP, fill = color_brecha)) +
     geom_col() +
-    facet_wrap(as.formula(paste("~", var_facet)), scales = "free_y") +
+    facet_wrap(as.formula(paste("~", var_facet)), scales = "free_y", ncol = ncol) +
     coord_flip() +
     geom_hline(yintercept = 0, linetype = "dashed") +
     scale_fill_manual(values = c("Sobre-representación PI" = colores_pertenencia[["PO"]], 
                                 "Sub-representación PI" = colores_pertenencia[["PG"]])) +
     labs(
       title = titulo, 
-      subtitle = "Brecha de Perfil Proporcional (BPP): Diferencia en puntos porcentuales entre PI y PG", 
+      subtitle = "Diferencia de Puntos Porcentuales (DPP) entre Pueblos Indígenas y Población General",
       x = NULL, y = "Diferencia (Puntos Porcentuales)", 
       fill = "Interpretación",
       caption = "BPP > 0: El capítulo tiene mayor peso relativo en el perfil indígena.\nAnálisis por Evento Hospitalario. Chile 2010-2022."
     ) +
     theme_minimal() +
-    theme(legend.position = "bottom", strip.text = element_text(face = "bold", size = 11))
+    theme(
+      legend.position = "bottom",
+      strip.text = element_text(face = "bold", size = 11),
+      axis.text.y = element_text(size = text_size)
+    )
 }
 
 #' Heatmap Regional de Carga de Enfermedad (TBE)
@@ -200,7 +204,7 @@ ind_sexo <- calcular_indicadores_estratificados(
   var_estrato = "sexo"
 )
 
-graficar_disparidades_facet(ind_sexo, "sexo", "Comparativa de Brechas Diagnósticas por Sexo (PI vs PG)")
+graficar_disparidades_facet(ind_sexo, "sexo", "Diferencias en el Perfil Diagnóstico por Sexo")
 ```
 
 ### Tabla 3.1. Indicadores por sexo y capítulo CIE-10
@@ -214,6 +218,8 @@ tabla_indicadores(ind_sexo, "sexo",
 ## 4. Disparidades por Ciclo Vital
 
 ```{r edad}
+#| fig-width: 11
+#| fig-height: 13
 denominador_edad <- censo_lista$por_grupo_etario %>%
   preparar_denominador_estrato()
 
@@ -223,7 +229,14 @@ ind_edad <- calcular_indicadores_estratificados(
   var_estrato = "grupo_etario"
 )
 
-graficar_disparidades_facet(ind_edad, "grupo_etario", "Brechas Diagnósticas por Grupo Etario")
+p_edad <- graficar_disparidades_facet(
+  ind_edad, "grupo_etario",
+  "Diferencias en el Perfil Diagnóstico por Grupo Etario",
+  ncol = 2, text_size = 10
+)
+guardar_multiformato(p_edad, "figura_2_7_disparidades_edad", ancho = 11, alto = 13,
+                     dir_salida = "resultados_tesis/figuras")
+p_edad
 ```
 
 ### Tabla 4.1. Indicadores por grupo etario y capítulo CIE-10
@@ -248,9 +261,9 @@ ind_edad %>%
   ggplot(aes(x = grupo_etario, y = reorder(Capitulo_wrap, BPP, FUN = function(x) mean(x, na.rm = TRUE)), fill = BPP)) +
   geom_tile(color = "white") +
   scale_fill_gradient2(low = colores_pertenencia[["PG"]], mid = "white", high = colores_pertenencia[["PO"]],
-                       midpoint = 0, name = "BPP (pp)") +
+                       midpoint = 0, name = "DPP (pp)") +
   labs(
-    title = "Brecha de Perfil Proporcional por grupo etario y capítulo CIE-10",
+    title = "Diferencia de Puntos Porcentuales por grupo etario y capítulo CIE-10",
     subtitle = "Rojo: sobrerrepresentación en PI. Azul: subrepresentación en PI.",
     x = "Grupo etario", y = NULL,
     caption = "Análisis por Evento Hospitalario. Chile 2010-2022."
@@ -301,7 +314,7 @@ ind_region %>%
   ggplot(aes(x = nombre_region, y = reorder(Capitulo_wrap, BPP, FUN = function(x) mean(x, na.rm = TRUE)), fill = BPP)) +
   geom_tile(color = "white") +
   scale_fill_gradient2(low = colores_pertenencia[["PG"]], mid = "white", high = colores_pertenencia[["PO"]],
-                       midpoint = 0, name = "BPP (pp)") +
+                       midpoint = 0, name = "DPP (pp)") +
   labs(
     title = "Disparidad regional PI vs PG por capítulo CIE-10",
     subtitle = "Rojo: sobrerrepresentación en PI. Azul: subrepresentación en PI.",
@@ -316,9 +329,11 @@ ind_region %>%
 
 ## 6. Combinación Compleja: Sexo y Región en PI
 
-¿Existen regiones donde las mujeres indígenas tengan una carga significativamente mayor que los hombres indígenas?
+Se comparó la carga total de egresos (TBE) por región y sexo entre población indígena y población general, para evaluar si el patrón de diferencias por sexo se mantiene o difiere entre ambas poblaciones.
 
 ```{r sexo-region}
+#| fig-width: 12
+#| fig-height: 11
 # Usar el estrato correcto 'region_sexo' devuelto por extraer_datos_censo
 denominador_sexo_reg <- censo_lista$region_sexo %>%
   preparar_denominador_estrato()
@@ -332,26 +347,38 @@ ind_sexo_reg <- calcular_indicadores_estratificados(
 # Visualizar TBE comparativa por Sexo en las regiones (Ordenadas de N a S)
 tabla_regiones <- obtener_tabla_regiones()
 
-ind_sexo_reg %>%
-  filter(grupo == "PI") %>%
-  group_by(region, sexo) %>%
-  summarise(TBE_global = sum(TBE), .groups = "drop") %>%
-  mutate(
+g_sexo_region <- ind_sexo_reg %>%
+  dplyr::filter(grupo %in% c("PI", "PG")) %>%
+  dplyr::group_by(grupo, region, sexo) %>%
+  dplyr::summarise(TBE_global = sum(TBE), .groups = "drop") %>%
+  dplyr::mutate(
     nombre_region = codigo_a_nombre_region(region, tipo = "corto"),
-    nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto)
+    nombre_region = factor(nombre_region, levels = tabla_regiones$nombre_corto),
+    grupo = factor(grupo, levels = c("PI", "PG"),
+                   labels = c("Población indígena", "Población general"))
   ) %>%
   ggplot(aes(x = nombre_region, y = TBE_global, fill = sexo)) +
   geom_col(position = "dodge") +
+  facet_wrap(~ grupo, ncol = 1, scales = "free_y") +
   scale_fill_manual(values = c("HOMBRE" = colores_sexo[["HOMBRE"]], "MUJER" = colores_sexo[["MUJER"]])) +
   labs(
-    title = "Carga Total de Egresos (TBE) por Región y Sexo en Población Indígena",
-    subtitle = "Tasas Brutas por 10.000 habitantes pertenecientes a PI",
+    title = "Carga Total de Egresos (TBE) por Región y Sexo: Población Indígena vs Población General",
+    subtitle = "Tasas Brutas por 10.000 habitantes; permite comparar el patrón por sexo entre poblaciones",
     x = NULL,
     y = "TBE x 10k hab.",
-    caption = "Regiones ordenadas de Norte a Sur. Permite identificar disparidades territoriales."
+    fill = "Sexo",
+    caption = "Regiones ordenadas de Norte a Sur."
   ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold", size = 12),
+    legend.position = "bottom"
+  )
+
+guardar_multiformato(g_sexo_region, "figura_2_9_tbe_region_sexo_PI_PG", ancho = 12, alto = 11,
+                     dir_salida = "resultados_tesis/figuras")
+g_sexo_region
 ```
 
 ### Tabla 6.1. Indicadores por sexo × región y capítulo CIE-10
