@@ -1,0 +1,501 @@
+---
+title: "Recalculo del CCC regional con el mapeo corregido de comunas de Ñuble (Censo 2017)"
+author: "Rodolfo Tasso"
+date: "2026-09-13"
+description: "Recalculo del Lin's CCC por region con la extraccion censal de Ñuble corregida (comunas 401:421), comparable con la tabla regional publicada"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+---
+
+# Proposito y alcance
+
+**Fecha:** 2026-09-13. **Insumo para la tesis** (documento de trabajo). El articulo
+enviado a *Salud Publica de Mexico* queda intocable: este recalculo NO se
+incorpora al manuscrito SPM.
+
+**Bug corregido.** En la extraccion censal de Ñuble, los microdatos del Censo
+2017 codifican la region 8 (Biobio) con un digito de provincia en el tercer a
+quinto caracter del geocodigo: 1xx = Concepcion, 2xx = Arauco, 3xx = Biobio
+(14 comunas), 4xx = Ñuble (21 comunas). La tabla regional publicada se genero
+con el mapeo 301:321 (provincia Biobio, incorrecto). El mapeo correcto es
+**401:421**, verificado contra las cifras oficiales INE de Ñuble: 480.609
+personas y 22.341 pertenecientes a pueblos originarios (p16 == 1), reproducidas
+al digito.
+
+**Decisiones de diseno:**
+
+- Este documento es **autocontenido**: replica la logica de
+  `extraer_datos_censo()` internamente (mismo SQL, mismos filtros, misma
+  estructura de salida) con el vector de comunas 401:421, sin depender del
+  estado de la funcion del repositorio. La funcion canonica
+  (`R/concordancias/extraer_datos_censo.R`) ya contiene el mapeo correcto en su
+  linea 235 y **no se modifica**. Queda pendiente verificar con que version de
+  la canonica se genero el HTML publicado (test de sanidad: el n de Ñuble del
+  lado censo debe dar 480.609 personas / 22.341 PO).
+- El CCC regional se calcula con la **misma funcion y parametros** que la tabla
+  regional publicada en `Concord_nuevas_modular.qmd`
+  (`calcular_ccc_detallado()` con `columnas_categoria = "region"` y
+  `columnas_subcategoria = c("sexo", "grupo_etario")`), de modo que los valores
+  antiguos y nuevos son directamente comparables. La tabla publicada usa el
+  elemento `tabla_detalle` (CCC por region), no el `ccc_valor` global.
+- Base de egresos sin duplicados, identica al pipeline publicado:
+  `filter(!is.na(RUN)) %>% arrange(RUN, desc(AÑO)) %>% distinct(RUN, .keep_all = TRUE)`
+  (9.646.325 pacientes unicos).
+- **Memoria:** la base completa (~900 MB en disco) y la deduplicacion generan un
+  pico estimado de **~9 GB** de RAM (copias de `arrange()` + `distinct()`).
+  Liberar con `rm()` + `gc()` apenas cada objeto grande deje de usarse.
+
+# 1. Configuracion
+
+```{r setup, message=FALSE, warning=FALSE}
+# Verificacion renv-aware: renv esta desincronizado en R 4.6.0, asi que se
+# validan los paquetes ANTES de cargar nada y se detiene con mensaje claro.
+required_pkgs <- c(
+  "dplyr", "tibble", "purrr", "readr", "rlang",
+  "DBI", "dbplyr", "censo2017", "DescTools", "rprojroot",
+  "knitr"
+)
+missing_pkgs <- required_pkgs[
+  !vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)
+]
+if (length(missing_pkgs) > 0) {
+  stop(
+    "Faltan paquetes requeridos: ", paste(missing_pkgs, collapse = ", "), ".\n",
+    "renv esta desincronizado en R 4.6.0: ejecutar renv::restore() antes de ",
+    "renderizar este documento (ver AGENTS.md seccion 3)."
+  )
+}
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tibble)
+  library(purrr)
+  library(readr)
+})
+
+# Raiz del proyecto (patron rprojroot del proyecto; prohibido ../../)
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+knitr::opts_knit$set(root.dir = project_root)
+
+# Funciones personalizadas del proyecto (se usan sin modificar:
+# extraer_datos_variable_enriquecida, extraer_datos_egresos_hospitalarios,
+# calcular_ccc_detallado, formatear_resultado_ccc)
+source(file.path(project_root, "R/cargar_funciones.R"))
+
+stopifnot(
+  exists("extraer_datos_variable_enriquecida"),
+  exists("extraer_datos_egresos_hospitalarios"),
+  exists("calcular_ccc_detallado")
+)
+
+# Base principal de egresos homologados
+load(file.path(project_root, "BBDD_homologados.RData"))
+stopifnot(exists("datos_homologados"))
+
+cat("Setup OK. Registros cargados:", format(nrow(datos_homologados), big.mark = ","), "\n")
+```
+
+# 2. Egresos hospitalarios: base sin duplicados (identica al pipeline publicado)
+
+```{r dedup_egresos}
+# Deduplicacion exacta del pipeline publicado (un registro por paciente, el
+# egreso mas reciente). AÑO se referencia via .data[[...]] para mantener el
+# codigo en ASCII; es semanticamente identico a desc(AÑO).
+anio_col <- "A\u00d1O"
+
+patients_unique <- datos_homologados %>%
+  filter(!is.na(RUN)) %>%
+  arrange(RUN, desc(.data[[anio_col]])) %>%
+  distinct(RUN, .keep_all = TRUE)
+
+n_original <- nrow(datos_homologados)
+n_unique <- nrow(patients_unique)
+cat(sprintf("Registros originales: %s\n", format(n_original, big.mark = ",")))
+cat(sprintf("Pacientes unicos:   %s (esperado ~9.646.325)\n", format(n_unique, big.mark = ",")))
+
+# Pico de memoria aqui (~9 GB): la base completa ya no se necesita
+rm(datos_homologados)
+gc(verbose = FALSE)
+```
+
+# 3. Censo 2017 con el mapeo corregido de Ñuble (401:421)
+
+Replica la logica de `extraer_datos_censo()` (mismo SQL, mismos filtros de
+p16/p09/p08, mismos grupos etarios y misma estructura de salida) con el vector
+de comunas corregido. No retorna los datos individuales (17 M de filas): solo
+las desagregaciones y una verificacion de Ñuble contra cifras oficiales INE.
+
+```{r censo_corregido}
+extract_census_corrected <- function(verbose = TRUE) {
+  # Misma consulta y filtros que la funcion canonica
+  con_censo <- censo2017::censo_conectar()
+  on.exit(censo2017::censo_desconectar(), add = TRUE)
+
+  query_censo_individual <- "
+  SELECT
+    p16 as pertenencia,
+    CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER) as region,
+    CAST(SUBSTR(z.geocodigo, 3, 3) AS INTEGER) as comuna,
+    p09 as edad,
+    p08 as sexo
+  FROM personas p
+  JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
+  JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
+  JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
+  WHERE p.p16 IS NOT NULL
+    AND p.p09 IS NOT NULL
+    AND p.p09 BETWEEN 0 AND 120
+    AND p.p08 IN (1, 2)
+    AND z.geocodigo IS NOT NULL
+  "
+
+  census_individual <- dplyr::tbl(con_censo, dbplyr::sql(query_censo_individual)) %>%
+    dplyr::collect() %>%
+    dplyr::mutate(
+      pertenencia_bin = ifelse(pertenencia == 1, 1, 0),
+      sexo_txt = ifelse(sexo == 1, "HOMBRE", "MUJER"),
+      grupo_etario = dplyr::case_when(
+        edad < 5 ~ "0-4",
+        edad < 15 ~ "5-14",
+        edad < 25 ~ "15-24",
+        edad < 45 ~ "25-44",
+        edad < 65 ~ "45-64",
+        edad < 75 ~ "65-74",
+        edad >= 75 ~ "75+",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    dplyr::filter(!is.na(grupo_etario)) %>%
+    dplyr::mutate(
+      grupo_etario = factor(
+        grupo_etario,
+        levels = c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+      )
+    )
+
+  # Mapeo corregido: en la region 8 el tercer-quinto caracter del geocodigo
+  # codifica provincia; Ñuble es la provincia 4xx (21 comunas, 401 a 421).
+  # El valor erroneo original era 301:321 (provincia Biobio).
+  nuble_comunas <- 401:421
+
+  nuble_data <- census_individual %>%
+    dplyr::filter(region == 8, comuna %in% nuble_comunas) %>%
+    dplyr::mutate(region = 16)
+
+  census_individual <- census_individual %>%
+    dplyr::filter(!(region == 8 & comuna %in% nuble_comunas)) %>%
+    dplyr::bind_rows(nuble_data)
+
+  # Verificacion contra cifras oficiales INE de Ñuble (Censo 2017)
+  nuble_check <- nuble_data %>%
+    dplyr::summarise(
+      total = dplyr::n(),
+      pertenece = sum(pertenencia_bin == 1),
+      .groups = "drop"
+    )
+
+  # Misma estructura de salida que la funcion canonica (sin datos individuales)
+  summarise_pct <- function(df, ...) {
+    df %>%
+      dplyr::group_by(...) %>%
+      dplyr::summarise(
+        total = dplyr::n(),
+        pertenece = sum(pertenencia_bin == 1),
+        porcentaje_censo = (pertenece / total) * 100,
+        .groups = "drop"
+      )
+  }
+
+  out <- list(
+    nacional = summarise_pct(census_individual),
+    por_region = summarise_pct(census_individual, region),
+    por_sexo = summarise_pct(census_individual, sexo_txt) %>%
+      dplyr::rename(sexo = sexo_txt),
+    por_grupo_etario = summarise_pct(census_individual, grupo_etario),
+    region_sexo = summarise_pct(census_individual, region, sexo_txt) %>%
+      dplyr::rename(sexo = sexo_txt),
+    region_edad = summarise_pct(census_individual, region, grupo_etario),
+    sexo_edad = summarise_pct(census_individual, sexo_txt, grupo_etario) %>%
+      dplyr::rename(sexo = sexo_txt),
+    region_sexo_edad = summarise_pct(census_individual, region, sexo_txt, grupo_etario) %>%
+      dplyr::rename(sexo = sexo_txt),
+    nuble_check = nuble_check
+  )
+
+  if (verbose) {
+    cat("Censo extraido. Nacional:", round(out$nacional$porcentaje_censo, 2), "%\n")
+    cat("Regiones:", nrow(out$por_region), "(incluye \u00d1uble = 16)\n")
+    cat("\u00d1uble:", format(nuble_check$total, big.mark = ","), "personas,",
+        format(nuble_check$pertenece, big.mark = ","), "pertenecen a PO\n")
+  }
+
+  out
+}
+
+census_data <- extract_census_corrected(verbose = TRUE)
+
+# Chequeo contra cifras oficiales INE: 480.609 personas, 22.341 con p16 == 1
+ine_ok <- census_data$nuble_check$total == 480609 &&
+  census_data$nuble_check$pertenece == 22341
+if (!ine_ok) {
+  warning(
+    "Las cifras de \u00d1uble NO reproducen los valores oficiales INE ",
+    "(480.609 personas / 22.341 PO). Revisar el mapeo de comunas antes de ",
+    "usar los resultados."
+  )
+} else {
+  cat("Verificacion INE OK: \u00d1uble reproduce al digito las cifras oficiales.\n")
+}
+```
+
+# 4. Variables de egresos (sin duplicados): enriquecida y EH puro
+
+Se usan las funciones canonicas del repositorio, sin modificacion, sobre la
+misma base deduplicada del pipeline publicado.
+
+```{r extraer_egresos}
+# Columna region numerica, como en el pipeline publicado
+datos_prep <- patients_unique %>%
+  mutate(region = as.integer(CODIGO_REGION))
+
+# (a) Variable enriquecida PERTENENCIA2
+pert2_data <- extraer_datos_variable_enriquecida(datos_prep, verbose = TRUE)
+
+# (b) EH puro PUEBLO_ORIGINARIO_BIN
+egresos_data <- extraer_datos_egresos_hospitalarios(datos_prep, verbose = TRUE)
+
+# Liberar la base de pacientes unicos (ya no se necesita)
+rm(patients_unique, datos_prep)
+
+# Anular los datos individuales que retornan las extractoras (copias casi
+# completas de la base, ~2-3 GB): solo se usan las desagregaciones
+pert2_data$datos_individuales <- NULL
+egresos_data$datos_individuales <- NULL
+gc(verbose = FALSE)
+```
+
+# 5. CCC por region con los parametros del pipeline publicado
+
+Misma funcion y parametros que `Concord_nuevas_modular.qmd` (chunk `ccc_region`
+y chunk `ccc_region_egresos`): `calcular_ccc_detallado()` sobre el cruce triple
+region x sexo x grupo etario. Los valores por region salen de `tabla_detalle`;
+el `ccc_valor` global replica el CCC global reportado en el caption publicado.
+
+```{r ccc_regiones}
+nombres_regiones <- tibble::tibble(
+  region = c(15, 1, 2, 3, 4, 5, 13, 6, 7, 16, 8, 9, 14, 10, 11, 12),
+  region_nombre = c(
+    "Arica y Parinacota", "Tarapac\u00e1", "Antofagasta", "Atacama", "Coquimbo",
+    "Valpara\u00edso", "Metropolitana", "O'Higgins", "Maule", "\u00d1uble",
+    "Biob\u00edo", "La Araucan\u00eda", "Los R\u00edos", "Los Lagos", "Ays\u00e9n",
+    "Magallanes"
+  )
+)
+
+# (a) Censo 2017 vs Variable Enriquecida (PERTENENCIA2)
+ccc_enriquecida <- calcular_ccc_detallado(
+  census_data$region_sexo_edad,
+  pert2_data$region_sexo_edad,
+  columnas_categoria = "region",
+  columnas_subcategoria = c("sexo", "grupo_etario"),
+  nombre_desagregacion = "Por Regi\u00f3n",
+  verbose = TRUE
+)
+
+# (b) Censo 2017 vs Egresos Hospitalarios puros (PUEBLO_ORIGINARIO_BIN)
+ccc_egresos <- calcular_ccc_detallado(
+  census_data$region_sexo_edad,
+  egresos_data$region_sexo_edad,
+  columnas_categoria = "region",
+  columnas_subcategoria = c("sexo", "grupo_etario"),
+  nombre_desagregacion = "Por Regi\u00f3n (Egresos)",
+  col_porcentaje_comparacion = "porcentaje_egresos",
+  verbose = TRUE
+)
+
+cat("\nCCC global (a) Censo vs Enriquecida:",
+    sprintf("%.4f [%.4f, %.4f]",
+            ccc_enriquecida$ccc_valor$`Lin's CCC`,
+            ccc_enriquecida$ccc_valor$`IC 95% Inferior`,
+            ccc_enriquecida$ccc_valor$`IC 95% Superior`), "\n")
+cat("CCC global (b) Censo vs EH puro:     ",
+    sprintf("%.4f [%.4f, %.4f]",
+            ccc_egresos$ccc_valor$`Lin's CCC`,
+            ccc_egresos$ccc_valor$`IC 95% Inferior`,
+            ccc_egresos$ccc_valor$`IC 95% Superior`), "\n")
+```
+
+# 6. Tabla comparativa: valores publicados (mapeo erroneo) vs recalculados
+
+Los valores antiguos provienen del HTML publicado de `Concord_nuevas_modular`
+(comparacion a: Censo vs PERTENENCIA2) y se hardcodean como referencia
+documentada. Para la comparacion (b) solo se conoce el valor antiguo de Ñuble
+(0,0004).
+
+```{r tabla_comparativa}
+# Referencia documentada del HTML publicado (comparacion a)
+old_values_a <- tibble::tribble(
+  ~region, ~ccc_old, ~ic95_inf_old, ~ic95_sup_old,
+  15, 0.6866, NA_real_, NA_real_,
+  1,  0.6630, NA_real_, NA_real_,
+  2,  0.2564, NA_real_, NA_real_,
+  3,  0.7671, NA_real_, NA_real_,
+  4,  0.3144, NA_real_, NA_real_,
+  5,  0.3001, NA_real_, NA_real_,
+  13, 0.2279, NA_real_, NA_real_,
+  6,  0.0782, NA_real_, NA_real_,
+  7,  0.1622, NA_real_, NA_real_,
+  16, 0.0897, 0.0151,   0.1632,
+  8,  0.4694, NA_real_, NA_real_,
+  9,  0.8001, NA_real_, NA_real_,
+  14, 0.7302, NA_real_, NA_real_,
+  10, 0.8104, NA_real_, NA_real_,
+  11, 0.1154, NA_real_, NA_real_,
+  12, 0.6327, NA_real_, NA_real_
+)
+old_global_a <- 0.7647
+
+# Unico valor antiguo conocido de la comparacion (b): Ñuble = 0,0004
+old_values_b <- tibble::tribble(
+  ~region, ~ccc_old, ~ic95_inf_old, ~ic95_sup_old,
+  16, 0.0004, NA_real_, NA_real_
+)
+
+# Armar filas nuevas por comparacion
+new_rows_a <- ccc_enriquecida$tabla_detalle %>%
+  transmute(
+    region = as.integer(region),
+    ccc_new = `Lin's CCC`,
+    ic95_inf_new = `IC 95% Inferior`,
+    ic95_sup_new = `IC 95% Superior`,
+    interpretacion_new = Interpretacion
+  ) %>%
+  left_join(old_values_a, by = "region")
+
+new_rows_b <- ccc_egresos$tabla_detalle %>%
+  transmute(
+    region = as.integer(region),
+    ccc_new = `Lin's CCC`,
+    ic95_inf_new = `IC 95% Inferior`,
+    ic95_sup_new = `IC 95% Superior`,
+    interpretacion_new = Interpretacion
+  ) %>%
+  left_join(old_values_b, by = "region")
+
+tabla_comp_a <- nombres_regiones %>%
+  left_join(new_rows_a, by = "region") %>%
+  mutate(comparacion = "censo_vs_enriquecida", .before = 1)
+tabla_comp_b <- nombres_regiones %>%
+  left_join(new_rows_b, by = "region") %>%
+  mutate(comparacion = "censo_vs_eh_puro", .before = 1)
+
+knitr::kable(
+  tabla_comp_a,
+  digits = 4,
+  caption = "Comparacion (a): Censo 2017 vs Variable Enriquecida. ccc_old = HTML publicado (mapeo erroneo 301:321); ccc_new = mapeo corregido 401:421."
+)
+knitr::kable(
+  tabla_comp_b,
+  digits = 4,
+  caption = "Comparacion (b): Censo 2017 vs EH puro. Solo se conoce ccc_old de \u00d1uble (0,0004)."
+)
+```
+
+# 7. Detalle de Ñuble en el lado de egresos (comparacion a)
+
+```{r nuble_eh}
+nuble_pert2 <- pert2_data$por_region %>% filter(region == 16)
+nuble_eh <- egresos_data$por_region %>% filter(region == 16)
+
+cat(sprintf(
+  "\u00d1uble, pacientes unicos (dedup): %s\n",
+  format(nuble_pert2$total, big.mark = ",")
+))
+cat(sprintf("\u00d1uble, %%PO Variable Enriquecida (PERTENENCIA2): %.2f%%\n", nuble_pert2$porcentaje_pert2))
+cat(sprintf("\u00d1uble, %%PO EH puro (PUEBLO_ORIGINARIO_BIN):     %.2f%%\n", nuble_eh$porcentaje_egresos))
+cat(sprintf("\u00d1uble, %%PO Censo 2017 (corregido):              %.2f%%\n",
+            census_data$por_region$porcentaje_censo[census_data$por_region$region == 16]))
+```
+
+# 8. Exportacion
+
+CSV en formato largo: todas las regiones, ambas comparaciones, IC95 nuevos,
+valores antiguos documentados y n (pacientes unicos EH y personas Censo por
+region). Destino preferente `resultados_tesis/concordancias/`; si no existe o
+no es escribible, `temp_read/nuble_ccc_recalculo/`.
+
+```{r exportar}
+# n por region desde las desagregaciones ya calculadas
+n_a <- pert2_data$por_region %>%
+  transmute(region, n_pacientes_eh = total, pct_po_eh = porcentaje_pert2)
+n_b <- egresos_data$por_region %>%
+  transmute(region, n_pacientes_eh = total, pct_po_eh = porcentaje_egresos)
+n_censo <- census_data$por_region %>%
+  transmute(region, n_censo = total, pct_po_censo = porcentaje_censo)
+
+results_long <- bind_rows(
+  tabla_comp_a %>% left_join(n_a, by = "region"),
+  tabla_comp_b %>% left_join(n_b, by = "region")
+) %>%
+  left_join(n_censo, by = "region") %>%
+  arrange(comparacion, region)
+
+# Filas globales (ccc_valor replica el CCC global del caption publicado)
+global_rows <- tibble::tibble(
+  comparacion = c("censo_vs_enriquecida", "censo_vs_eh_puro"),
+  region = NA_integer_,
+  region_nombre = "GLOBAL",
+  ccc_new = c(ccc_enriquecida$ccc_valor$`Lin's CCC`,
+              ccc_egresos$ccc_valor$`Lin's CCC`),
+  ic95_inf_new = c(ccc_enriquecida$ccc_valor$`IC 95% Inferior`,
+                   ccc_egresos$ccc_valor$`IC 95% Inferior`),
+  ic95_sup_new = c(ccc_enriquecida$ccc_valor$`IC 95% Superior`,
+                   ccc_egresos$ccc_valor$`IC 95% Superior`),
+  interpretacion_new = c(ccc_enriquecida$ccc_valor$Interpretacion,
+                         ccc_egresos$ccc_valor$Interpretacion),
+  ccc_old = c(old_global_a, NA_real_)
+)
+
+results_export <- bind_rows(results_long, global_rows) %>%
+  mutate(region_nombre = ifelse(is.na(region), "GLOBAL", region_nombre))
+
+out_dir <- file.path(project_root, "resultados_tesis", "concordancias")
+dir_ok <- dir.exists(out_dir) ||
+  tryCatch(dir.create(out_dir, recursive = TRUE), warning = function(w) FALSE)
+if (!dir_ok || file.access(out_dir, mode = 2) != 0) {
+  out_dir <- file.path(project_root, "temp_read", "nuble_ccc_recalculo")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  cat("Carpeta preferente no disponible; exportando a:", out_dir, "\n")
+}
+
+out_file <- file.path(out_dir, "ccc_regiones_nuble_corregido.csv")
+readr::write_csv(results_export, out_file)
+cat("Exportado:", out_file, "\n")
+cat("Filas:", nrow(results_export), "(16 regiones x 2 comparaciones + 2 globales)\n")
+
+# Limpieza final de objetos grandes
+rm(pert2_data, egresos_data, census_data)
+gc(verbose = FALSE)
+```
+
+# Notas finales
+
+- Los valores `ccc_new` son directamente comparables con los `ccc_old` porque se
+  usa la misma funcion (`calcular_ccc_detallado()`), los mismos parametros y la
+  misma base deduplicada que el pipeline publicado; lo unico que cambia es el
+  mapeo de comunas de Ñuble en la extraccion censal.
+- Las regiones distintas de Biobio y Ñuble deberian reproducir exactamente los
+  valores publicados: el mapeo corregido solo mueve comunas dentro de la
+  region 8 (Biobio 3xx recupera sus 14 comunas; Ñuble pasa a 4xx). Cualquier
+  diferencia fuera de esas dos regiones indicaria un problema en la replica.
+- La funcion canonica `R/concordancias/extraer_datos_censo.R` ya tiene el mapeo
+  correcto (401:421, linea 235) y **sigue sin tocarse**. Lo pendiente es
+  verificar con que version de la canonica se genero el HTML publicado; si el
+  render de este documento arroja el n oficial de Ñuble (480.609 / 22.341), la
+  replica confirma que la diferencia entre `ccc_old` y `ccc_new` proviene solo
+  del mapeo de comunas vigente al momento de aquel render.
