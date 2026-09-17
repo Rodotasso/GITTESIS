@@ -224,12 +224,15 @@ extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
   }
   
   # --- PASO 2.9: CREAR REGIÓN DE ÑUBLE (16) ---
-  # Ñuble se creó el 5 sept 2018 desde 21 comunas de Biobío
-  # Comunas: códigos del 8301 al 8321 (región 8, comunas 301-321)
+  # Ñuble se creó el 5 sept 2018 desde 21 comunas de la provincia Ñuble (región 8)
+  # En el geocódigo de los microdatos 2017 la región 8 usa un dígito de provincia:
+  # 1xx Concepción, 2xx Arauco, 3xx Biobío, 4xx Ñuble.
+  # Comunas de Ñuble: códigos 401-421 de la región 8 (equivalentes a 8401-8421
+  # de la nomenclatura oficial antigua; verificar con R/utilidades/crear_region_nuble.R)
   if(verbose) cat("\n3. Creando Región de Ñuble (16) desde comunas de Biobío...\n")
   
-  # Códigos de comunas de Ñuble (rango 301-321 de región 8)
-  comunas_nuble <- 301:321
+  # Códigos de comunas de Ñuble (rango 401-421 de región 8, provincia 4)
+  comunas_nuble <- 401:421
   
   # Extraer datos de Ñuble desde datos individuales
   datos_nuble <- datos_censo %>%

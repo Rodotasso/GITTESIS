@@ -24,10 +24,11 @@ preparar_denominador_estrato <- function(df_censo) {
 #' @param denominador_df Data frame con la población. Debe tener columnas 'grupo', 'poblacion' y las de `var_estrato`.
 #' @param var_estrato Vector de caracteres con los nombres de las variables a estratificar.
 #' @param col_pertenencia Columna de pertenencia (default: "PERTENENCIA2").
+#' @param anos_estudio Número de años del período (default: 13 para 2010-2022).
 #'
 #' @return Tibble con TBE, TLI, PEC, BPP, PDE estratificados.
 #' @export
-calcular_indicadores_estratificados <- function(datos, denominador_df, var_estrato, col_pertenencia = "PERTENENCIA2") {
+calcular_indicadores_estratificados <- function(datos, denominador_df, var_estrato, col_pertenencia = "PERTENENCIA2", anos_estudio = 13) {
   
   # Asignar grupo PI/PG
   datos <- datos %>%
@@ -46,7 +47,7 @@ calcular_indicadores_estratificados <- function(datos, denominador_df, var_estra
     ) %>%
     dplyr::inner_join(denominador_df, by = c("grupo", var_estrato)) %>%
     dplyr::mutate(
-      TBE = (Et / poblacion) * 10000,
+      TBE = (Et / poblacion / anos_estudio) * 1000,
       TLI_global = (F_total / Et) * 100,
       PDE_global = Sum_dias / n_validos_dias
     )
@@ -66,7 +67,7 @@ calcular_indicadores_estratificados <- function(datos, denominador_df, var_estra
       by = c("grupo", var_estrato)
     ) %>%
     dplyr::mutate(
-      TBE = (Ec / poblacion) * 10000,
+      TBE = (Ec / poblacion / anos_estudio) * 1000,
       PEC = (Ec / Et) * 100,
       TLI = (Fc / Ec) * 100,
       PDE = Sum_dias_c / n_validos_c

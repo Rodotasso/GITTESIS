@@ -44,7 +44,7 @@ calcular_indicadores_objetivo4 <- function(datos,
     ) %>%
     dplyr::left_join(denominadores_censo, by = "grupo") %>%
     dplyr::mutate(
-      TBE = (Et / poblacion) * 1000,
+      TBE = (Et / poblacion / anos_estudio) * 1000,
       TLI_global = (F_total / Et) * 100,
       PDE_global = Sum_dias / n_validos_dias
     )
@@ -106,7 +106,7 @@ crear_tabla_maestra_perfiles <- function(datos_resultado, titulo, tamano_fuente 
   tbe_pi <- tabla_wide$TBE_PI[1]
   tbe_pg <- tabla_wide$TBE_PG[1]
   glosa_tbe <- sprintf(
-    "Tasa Bruta de Egreso global (x10.000)  |  Pueblos Indígenas: %s  ·  Población General: %s",
+    "Tasa Bruta de Egreso global anual (por 1.000 hab. por año)  |  Pueblos Indígenas: %s  ·  Población General: %s",
     formatC(tbe_pi, format = "f", digits = 2, big.mark = ".", decimal.mark = ","),
     formatC(tbe_pg, format = "f", digits = 2, big.mark = ".", decimal.mark = ",")
   )

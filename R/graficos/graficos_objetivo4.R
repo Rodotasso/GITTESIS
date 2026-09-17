@@ -264,10 +264,10 @@ graficar_heatmap_regional <- function(datos_ind, titulo) {
     dplyr::filter(Capitulo_wrap %in% top_caps) %>%
     ggplot2::ggplot(ggplot2::aes(x = nombre_region, y = Capitulo_wrap, fill = TBE)) +
     ggplot2::geom_tile(color = "white") +
-    ggplot2::scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "TBE x 10k", na.value = "grey90") +
+    ggplot2::scale_fill_distiller(palette = "YlOrRd", direction = 1, name = "TBE anual x 1.000 hab.", na.value = "grey90") +
     ggplot2::labs(
       title    = titulo,
-      subtitle = "Tasa Bruta de Egresos (TBE) por 10.000 hab. en Población Indígena",
+      subtitle = "Tasa Bruta de Egresos (TBE) anual por 1.000 hab. en Población Indígena",
       x = NULL, y = NULL,
       caption = "Excluye Cap. XV. Regiones ordenadas de Norte a Sur. La TBE mide la carga regional."
     ) +

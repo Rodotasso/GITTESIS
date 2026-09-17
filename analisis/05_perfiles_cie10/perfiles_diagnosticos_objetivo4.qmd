@@ -53,6 +53,7 @@ source("R/cargar_funciones.R")
 
 # Cargar bases de datos
 load("BBDD_homologados.RData")
+data.table::setDT(datos_homologados)
 
 # Obtener denominadores del Censo 2017 usando la función optimizada
 censo_lista <- obtener_poblacion_censo(verbose = FALSE)

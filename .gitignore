@@ -83,3 +83,11 @@ _*.py
 .adversarial_report.json
 .gemini_diagnostic.json
 gemini.md
+
+# Estado interno de herramientas de agente (equivalente a .claude/)
+.pi/
+
+# Diagnosticos puntuales y logs de render (resultados ya registrados en memoria)
+diag_*
+render_*.log
+render_log.txt
