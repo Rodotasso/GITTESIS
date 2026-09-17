@@ -92,21 +92,53 @@ print(triple_na)
 # Consolidación de variables de pertenencia a pueblo indígena ----
 
 
-# 2. Variable PERTENENCIA (para análisis operativo, ignora NA)
-#    - Usa CONADI ya consolidado
-#    - Interpreta "no información" como "sin pertenencia"
+# ADVERTENCIA (2026-09, ver informe Fase 0: _FASE0_auditoria_usos_pertenencia.md):
+# El fcase de PERTENENCIA fue corregido para conservar NA: asigna 1 si
+# alguna fuente indica pertenencia, NA_integer_ cuando las tres fuentes
+# son NA (triple-NA, "sin registro") y 0 cuando hay al menos una fuente
+# informada y ninguna indica pertenencia. Coherente con la base guardada
+# BBDD_homologados.RData (PERTENENCIA con 104.326 NA, PERTENENCIA2 con 0).
+# Nota: la base histórica proviene de una versión anterior que usaba
+# pmax(..., na.rm = TRUE) (ver nota del bloque pmax más abajo); la
+# equivalencia del fcase corregido con esa base NO se ha verificado
+# re-ejecutando este qmd.
+#
+# Convención canónica de uso (confirmada por el diccionario de variables
+# de la tesis):
+# - PERTENENCIA (con NA): descriptivos, distribución de fuentes
+#   EH/RSH/CONADI y concordancia (kappa, CCC de Lin).
+# - PERTENENCIA2 (NA imputado a 0): perfiles CIE-10, tasas e indicadores.
+#
+# 2. Variable PERTENENCIA (fuente EH, conserva NA en la base guardada)
+#    - En la base: vale 1 si alguna fuente indica pertenencia,
+#      0 si ninguna lo indica con al menos una fuente informada, y
+#      NA si las tres fuentes están ausentes (triple-NA), 104.326 casos.
+#    - Positivos: 3.117.578; NA: 104.326; registros totales: 20.957.004.
+#    - El código fcase de abajo implementa esta definición: la condición
+#      de triple-NA (después de la de 1 y antes de la de 0) asigna
+#      NA_integer_, y default = NA_integer_ queda como salvaguarda.
 datos[, PERTENENCIA := fcase(
   # Si alguna fuente indica pertenencia, asigna 1
   CONADI == 1 | RSH == 1 | (!is.na(PUEBLO_ORIGINARIO) & PUEBLO_ORIGINARIO != 96), 1L,
-  # En todos los demás casos (incluidos todos NA), asigna 0
-  default = 0L
+  # Sin registro en las tres fuentes (triple-NA): conserva NA, no imputar
+  is.na(CONADI) & is.na(RSH) & is.na(PUEBLO_ORIGINARIO), NA_integer_,
+  # Al menos una fuente informada y ninguna indica pertenencia: 0
+  !is.na(CONADI) | !is.na(RSH) | !is.na(PUEBLO_ORIGINARIO), 0L,
+  # Salvaguarda: en la práctica inalcanzable (toda fila es triple-NA o tiene dato)
+  default = NA_integer_
 )]
-# Al parecer la funcion de pmax cuando encuentra los 3 NA, devuelve -Inf
+# Nota historica: la version pmax de la construccion de PERTENCIA (la que
+# SI reproduce la base guardada) usaba pmax(CONADI, RSH, PUEBLO_ORIGINARIO_BIN,
+# na.rm = TRUE). Al parecer la funcion de pmax cuando encuentra los 3 NA, devuelve -Inf
 #Este comportamiento está documentado en la ayuda de R para pmax():
 
 #"If na.rm = TRUE, then NA values are ignored. If this is not possible (no values are non-NA) an NA is returned."
 
 #Sin embargo, hay un detalle adicional: cuando todos los valores son NA y se usa na.rm = TRUE, R devuelve -Inf para max() y pmax() (y devuelve Inf para min() y pmin()).
+
+# En la practica la version pmax conservo NA en los triple-NA (los 104.326
+# casos ausentes de las tres fuentes), resultado que la base guardada
+# confirma: PERTENCIA tiene 104.326 NA y PERTENCIA2 tiene 0 NA.
 
 # Caso con valores normales
 #pmax(1, 2, 3, na.rm = TRUE)         # Devuelve 3
@@ -117,10 +149,15 @@ datos[, PERTENENCIA := fcase(
 # Caso con todos NA
 #pmax(NA, NA, NA, na.rm = TRUE)      # Devuelve -Inf
 
-# 3. Variable PERTENENCIA2 (para uso metodológico, conserva NA si no hay datos)
-#    - Da 1 si alguna fuente indica pertenencia
-#    - Da 0 si ninguna lo hace y el resto es NA
-#    - Da NA si no hay forma de decidir
+# 3. Variable PERTENCIA2 (enriquecida RSH + CONADI + EH, NA imputado a 0)
+#    - El codigo fcase de abajo es funcionalmente equivalente a "PERTENCIA
+#      con NA imputado a 0": el triple-NA cae en la segunda condicion y el
+#      default = NA es inalcanzable. Nota: el comentario original afirmaba
+#      lo contrario ("conserva NA si no hay datos"); eso es incorrecto.
+#    - Uso canonico: perfiles CIE-10, tasas e indicadores (Objetivo 4).
+#    - En la base guardada: 0 NA; los 104.326 triple-NA de PERTENCIA
+#      fueron reasignados a 0 sin excepciones (tabla puente verificada).
+#    - Positivos identicos a PERTENCIA: 3.117.578.
 datos[, PERTENENCIA2 := fcase(
   CONADI == 1 | RSH == 1 | PUEBLO_ORIGINARIO != 96, 1,
   (CONADI %in% c(0, NA)) & 
