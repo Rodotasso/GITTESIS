@@ -43,7 +43,7 @@ Las reglas globales (`~/.omp/agent/AGENTS.md` + `RULES.md`) siguen activas; este
   ```
 
 - Bash en este equipo NO mapea `/c/…` (Git-Bash paths); usar PowerShell (`powershell -NoProfile -Command …`) para rutas de sistema Windows.
-- **renv desincronizado:** el entorno R 4.6.0 no tiene los paquetes de `renv.lock` restaurados. Antes de renders pesados o regenerar figuras, restaurar con `renv::restore()` (con OK del usuario). Detalle: memoria `project_r460_renv_desync.md`.
+- **renv:** RESUELTO 2026-06-05 (~35 deps restauradas desde Posit PM en R 4.6.0; detalle: memoria `project_r460_renv_desync.md`). Ya no aplica la advertencia de desincronización.
 
 ## 4. Datos
 

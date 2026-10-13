@@ -24,7 +24,7 @@ Documentos **vigentes** en la raíz de `FINAL-TESIS/`:
 
 | Archivo | Rol |
 |---|---|
-| `Tesis_final_RTS_revSFA_revAAC.docx` | **Documento final de la tesis (VIGENTE desde 2026-08-14)**. Supera a `Tesis_final_para_rev_RTS.docx` (2026-07-17) y a `FUTURO DOC TESIS con updates.docx`. |
+| `Tesis_final_RTS_revSFA_revAAC.docx` | Superado. **El vigente con cap.1 desde 2026-09-13 es `03_AUDITORIAS/Tesis_final_RTS_revSFA_revAAC.docx`** (área de edición activa); la alternativa sin cap.1 es `03_AUDITORIAS/Tesis_alternativa_sin_cap1.docx`. Este archivo de FINAL-TESIS quedó congelado al 2026-09-05. |
 | `FUTURO DOC TESIS con updates.docx` | Superado (era el documento final en edición al 2026-07-16). |
 | `Presentacion_Defensa_Tesis.pptx` | **Presentación de defensa (vigente)**. 13 slides, estructura IMRaD según orientaciones AFE (resultados descriptivos; interpretación en Discusión I/II). Respaldo previo a reestructura en `temp_read/backup_pptx_defensa/`. |
 | `Guion_Defensa_20min.md` / `Guion_Defensa_20min.docx` | **Guión de defensa (vigente)**, 13 secciones D mapeadas 1:1 con la presentación; el .docx se regenera desde el .md con pandoc. Cifras auditadas contra la tesis vigente (2026-08-30). |
