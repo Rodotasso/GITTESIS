@@ -1,0 +1,44 @@
+"dimension","categoria","n_total","n_na","pct_na_del_estrato","pct_del_total_na"
+"Año de egreso","2010",1623875,104325,6.424,99.999
+"Año de egreso","2011",1648677,0,0,0
+"Año de egreso","2012",1670447,0,0,0
+"Año de egreso","2013",1676931,0,0,0
+"Año de egreso","2014",1660151,0,0,0
+"Año de egreso","2015",1671054,0,0,0
+"Año de egreso","2016",1637265,0,0,0
+"Año de egreso","2017",1637150,1,0,0.001
+"Año de egreso","2018",1669602,0,0,0
+"Año de egreso","2019",1667180,0,0,0
+"Año de egreso","2020",1330477,0,0,0
+"Año de egreso","2021",1467062,0,0,0
+"Año de egreso","2022",1597118,0,0,0
+"Año de egreso","No reportado",15,0,0,0
+"Región","Región De Tarapacá",313441,4600,1.468,4.409
+"Región","Región De Antofagasta",713448,3860,0.541,3.7
+"Región","Región De Atacama",278948,611,0.219,0.586
+"Región","Región De Coquimbo",639706,13,0.002,0.012
+"Región","Región De Valparaíso",2124556,9238,0.435,8.855
+"Región","Región Del Libertador Gral. B. O'Higgins",859790,5,0.001,0.005
+"Región","Región Del Maule",940926,33,0.004,0.032
+"Región","Región Del Bíobío",2135021,1014,0.047,0.972
+"Región","Región De La Araucanía",1254340,578,0.046,0.554
+"Región","Región De Los Lagos",1020194,2219,0.218,2.127
+"Región","Región De Aysén del General Carlos Ibañez del Campo",136789,7265,5.311,6.964
+"Región","Región De Magallanes y de la Antártica Chilena",257327,8939,3.474,8.568
+"Región","Región Metropolitana de Santiago",8788480,65923,0.75,63.189
+"Región","Región De Los Ríos",541098,10,0.002,0.01
+"Región","Región De Arica Parinacota",229245,3,0.001,0.003
+"Región","Región De Ñuble",515662,3,0.001,0.003
+"Región","No reportado",208033,12,0.006,0.012
+"Sexo","HOMBRE",8477190,38562,0.455,36.963
+"Sexo","INTERSEX (INDETERMINADO)",333,0,0,0
+"Sexo","MUJER",12478704,65764,0.527,63.037
+"Sexo","No reportado",777,0,0,0
+"Grupo etario","0-4",1733255,10054,0.58,9.637
+"Grupo etario","5-14",1250520,4688,0.375,4.494
+"Grupo etario","15-24",2291461,14623,0.638,14.017
+"Grupo etario","25-44",6293962,31711,0.504,30.396
+"Grupo etario","45-64",4635640,21386,0.461,20.499
+"Grupo etario","65-74",2229295,10046,0.451,9.629
+"Grupo etario","75+",2522871,11818,0.468,11.328
+"Total","",20957004,104326,0.5,100

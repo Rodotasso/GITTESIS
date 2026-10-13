@@ -24,8 +24,12 @@ Meta/
 
 # Generated output
 /output_qmd/
-/resultados_tesis/
-resultados_tesis/
+resultados_tesis/*
+# Las carpetas resultados_tesis/ de trabajo bajo analisis/ siguen ignoradas
+# (la regla anterior sin ancla las cubria; se mantiene ese comportamiento)
+analisis/*/resultados_tesis/
+# Artefactos de render de knitr (figuras sueltas; las de registro van embebidas en HTML)
+analisis/*/figure/
 /grafico_pertenencia_modular_files/
 
 # Sensitive data
@@ -77,6 +81,8 @@ html/
 # Archivos temporales de trabajo (checks, scripts auxiliares, volcados)
 temp_*
 temp_read/
+99_TEMP/
+**/99_TEMP/
 _*.R
 _*.py
 *_check.md
@@ -91,3 +97,8 @@ gemini.md
 diag_*
 render_*.log
 render_log.txt
+
+# Excepcion: solo resultados_tesis/VIGENTES/ es publicable (va al final para
+# prevalecer sobre las reglas globales *.csv, *.docx y *.html)
+!resultados_tesis/VIGENTES/
+!resultados_tesis/VIGENTES/**

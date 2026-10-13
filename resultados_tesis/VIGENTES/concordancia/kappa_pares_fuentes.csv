@@ -1,0 +1,7 @@
+tipo,par,n,acuerdo_observado,kappa,ic_inf,ic_sup,interpretacion
+control_calidad,VE x EH,20957004,93.62,0.6938,0.6933,0.6942,Sustancial
+control_calidad,VE x RSH,20957004,91.67,0.5721,0.5716,0.5727,Moderada
+control_calidad,VE x CONADI,20957004,89.35,0.4036,0.403,0.4041,Moderada
+par_nuevo,EH x CONADI,20957004,88.76,0.0638,0.0633,0.0643,Leve
+par_nuevo,RSH x CONADI,20957004,94.78,0.4891,0.4883,0.4899,Moderada
+par_nuevo,EH x RSH,20957004,87.78,0.1227,0.1221,0.1233,Leve
