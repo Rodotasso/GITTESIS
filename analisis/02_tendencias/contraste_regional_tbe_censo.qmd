@@ -1,0 +1,298 @@
+---
+title: "Contraste regional: TBE (PI), proporción PO en egresos y proporción censal"
+author: ""
+output: html_document
+---
+
+<!--
+Documento de análisis para responder los comentarios de revisoras:
+  #128/#131: contrastar la TBE regional (PI) con el %PO en la base de egresos y con el %PO del Censo 2017 (Spearman + tabla).
+  #135:     mismo insumo con enfoque en región del establecimiento (la base EH no tiene residencia; el contraste es contra el censo por región).
+  #119:     verificar si las regiones con mayor exceso del capítulo XI (enfermedades del sistema digestivo, DPP PO vs PG) concentran mayor %PO censal.
+
+Insumos (todos CSV livianos; NO se carga BBDD_homologados.RData):
+
+  1) resultados_tesis/concordancias/ccc_regiones_nuble_corregido.csv
+     Serie con Ñuble reconstruida (CODIGO_REGION 16). Aporta pct_po_eh por región.
+     Contiene dos comparaciones ("censo_vs_eh_puro" y "censo_vs_enriquecida") y dos filas
+     GLOBAL (region = NA) que se excluyen. Se usa "censo_vs_enriquecida" porque la TBE
+     regional proviene del pipeline que identifica PI con la variable enriquecida PERTENENCIA2
+     (EH + RSH + CONADI); ver documentación del insumo (2).
+
+  2) DOCUMENTOS TESIS/FINAL-TESIS/figuras_nuevas/salida/datos/ind_region.csv
+     NOTA DE RUTA: el encargo indicaba "figuras_nuevas/datos", pero ese directorio no existe;
+     los CSV fuente viven en "figuras_nuevas/salida/datos" (mismo nivel, carpeta "salida").
+     Es el CSV fuente de figura_2_6_heatmap_regional_tbe_sin_op.qmd
+     (scripts/perfiles_diagnosticos_desagregados_sin_op.qmd). Columnas: grupo, region,
+     Capitulo, Ec, Et, PEC, BPP, TLI, PDE, TBE, nombre_region.
+     Definiciones del pipeline de origen:
+       - PI = pertenencia con variable enriquecida PERTENCIA2; PG = población general.
+       - Se EXCLUYE el capítulo XV (Embarazo, parto y puerperio); "sin_op" = sin obstetricia/parto.
+       - TBE = tasa bruta de egresos anual por 1.000 habitantes, por capítulo.
+       - BPP = DPP del capítulo (PI − PG) en puntos porcentuales.
+       - TBE regional global PI = suma de TBE por capítulo (mismo criterio de figura 2.9:
+         dplyr::summarise(TBE_global = sum(TBE))).
+     También cubre el insumo "tabla_perfil_po_top20.html" (DPP por capítulo): su CSV fuente
+     es este mismo archivo, por lo que se lee directamente el CSV y no el HTML.
+
+  3) temp_read/fase2_caracterizacion/censo2017_po_region_corregido.csv
+     Censo 2017 con Ñuble reconstruida (16 regiones). Aporta pct_censo por región.
+
+Correlaciones: Spearman (stats::cor.test, exact = FALSE). El IC95% de rho se aproxima con la
+transformación z de Fisher: z = atanh(rho), EE = 1/sqrt(n-3), IC = tanh(z ± 1.96·EE), con
+n = 16 regiones (aproximación estándar; cor.test no entrega IC para Spearman).
+
+Nota técnica: la recta punteada de las figuras se calcula con aritmética pura (pendiente e
+intersección por minimos cuadrados explícitos) en lugar de geom_smooth()/lm(), por incompatibilidad
+de geom_smooth() con el entorno R de este equipo (segfault reproducible); no afecta las estadísticas.
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 9,
+  fig.height = 6
+)
+
+# Raíz del proyecto (regla del repo: prohibido ../../; usar rprojroot)
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+
+# Directorios de salida
+dir_csv <- file.path(project_root, "temp_read", "comentarios_tania")
+dir_fig <- file.path(project_root, "resultados_tesis", "comentarios_tania")
+dir.create(dir_csv, recursive = TRUE, showWarnings = FALSE)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+
+# Funciones del proyecto (guardar_multiformato)
+source(file.path(project_root, "R", "cargar_funciones.R"))
+
+library(dplyr)
+library(readr)
+library(ggplot2)
+```
+
+## 1. Carga y preparación de insumos
+
+```{r cargar-insumos}
+# --- (1) CCC regional (Ñuble reconstruida): aporta pct_po_eh -------------------
+ccc <- read_csv(
+  file.path(project_root, "resultados_tesis", "concordancias", "ccc_regiones_nuble_corregido.csv"),
+  show_col_types = FALSE
+) %>%
+  filter(comparacion == "censo_vs_enriquecida", !is.na(region)) %>%
+  transmute(
+    CODIGO_REGION = as.integer(region),
+    region_nombre = region_nombre,
+    pct_po_eh = pct_po_eh
+  )
+
+# --- (2) Indicadores regionales por capítulo (fuente de figura 2.6) ------------
+ind_region <- read_csv(
+  file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS", "figuras_nuevas",
+            "salida", "datos", "ind_region.csv"),
+  show_col_types = FALSE
+)
+
+cap_digestivo <- "Enfermedades del sistema digestivo"
+
+tbe_pi <- ind_region %>%
+  filter(grupo == "PI") %>%
+  group_by(CODIGO_REGION = as.integer(region)) %>%
+  summarise(TBE_PI = sum(TBE), .groups = "drop")
+
+dpp_capitulo_xi <- ind_region %>%
+  filter(grupo == "PI", Capitulo == cap_digestivo) %>%
+  transmute(CODIGO_REGION = as.integer(region), DPP_capituloXI = BPP)
+
+# --- (3) Censo 2017 (Ñuble reconstruida): aporta pct_censo ---------------------
+censo <- read_csv(
+  file.path(project_root, "temp_read", "fase2_caracterizacion",
+            "censo2017_po_region_corregido.csv"),
+  show_col_types = FALSE
+) %>%
+  transmute(CODIGO_REGION = as.integer(region), pct_po_censo = pct_censo)
+
+# --- Tabla maestra por región --------------------------------------------------
+tabla_maestra <- ccc %>%
+  left_join(tbe_pi, by = "CODIGO_REGION") %>%
+  left_join(dpp_capitulo_xi, by = "CODIGO_REGION") %>%
+  left_join(censo, by = "CODIGO_REGION") %>%
+  arrange(CODIGO_REGION)
+
+# Validación cruzada: pct_po_censo debe coincidir con el del CSV de concordancia
+ccc_censo <- read_csv(
+  file.path(project_root, "resultados_tesis", "concordancias", "ccc_regiones_nuble_corregido.csv"),
+  show_col_types = FALSE
+) %>%
+  filter(comparacion == "censo_vs_enriquecida", !is.na(region))
+
+stopifnot(
+  nrow(tabla_maestra) == 16L,
+  all(!is.na(tabla_maestra$TBE_PI)),
+  all(!is.na(tabla_maestra$DPP_capituloXI)),
+  max(abs(ccc_censo$pct_po_censo[order(ccc_censo$region)] -
+            tabla_maestra$pct_po_censo[order(tabla_maestra$CODIGO_REGION)])) < 0.01
+)
+
+write_csv(tabla_maestra, file.path(dir_csv, "contraste_regional_resumen.csv"))
+print(tabla_maestra)
+```
+
+## 2. Comentarios #128 y #131: TBE regional (PI) vs %PO en egresos y en Censo 2017
+
+Contraste de la TBE bruta anual de egresos de la población perteneciente (PI) con su proporción en la base de egresos (`pct_po_eh`) y con su proporción censal (`pct_po_censo`), por región. Correlación de Spearman con IC95% (Fisher z).
+
+```{r spearman-128-131}
+# Función determinística: Spearman + IC95% por transformación z de Fisher
+spearman_ic <- function(x, y) {
+  ok <- complete.cases(x, y)
+  ct <- suppressWarnings(cor.test(x[ok], y[ok], method = "spearman", exact = FALSE))
+  rho <- unname(ct$estimate)
+  n <- sum(ok)
+  z <- atanh(rho)
+  se <- 1 / sqrt(n - 3)
+  tibble(
+    n = n,
+    rho = rho,
+    ic95_inf = tanh(z - 1.96 * se),
+    ic95_sup = tanh(z + 1.96 * se),
+    p_value = ct$p.value
+  )
+}
+
+# Recta de minimos cuadrados con aritmetica pura (evita lm()/geom_smooth:
+# ambos provocan segfault en el entorno R de este equipo; la recta es decorativa)
+recta_mc <- function(x, y) {
+  ok <- complete.cases(x, y)
+  x <- x[ok]; y <- y[ok]
+  mx <- mean(x); my <- mean(y)
+  pendiente <- sum((x - mx) * (y - my)) / sum((x - mx)^2)
+  c(pendiente = pendiente, interseccion = my - pendiente * mx)
+}
+
+cor_tbe_eh <- spearman_ic(tabla_maestra$TBE_PI, tabla_maestra$pct_po_eh) %>%
+  mutate(contraste = "TBE_PI vs pct_po_eh (egresos)")
+cor_tbe_censo <- spearman_ic(tabla_maestra$TBE_PI, tabla_maestra$pct_po_censo) %>%
+  mutate(contraste = "TBE_PI vs pct_po_censo (Censo 2017)")
+
+correlaciones <- bind_rows(cor_tbe_eh, cor_tbe_censo) %>%
+  select(contraste, n, rho, ic95_inf, ic95_sup, p_value)
+
+write_csv(correlaciones, file.path(dir_csv, "correlaciones_spearman.csv"))
+print(correlaciones)
+```
+
+```{r figura-128-131, fig.width=9, fig.height=6}
+rho_txt <- sprintf("rho Spearman = %.2f (IC95%% %.2f a %.2f)",
+                   cor_tbe_censo$rho, cor_tbe_censo$ic95_inf, cor_tbe_censo$ic95_sup)
+
+rc_128 <- recta_mc(tabla_maestra$pct_po_censo, tabla_maestra$TBE_PI)
+
+p_tbe <- ggplot(tabla_maestra, aes(x = pct_po_censo, y = TBE_PI)) +
+  geom_point(size = 2.5) +
+  geom_text(aes(label = CODIGO_REGION), vjust = -0.8, size = 3) +
+  geom_abline(slope = rc_128["pendiente"], intercept = rc_128["interseccion"],
+              linetype = 2, linewidth = 0.6) +
+  annotate("text", x = Inf, y = Inf, label = rho_txt, hjust = 1.05, vjust = 1.4, size = 3.5) +
+  labs(
+    title = "TBE regional (PI) vs proporción censal PO, Censo 2017",
+    subtitle = "Etiquetas = CODIGO_REGION (16 = Ñuble). Serie sin capítulo XV (salud materna).",
+    x = "%PO Censo 2017 (pertenece / total)",
+    y = "TBE anual PI por 1.000 hab. (suma de capítulos)"
+  ) +
+  theme_minimal()
+
+guardar_multiformato(p_tbe, "fig_contraste_tbe_pctpo_censo",
+                     ancho = 9, alto = 6, dir_salida = dir_fig)
+p_tbe
+```
+
+**Lectura preliminar (#128/#131):** se espera asociación positiva si las regiones con mayor población perteneciente también egresan más (mayor TBE). La comparación `TBE_PI vs pct_po_eh` usa el mismo universo (egresos), mientras que `TBE_PI vs pct_po_censo` contrasta la tasa hospitalaria con la estructura demográfica real de la población.
+
+## 3. Comentario #135: enfoque región del establecimiento
+
+La base de egresos hospitalarios **no registra comuna ni región de residencia**; la única geografía disponible es la del **establecimiento** (`CODIGO_REGION`). Por tanto, el contraste legítimo es TBE regional (establecimiento) contra la proporción censal por región (residencia), ya calculado arriba (`cor_tbe_censo`). Se documenta explícitamente esta asimetría de geografía (establecimiento vs residencia) como limitación del contraste.
+
+```{r tabla-135}
+tabla_135 <- tabla_maestra %>%
+  select(CODIGO_REGION, region_nombre, TBE_PI, pct_po_censo) %>%
+  mutate(rango_TBE = rank(-TBE_PI), rango_pct_censo = rank(-pct_po_censo))
+
+write_csv(tabla_135, file.path(dir_csv, "contraste_establecimiento_vs_censo.csv"))
+knitr::kable(tabla_135, digits = 2, caption = "TBE regional (establecimiento) y %PO censal (residencia)")
+```
+
+## 4. Comentario #119: exceso del capítulo XI (digestivo) y %PO censal
+
+Se verifica si las regiones con mayor DPP del capítulo XI (sobrerrepresentación de enfermedades del sistema digestivo en PI vs PG) concentran mayor proporción censal PO. Correlación de Spearman con IC95% (Fisher z) y descriptivo de rangos.
+
+```{r spearman-119}
+cor_dpp_censo <- spearman_ic(tabla_maestra$DPP_capituloXI, tabla_maestra$pct_po_censo) %>%
+  mutate(contraste = "DPP_capituloXI vs pct_po_censo (Censo 2017)")
+
+correlaciones <- bind_rows(correlaciones, cor_dpp_censo) %>%
+  select(contraste, n, rho, ic95_inf, ic95_sup, p_value)
+write_csv(correlaciones, file.path(dir_csv, "correlaciones_spearman.csv"))
+print(cor_dpp_censo)
+```
+
+```{r ranking-119}
+tabla_119 <- tabla_maestra %>%
+  select(CODIGO_REGION, region_nombre, DPP_capituloXI, pct_po_censo, TBE_PI) %>%
+  arrange(desc(DPP_capituloXI)) %>%
+  mutate(rank_DPP_XI = row_number())
+
+write_csv(tabla_119, file.path(dir_csv, "ranking_dpp_capituloXI.csv"))
+knitr::kable(tabla_119, digits = 2,
+             caption = "Regiones ordenadas por DPP del capítulo XI (digestivo), con %PO censal")
+```
+
+```{r figura-119, fig.width=9, fig.height=6}
+rho_txt_119 <- sprintf("rho Spearman = %.2f (IC95%% %.2f a %.2f)",
+                       cor_dpp_censo$rho, cor_dpp_censo$ic95_inf, cor_dpp_censo$ic95_sup)
+
+rc_119 <- recta_mc(tabla_maestra$pct_po_censo, tabla_maestra$DPP_capituloXI)
+
+p_dpp <- ggplot(tabla_maestra, aes(x = pct_po_censo, y = DPP_capituloXI)) +
+  geom_point(size = 2.5) +
+  geom_text(aes(label = CODIGO_REGION), vjust = -0.8, size = 3) +
+  geom_abline(slope = rc_119["pendiente"], intercept = rc_119["interseccion"],
+              linetype = 2, linewidth = 0.6) +
+  annotate("text", x = Inf, y = Inf, label = rho_txt_119, hjust = 1.05, vjust = 1.4, size = 3.5) +
+  labs(
+    title = "Exceso del capítulo XI (digestivo) en PI vs %PO censal",
+    subtitle = "DPP = puntos porcentuales (PI − PG). Etiquetas = CODIGO_REGION. Sin capítulo XV.",
+    x = "%PO Censo 2017 (pertenece / total)",
+    y = "DPP capítulo XI (puntos porcentuales)"
+  ) +
+  theme_minimal()
+
+guardar_multiformato(p_dpp, "fig_dpp_capituloXI_pctpo_censo",
+                     ancho = 9, alto = 6, dir_salida = dir_fig)
+p_dpp
+```
+
+**Lectura preliminar (#119):** si rho es positivo y significativo, las regiones con mayor proporción censal PO tienden a mostrar mayor sobrerrepresentación de enfermedades digestivas en los egresos PI. En el ranking, las regiones del extremo norte (mayor %PO censal) se contrastan con el centro-sur.
+
+## 5. Tabla resumen y correlaciones finales
+
+```{r tabla-resumen}
+knitr::kable(
+  tabla_maestra %>%
+    select(CODIGO_REGION, region_nombre, TBE_PI, pct_po_eh, pct_po_censo, DPP_capituloXI),
+  digits = 2,
+  caption = paste0("Tabla resumen por región (16 regiones, Ñuble reconstruida). ",
+                   "TBE_PI anual por 1.000 hab.; pct_po_eh = %PO en egresos (PERTENENCIA2); ",
+                   "pct_po_censo = %PO Censo 2017; DPP_capituloXI = exceso digestivo PI−PG (pp).")
+)
+
+knitr::kable(
+  correlaciones,
+  digits = 3,
+  caption = "Correlaciones de Spearman con IC95% (transformación z de Fisher), n = 16 regiones."
+)
+```

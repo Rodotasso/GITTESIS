@@ -1,0 +1,58 @@
+---
+title: "Figuras de la tesis: indicadores epidemiológicos (Cap. 2)"
+subtitle: "Figuras 10, 11, 12 y 13 del documento vigente, embebidas para publicación"
+date: "2026-10-11"
+lang: es
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Raíz del proyecto (regla del repo: prohibido ../../; usar rprojroot)
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+fig_dir <- file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
+                     "figuras_nuevas", "salida")
+```
+
+Documento compañero de publicación: embebe las figuras de indicadores
+epidemiológicos (desigualdades y tasas brutas de egresos) tal como están
+insertadas en el documento de tesis vigente, con sus pies exactos.
+No ejecuta análisis; solo empaqueta las imágenes en un HTML autocontenido.
+
+## Figura 10
+
+```{r fig10, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_2_5_desigualdades_sexo_sin_op.jpg"))
+```
+
+**Figura 10.** Desigualdades por sexo (sin capítulo de Embarazo, parto y puerperio): tres principales sobrerrepresentaciones y subrepresentaciones por sexo. Chile, 2010-2022.
+
+## Figura 11
+
+```{r fig11, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_2_7_disparidades_edad_sin_op.jpg"))
+```
+
+**Figura 11.** Desigualdades por grupo etario (sin capítulo de Embarazo, parto y puerperio): tres principales sobrerrepresentaciones y subrepresentaciones por grupo etario. Chile, 2010-2022.
+
+## Figura 12
+
+```{r fig12, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_2_6_heatmap_regional_tbe_sin_op.jpg"))
+```
+
+**Figura 12.** Morbilidad hospitalaria por región y capítulo CIE-10: Tasa Bruta de Egresos (TBE) por 1.000 habitantes en población indígena (sin capítulo de Embarazo, parto y puerperio). Chile, 2010-2022.
+
+## Figura 13
+
+```{r fig13, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_2_9_tbe_region_sexo_PI_PG_sin_op.jpg"))
+```
+
+**Figura 13.** Tasa Bruta de Egresos (TBE) por región y sexo en población indígena (sin capítulo de Embarazo, parto y puerperio). Chile, 2010-2022.

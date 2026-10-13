@@ -1,0 +1,241 @@
+---
+title: "Figura 12: Heatmap TBE por capítulo CIE-10 y región (PI, sin cap. XV)"
+subtitle: "Regeneración con denominador censal corregido de Ñuble (fix 2026-09-13)"
+author: "Rodolfo Tasso"
+date: today
+format:
+  html:
+    toc: true
+    theme: cosmo
+    df-print: paged
+    embed-resources: true
+execute:
+  warning: true
+  message: true
+---
+
+# Objetivo y trazabilidad
+
+Regenera la imagen de la **Figura 12** del docx de tesis (heatmap de Tasa Bruta
+de Egresos anual por 1.000 hab. en población indígena, capítulo CIE-10 × región,
+excluyendo el capítulo XV), reemplazando el artefacto del 2026-09-08 que usaba
+el denominador censal de Ñuble con bug. Los denominadores corregidos provienen
+de `extraer_datos_censo()` (`R/concordancias/extraer_datos_censo.R`, corregido
+el 2026-09-13: las comunas 401-421 de la región 8 se reasignan a la región 16).
+
+Replica **exactamente** la definición del chunk `regional` de
+`analisis/05_perfiles_cie10/perfiles_diagnosticos_desagregados_sin_op.qmd`
+(líneas 251-261) y de su chunk `preparacion-datos`:
+
+- Universo: egresos con `PERTENENCIA2` (PI = 1), sin capítulo XV
+  ("Embarazo, parto y puerperio"), sin NA en `Capitulo`, `sexo`,
+  `grupo_etario` ni `region`.
+- TBE = egresos del capítulo / población censal de la región / 13 años × 1.000.
+- Heatmap: `graficar_heatmap_regional()` (`R/graficos/graficos_objetivo4.R`),
+  paleta YlOrRd, top 18 capítulos por TBE media.
+
+**Nota de función de graficado**: se usa la copia en
+`figuras_nuevas/scripts/graficos_objetivo4.R`, que es la que generó la figura
+original insertada en el docx (su caption "...la TBE mide la morbilidad
+hospitalaria regional." coincide con la imagen insertada). La versión en
+`R/graficos/graficos_objetivo4.R` es idéntica salvo el caption ("...mide la
+carga regional.").
+
+**Nota de exportación JPEG**: el device JPEG de `ggsave` puede corromper los
+colores en este equipo (fondo magenta; bug documentado en
+`figuras_nuevas/scripts/sesgo_supervivencia_concordancia.qmd`, líneas 66-78).
+Por eso se exporta a PNG y se convierte a JPG con `magick` (calidad 95);
+si `magick` no está instalado, se cae al ggsave directo con advertencia.
+
+```{r}
+#| label: setup
+# Paquetes y fuentes explícitas de funciones del repo (sin setwd; rutas rprojroot)
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+
+project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+
+# Solo las funciones necesarias (source explicito, sin cargar_funciones.R)
+source(file.path(project_root, "R", "concordancias", "extraer_datos_censo.R"))
+source(file.path(project_root, "R", "perfiles", "calcular_indicadores_desagregados.R"))
+source(file.path(project_root, "R", "funciones", "ordenar_regiones.R"))
+
+# graficar_heatmap_regional: copia de figuras_nuevas (caption identico a la
+# imagen insertada en el docx; ver nota en la introduccion)
+source(file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
+                 "figuras_nuevas", "scripts", "graficos_objetivo4.R"))
+
+# Rutas de salida
+ruta_figura <- file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
+                         "figuras_nuevas", "salida",
+                         "figura_2_6_heatmap_regional_tbe_sin_op.jpg")
+ruta_respaldo <- sub("\\.jpg$", "_OLD.jpg", ruta_figura)
+dir_csv <- file.path(project_root, "resultados_tesis", "perfiles")
+if (!dir.exists(dir_csv)) dir.create(dir_csv, recursive = TRUE)
+ruta_csv <- file.path(dir_csv, "fig12_tbe_capitulo_region.csv")
+ruta_old <- file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
+                      "figuras_nuevas", "salida", "datos", "ind_region.csv")
+```
+
+```{r}
+#| label: carga-preparacion
+# Carga unica de la base (~2 min) y preparacion identica al chunk
+# `preparacion-datos` del qmd _sin_op (se omite la columna de ano, no usada aqui)
+t0 <- Sys.time()
+load(file.path(project_root, "BBDD_homologados.RData"))
+setDT(datos_homologados)
+cat("Carga base:", round(difftime(Sys.time(), t0, units = "mins"), 1), "min\n")
+
+cols_necesarias <- c("PERTENENCIA2", "COND_EGR", "FECHA_EGRESO_FMT_DEIS",
+                     "FECHA_INGRESO_FMT_DEIS", "Grupo_CIE10", "CODIGO_REGION",
+                     "GLOSA_SEXO", "EDAD_ANOS")
+
+# Subconjunto en data.table y liberacion inmediata de la base completa
+# (mitiga pico de memoria durante el mutate posterior)
+datos_sub <- datos_homologados[, cols_necesarias, with = FALSE]
+rm(datos_homologados)
+gc(verbose = FALSE)
+
+datos_analisis <- datos_sub %>%
+  as_tibble() %>%
+  mutate(
+    DIAS_ESTADA = as.numeric(as.Date(FECHA_EGRESO_FMT_DEIS) - as.Date(FECHA_INGRESO_FMT_DEIS)),
+    Capitulo = Grupo_CIE10,
+    sexo = GLOSA_SEXO,
+    grupo_etario = case_when(
+      EDAD_ANOS < 5 ~ "0-4",
+      EDAD_ANOS < 15 ~ "5-14",
+      EDAD_ANOS < 25 ~ "15-24",
+      EDAD_ANOS < 45 ~ "25-44",
+      EDAD_ANOS < 65 ~ "45-64",
+      EDAD_ANOS < 75 ~ "65-74",
+      EDAD_ANOS >= 75 ~ "75+",
+      TRUE ~ NA_character_
+    ),
+    # Llave de join como integer: calza con el tipo INTEGER del censo (duckdb)
+    region = as.integer(as.numeric(CODIGO_REGION))
+  ) %>%
+  # EXCLUSION CRITICA: Capitulo XV (misma del pipeline original)
+  filter(!stringr::str_detect(Capitulo, "Embarazo, parto y puerperio")) %>%
+  filter(!is.na(Capitulo), !is.na(sexo), !is.na(grupo_etario), !is.na(region))
+
+# Liberar la base completa lo antes posible (gestion de memoria)
+# (la base completa ya se elimino tras el subset; aqui se libera el subconjunto)
+rm(datos_sub)
+gc(verbose = FALSE)
+cat("datos_analisis:", format(nrow(datos_analisis), big.mark = ","), "filas\n")
+```
+
+```{r}
+#| label: censo
+# Denominadores censales corregidos y verificacion de Nuble (22.341 PO)
+censo_lista <- extraer_datos_censo(verbose = FALSE, responders_only = TRUE)
+
+nuble_po <- censo_lista$por_region$pertenece[censo_lista$por_region$region == 16]
+cat("Censo corregido - Nuble (16): total =",
+    censo_lista$por_region$total[censo_lista$por_region$region == 16],
+    "| pertenece PO =", nuble_po, "\n")
+stopifnot(nrow(censo_lista$por_region) == 16L, nuble_po == 22341)
+```
+
+```{r}
+#| label: indicadores-heatmap
+# Chunk `regional` del pipeline: indicadores por region y heatmap
+denominador_region <- preparar_denominador_estrato(censo_lista$por_region)
+# Homologar tipo de la llave con la de datos_analisis (integer)
+denominador_region$region <- as.integer(denominador_region$region)
+
+# Guardas previas con mensaje claro (fallar rapido y explicito)
+stopifnot(
+  all(c("PERTENENCIA2", "COND_EGR", "DIAS_ESTADA", "Capitulo", "region") %in%
+        names(datos_analisis)),
+  all(c("grupo", "poblacion", "region") %in% names(denominador_region)),
+  typeof(datos_analisis$region) == typeof(denominador_region$region)
+)
+
+ind_region <- calcular_indicadores_estratificados(
+  datos = datos_analisis,
+  denominador_df = denominador_region,
+  var_estrato = "region"
+)
+
+# Verificacion de cobertura: 16 regiones x grupo, sin TBE perdida en PI
+stopifnot(
+  length(unique(ind_region$region[ind_region$grupo == "PI"])) == 16L,
+  !any(is.na(ind_region$TBE[ind_region$grupo == "PI"]))
+)
+
+p_heatmap_region <- graficar_heatmap_regional(
+  ind_region, "Morbilidad Hospitalaria por Región (Sin Salud Materna)"
+)
+p_heatmap_region
+```
+
+```{r}
+#| label: exportar-figura
+# Respaldo de la imagen vieja (sufijo _OLD junto a ella) y exportacion al
+# MISMO path del pipeline. Workaround JPEG: PNG + magick (ver nota inicial)
+stopifnot(file.exists(ruta_figura))
+ok_copia <- file.copy(ruta_figura, ruta_respaldo, overwrite = TRUE)
+stopifnot(ok_copia)
+cat("Respaldo imagen vieja en:", ruta_respaldo, "\n")
+
+if (requireNamespace("magick", quietly = TRUE)) {
+  ruta_png <- tempfile(fileext = ".png")
+  ggsave(ruta_png, p_heatmap_region, width = 12, height = 8, dpi = 300,
+         bg = "white")
+  img <- magick::image_read(ruta_png)
+  magick::image_write(img, ruta_figura, format = "jpeg", quality = 95)
+  cat("Figura exportada (PNG + magick q95):", ruta_figura, "\n")
+} else {
+  warning("Paquete magick no instalado: ggsave directo a JPEG ",
+          "(riesgo de colores corruptos en este equipo).")
+  ggsave(ruta_figura, p_heatmap_region, width = 12, height = 8, dpi = 300,
+         bg = "white")
+  cat("Figura exportada (ggsave directo):", ruta_figura, "\n")
+}
+```
+
+```{r}
+#| label: csv-trazabilidad
+# CSV de trazabilidad: filas PI que alimentan el heatmap
+fig12_pi <- ind_region %>%
+  filter(grupo == "PI") %>%
+  mutate(nombre_region = codigo_a_nombre_region(region, tipo = "corto")) %>%
+  select(region, nombre_region, Capitulo, Ec, Et, TBE) %>%
+  arrange(region, desc(TBE))
+write.csv(fig12_pi, ruta_csv, row.names = FALSE, fileEncoding = "UTF-8")
+cat("CSV trazabilidad en:", ruta_csv, "\n")
+```
+
+```{r}
+#| label: contraste-artefacto
+# Contraste contra el artefacto viejo (suma de TBE por capitulo = TBE total PI)
+old <- read.csv(ruta_old, fileEncoding = "UTF-8", stringsAsFactors = FALSE)
+old_pi <- aggregate(TBE ~ region, data = old[old$grupo == "PI", ], FUN = sum)
+new_pi <- aggregate(TBE ~ region, data = fig12_pi, FUN = sum)
+comp <- merge(old_pi, new_pi, by = "region", suffixes = c("_vieja", "_nueva"))
+comp$dif <- round(comp$TBE_nueva - comp$TBE_vieja, 2)
+cat("TBE total PI por region (suma capitulos): vieja vs nueva\n")
+print(comp)
+```
+
+## Resultado esperado
+
+Con el denominador corregido, **Ñuble** sube de 23,27 a **32,94** (TBE total PI)
+y **Biobío** baja de 71,78 a **67,80** (el artefacto viejo asignaba mal las
+comunas de Ñuble dentro de la región 8). Las 14 regiones restantes no deben
+cambiar (diferencia 0,00). Los valores cuadran con la fuente corregida
+`resultados_tesis/indicadores_epidemiologicos/tbe_regional_sexo_po.csv`
+(Ñuble 32,9; Biobío 67,8).
+
+```{r}
+#| label: limpieza
+# Liberacion de memoria
+rm(datos_analisis, ind_region, censo_lista, denominador_region, fig12_pi,
+   p_heatmap_region, old, old_pi, new_pi, comp)
+gc(verbose = FALSE)
+cat("Memoria liberada.\n")
+```

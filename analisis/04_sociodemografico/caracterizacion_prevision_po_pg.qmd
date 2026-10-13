@@ -1,0 +1,213 @@
+---
+title: "Distribución de egresos por previsión de salud: PO y PG (comentario #79)"
+author: ""
+output: html_document
+---
+
+<!--
+Documento de análisis para responder el comentario #79 de la revisoría:
+la Figura 8.2 del manuscrito describe solo la previsión de la población
+perteneciente (PO). Se requieren DOS figuras: una para PO y otra para
+población general (PG), con la distribución porcentual por tramo de
+previsión dentro de cada grupo.
+
+Insumo (CSV liviano; NO se carga BBDD_homologados.RData):
+
+  temp_read/fase2_caracterizacion/caracterizacion_pertenencia2.csv
+    Columnas: variable, categoria, pertenencia, N, pct_columna.
+    Se filtra variable == "GLOSA_PREVISION" y pertenencia en {PO, No PO}.
+    pct_columna = porcentaje dentro del grupo (columna), equivalente al
+    porcentaje que se grafica por barra.
+
+Salidas:
+  - Figuras: resultados_tesis/comentarios_tania/fig_prevision_PO.jpg
+              resultados_tesis/comentarios_tania/fig_prevision_PG.jpg
+    (guardar_multiformato, 300 dpi)
+  - Cifras:  temp_read/comentarios_tania/prevision_po_pg.csv
+
+Nota de ordenamiento: barras horizontales ordenadas por porcentaje
+descendente (mayor arriba). La categoría "FONASA sin tramo" (registros
+FONASA sin identificación de tramo A-D) se mantiene siempre al final del
+ranking, aunque su porcentaje ya es el mínimo en ambos grupos.
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 5.5
+)
+
+# Raíz del proyecto (regla del repo: prohibido ../../; usar rprojroot)
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+
+# Directorios de salida
+dir_csv <- file.path(project_root, "temp_read", "comentarios_tania")
+dir_fig <- file.path(project_root, "resultados_tesis", "comentarios_tania")
+dir.create(dir_csv, recursive = TRUE, showWarnings = FALSE)
+dir.create(dir_fig, recursive = TRUE, showWarnings = FALSE)
+
+# Funciones del proyecto (guardar_multiformato)
+source(file.path(project_root, "R", "cargar_funciones.R"))
+
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(forcats)
+library(scales)
+```
+
+## 1. Carga y preparación de datos
+
+```{r cargar-datos}
+caracterizacion <- read_csv(
+  file.path(project_root, "temp_read", "fase2_caracterizacion",
+            "caracterizacion_pertenencia2.csv"),
+  show_col_types = FALSE
+)
+
+# Validación del insumo
+stopifnot(
+  all(c("variable", "categoria", "pertenencia", "N", "pct_columna") %in% names(caracterizacion)),
+  "GLOSA_PREVISION" %in% caracterizacion$variable,
+  all(c("PO", "No PO") %in% caracterizacion$pertenencia)
+)
+
+prevision <- caracterizacion %>%
+  filter(variable == "GLOSA_PREVISION", pertenencia %in% c("PO", "No PO")) %>%
+  transmute(
+    variable,
+    categoria,
+    pertenencia,
+    N,
+    pct = pct_columna
+  ) %>%
+  mutate(
+    # Etiqueta explícita para los registros FONASA sin tramo A-D
+    categoria_label = ifelse(categoria == "FONASA", "FONASA (sin tramo)", categoria)
+  )
+
+# Clave de ordenamiento: FONASA sin tramo queda anclada al final del ranking
+prevision <- prevision %>%
+  mutate(pct_ord = ifelse(categoria == "FONASA", -Inf, pct))
+
+# Verificación: los porcentajes de cada grupo deben sumar ~100
+prevision %>%
+  group_by(pertenencia) %>%
+  summarise(
+    n_categorias = n(),
+    N_total = sum(N),
+    pct_total = sum(pct),
+    .groups = "drop"
+  ) %>%
+  knitr::kable(digits = 3)
+```
+
+## 2. Figura: población perteneciente a pueblos indígenas (PO)
+
+```{r figura-po, fig.width=10, fig.height=5.5, dpi=300}
+datos_po <- prevision %>%
+  filter(pertenencia == "PO") %>%
+  mutate(categoria_label = fct_reorder(categoria_label, pct_ord))
+
+titulo_po <- "Distribuci\u00f3n de egresos por previsi\u00f3n de salud, poblaci\u00f3n perteneciente a pueblos ind\u00edgenas (PO), Chile 2010-2022"
+caption_fig <- "Fuente: DEIS, MINSAL. Egresos hospitalarios 2010-2022. Pertenencia seg\u00fan fuente enriquecida (EH + RSH + CONADI). Porcentajes respecto del total de egresos del grupo."
+
+p_po <- ggplot(datos_po, aes(x = pct, y = categoria_label)) +
+  geom_col(width = 0.65, fill = "#2e86c1") +
+  geom_text(
+    aes(label = sprintf("%.1f%%", pct)),
+    hjust = -0.15, size = 3.5
+  ) +
+  scale_x_continuous(
+    limits = c(0, max(datos_po$pct) * 1.15),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  labs(
+    title = titulo_po,
+    x = "Porcentaje de egresos del grupo (%)",
+    y = NULL,
+    caption = caption_fig
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(face = "bold"),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(size = 8, color = "grey40", hjust = 0),
+    plot.margin = margin(15, 25, 10, 10)
+  )
+
+guardar_multiformato(p_po, "fig_prevision_PO",
+                     ancho = 10, alto = 5.5, dpi = 300,
+                     dir_salida = dir_fig)
+p_po
+```
+
+**Lectura preliminar (#79, PO):** la concentración en FONASA A y B (tramos de menores ingresos) es marcadamente mayor en el grupo perteneciente, con ISAPRE en proporción mucho menor que en la población general.
+
+## 3. Figura: población general (PG)
+
+```{r figura-pg, fig.width=10, fig.height=5.5, dpi=300}
+datos_pg <- prevision %>%
+  filter(pertenencia == "No PO") %>%
+  mutate(categoria_label = fct_reorder(categoria_label, pct_ord))
+
+titulo_pg <- "Distribuci\u00f3n de egresos por previsi\u00f3n de salud, poblaci\u00f3n general (PG), Chile 2010-2022"
+
+p_pg <- ggplot(datos_pg, aes(x = pct, y = categoria_label)) +
+  geom_col(width = 0.65, fill = "#7f8c8d") +
+  geom_text(
+    aes(label = sprintf("%.1f%%", pct)),
+    hjust = -0.15, size = 3.5
+  ) +
+  scale_x_continuous(
+    limits = c(0, max(datos_pg$pct) * 1.15),
+    expand = expansion(mult = c(0, 0))
+  ) +
+  labs(
+    title = titulo_pg,
+    x = "Porcentaje de egresos del grupo (%)",
+    y = NULL,
+    caption = caption_fig
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(face = "bold"),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(size = 8, color = "grey40", hjust = 0),
+    plot.margin = margin(15, 25, 10, 10)
+  )
+
+guardar_multiformato(p_pg, "fig_prevision_PG",
+                     ancho = 10, alto = 5.5, dpi = 300,
+                     dir_salida = dir_fig)
+p_pg
+```
+
+**Lectura preliminar (#79, PG):** la población general muestra un reparto más equilibrado entre FONASA B, FONASA A e ISAPRE, con presencia de ISAPRE casi el doble que en el grupo perteneciente.
+
+## 4. Exportación de las cifras usadas
+
+```{r exportar-csv}
+prevision_export <- prevision %>%
+  select(variable, categoria, categoria_label, pertenencia, N, pct) %>%
+  arrange(pertenencia, desc(pct))
+
+write_csv(prevision_export, file.path(dir_csv, "prevision_po_pg.csv"))
+
+# Vista resumida para el documento
+prevision_export %>%
+  select(-variable, -categoria) %>%
+  knitr::kable(digits = 3,
+               col.names = c("Categoría", "Grupo", "N egresos", "% del grupo"))
+```
+
+Las dos figuras y el CSV quedan disponibles para reemplazar/complementar la Figura 8.2 del manuscrito, que solo mostraba la previsión del grupo perteneciente.

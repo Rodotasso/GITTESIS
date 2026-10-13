@@ -45,7 +45,9 @@ cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional")
 
 # Cargar Datos
 load("BBDD_homologados.RData")
-censo_lista <- extraer_datos_censo(verbose = FALSE)
+# Denominador censal PG sobre base oficial INE de respondedores (p16 IN (1,2));
+# decisión metodológica 2026-10-12: excluir no-respondedores (p16 = 99) en toda la tesis
+censo_lista <- extraer_datos_censo(verbose = FALSE, responders_only = TRUE)
 
 #' Tabla flextable estandar para indicadores estratificados
 #' Asume columnas: estrato(s), Capitulo, n_PI, n_PG, prop_PI, prop_PG, BPP, TBE (cuando aplique)
@@ -215,7 +217,7 @@ tabla_indicadores(ind_sexo, "sexo",
                   titulo = "Tabla 3.1. Indicadores estratificados por sexo (PI vs PG), Chile 2010-2022")
 ```
 
-## 4. Disparidades por Ciclo Vital
+## 4. Desigualdades por Ciclo Vital
 
 ```{r edad}
 #| fig-width: 11
@@ -401,6 +403,39 @@ resumen_sexo_region <- ind_sexo_reg_etiquetado %>%
 
 tabla_indicadores(resumen_sexo_region, c("nombre_region","region"),
                   titulo = "Tabla 6.1. TBE total (PI) por región y sexo, Chile 2010-2022")
+```
+
+### Exportación 6.2. TBE por región × sexo a CSV
+
+Se exporta la TBE total (por 1.000 hab./año) estratificada por sexo × región, para PI y PG, con sus egresos y denominadores censales. Se incluye además la variante sin capítulo XV (Embarazo, parto y puerperio), útil para comparar la carga entre sexos sin el efecto de la morbilidad obstétrica.
+
+```{r exportar-tbe-regional-sexo}
+# Directorio de salida dentro de resultados_tesis (se crea si no existe)
+dir_tbe <- file.path(project_root, "resultados_tesis", "indicadores_epidemiologicos")
+if (!dir.exists(dir_tbe)) dir.create(dir_tbe, recursive = TRUE)
+
+# Et es el total de egresos del estrato (constante entre capitulos);
+# sum(TBE) por estrato equivale a egresos / poblacion / 13 anos * 1000
+# Las variantes *_sin_xv excluyen el capitulo XV (Embarazo, parto y puerperio)
+cap_xv <- "Embarazo, parto y puerperio"
+tbe_regional_sexo <- ind_sexo_reg_etiquetado %>%
+  dplyr::group_by(grupo, region, nombre_region, sexo) %>%
+  dplyr::summarise(
+    egresos = dplyr::first(Et),
+    tbe_por_1000 = sum(TBE, na.rm = TRUE),
+    egresos_sin_xv = sum(Ec[Capitulo != cap_xv], na.rm = TRUE),
+    tbe_por_1000_sin_xv = sum(TBE[Capitulo != cap_xv], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::left_join(
+    denominador_sexo_reg %>% dplyr::rename(denominador = poblacion),
+    by = c("grupo", "region", "sexo")
+  ) %>%
+  dplyr::select(grupo, region, nombre_region, sexo, egresos, denominador,
+                tbe_por_1000, egresos_sin_xv, tbe_por_1000_sin_xv) %>%
+  dplyr::arrange(grupo, region, sexo)
+
+readr::write_csv(tbe_regional_sexo, file.path(dir_tbe, "tbe_regional_sexo_po.csv"))
 ```
 
 

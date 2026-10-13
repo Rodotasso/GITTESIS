@@ -43,7 +43,7 @@ cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional (Filtro Sin Sal
 
 # Cargar Datos
 load("BBDD_homologados.RData")
-censo_lista <- extraer_datos_censo(verbose = FALSE)
+censo_lista <- extraer_datos_censo(verbose = FALSE, responders_only = TRUE)
 ```
 
 ## 1. Introducción y resumen general
@@ -179,7 +179,7 @@ tabla_indicadores_desagregados(ind_sexo, "sexo",
 )
 ```
 
-## 4. Disparidades por Ciclo Vital (Sin Salud Materna)
+## 4. Desigualdades por Ciclo Vital (Sin Salud Materna)
 
 ```{r edad}
 #| fig-width: 11

@@ -114,7 +114,7 @@ cat("=== EXTRAYENDO DENOMINADORES DEL CENSO 2017 ===\n\n")
 pob_censo <- obtener_poblacion_censo(verbose = TRUE)
 
 # Denominadores desagregados
-datos_censo <- extraer_datos_censo(verbose = TRUE)
+datos_censo <- extraer_datos_censo(verbose = TRUE, responders_only = TRUE)
 
 cat("\n=== RESUMEN DENOMINADORES ===\n")
 cat("Nacional:\n")

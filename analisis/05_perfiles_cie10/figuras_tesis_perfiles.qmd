@@ -1,0 +1,61 @@
+---
+title: "Figuras de la tesis: perfiles diagnósticos (Cap. 2)"
+subtitle: "Figuras 7, 8, 9 y S1 del documento vigente, embebidas para publicación"
+date: "2026-10-11"
+lang: es
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Raíz del proyecto (regla del repo: prohibido ../../; usar rprojroot)
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+fig_dir <- file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
+                     "figuras_nuevas", "salida")
+# Figura 7 (dos paneles: IC95% + evolución temporal): la imagen correcta vive en
+# final_resultados (pipeline REVISTA); figura_3_brecha_divergente.jpg es un
+# panel único y no calza con el pie de la Figura 7
+dir_final <- file.path(project_root, "resultados_tesis", "final_resultados")
+```
+
+Documento compañero de publicación: embebe las figuras de perfiles diagnósticos
+tal como están insertadas en el documento de tesis vigente, con sus pies exactos.
+No ejecuta análisis; solo empaqueta las imágenes en un HTML autocontenido.
+
+## Figura 8
+
+```{r fig8, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_2_1_top_causas_panel.jpg"))
+```
+
+**Figura 8.** Distribución de egresos hospitalarios por capítulo CIE-10 en población indígena y población general. Chile, 2010-2022.
+
+## Figura 7
+
+```{r fig7, out.width="100%"}
+knitr::include_graphics(file.path(dir_final, "Figura_3E_forest_heatmap.jpg"))
+```
+
+**Figura 7. Patrones diferenciados en representación de pueblos indígenas por grupo diagnóstico CIE-10: estimaciones con intervalos de confianza y evolución temporal. Chile, 2010-2022.** Panel izquierdo: diferencia, en puntos porcentuales (pp), entre la proporción de egresos de población indígena en cada capítulo CIE-10 y la proporción general de población indígena en el total de egresos (13,6%, promedio de las proporciones anuales según la variable enriquecida; la proporción agrupada del período completo es 14,9%); los puntos indican la diferencia promedio sobre los 13 años del periodo (n = 13 puntos anuales) y las barras horizontales representan el intervalo de confianza al 95% (IC95%) estimado mediante aproximación normal. Los puntos rojos señalan sobrerrepresentación (diferencia superior al promedio general); los puntos azules, subrepresentación (diferencia inferior al promedio general). La línea vertical punteada marca la diferencia nula (0 pp). Se incluyen los grupos CIE-10 con diferencia promedio ≥1,5 pp respecto a la línea de referencia. Panel derecho: evolución temporal año a año (2010-2022) de la misma diferencia para los mismos capítulos CIE-10; la intensidad del color representa la magnitud de la diferencia: tonos rojos más intensos indican mayor sobrerrepresentación; tonos azules más intensos, mayor subrepresentación. Variable enriquecida: integración de las tres fuentes administrativas (RSH, CONADI y autodeclaración en EH); pertenencia positiva si la persona figura como perteneciente en al menos una fuente. Fuente: Departamento de Estadísticas e Información de Salud (DEIS), Ministerio de Salud, Chile.
+
+## Figura S1
+
+```{r figs1, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_4_dumbbell_proporciones.jpg"))
+```
+
+**Figura S1.** Proporciones de egresos hospitalarios por capítulo CIE-10 en población indígena y población general (gráfico de dumbbell). Chile, 2010-2022.
+
+## Figura 9
+
+```{r fig9, out.width="100%"}
+knitr::include_graphics(file.path(fig_dir, "figura_5_cuadrantes_severidad.jpg"))
+```
+
+**Figura 9.** Distribución conjunta de Proporción de Egresos por Causa (PEC) y Proporción de Letalidad Intrahospitalaria (PLI) por capítulo CIE-10. Chile, 2010-2022.

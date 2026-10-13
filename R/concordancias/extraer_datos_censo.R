@@ -12,6 +12,11 @@
 #'
 #' @param conexion Conexión a la base de datos del censo. Si NULL, se crea una nueva.
 #' @param verbose Lógico. Si TRUE, muestra mensajes de progreso.
+#' @param responders_only Lógico. Si TRUE, restringe la extracción a la base
+#'   oficial INE de respondedores de la pregunta de pertenencia (`p16 IN (1, 2)`),
+#'   excluyendo los 497.927 no-respondedores (`p16 = 99`). Si FALSE (default),
+#'   preserva el comportamiento histórico (`p16 IS NOT NULL`), que incluye el
+#'   código 99 porque en la base duckdb no existen NULL en p16.
 #' 
 #' @return Lista con 9 elementos:
 #' \itemize{
@@ -38,7 +43,8 @@
 #' }
 #' 
 #' @export
-extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
+extraer_datos_censo <- function(conexion = NULL, verbose = TRUE,
+                                responders_only = FALSE) {
   
   # Verificar que el paquete censo2017 esté disponible
   if (!requireNamespace("censo2017", quietly = TRUE)) {
@@ -61,8 +67,14 @@ extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
   # --- PASO 1: EXTRAER DATOS INDIVIDUALES ---
   if(verbose) cat("1. Extrayendo datos individuales del censo...\n")
   
-  query_censo_individual <- "
-  SELECT 
+  # Filtro de pertenencia: por defecto se preserva el comportamiento histórico
+  # (p16 IS NOT NULL), que no excluye a nadie porque p16 no tiene NULL en la
+  # base duckdb y los no-respondedores vienen codificados como 99. Con
+  # responders_only = TRUE se usa la base oficial INE de respondedores.
+  filtro_p16 <- if (isTRUE(responders_only)) "p.p16 IN (1, 2)" else "p.p16 IS NOT NULL"
+
+  query_censo_individual <- sprintf("
+  SELECT
     p16 as pertenencia,
     CAST(SUBSTR(z.geocodigo, 1, 2) AS INTEGER) as region,
     CAST(SUBSTR(z.geocodigo, 3, 3) AS INTEGER) as comuna,
@@ -72,12 +84,12 @@ extraer_datos_censo <- function(conexion = NULL, verbose = TRUE) {
   JOIN hogares h ON p.hogar_ref_id = h.hogar_ref_id
   JOIN viviendas v ON h.vivienda_ref_id = v.vivienda_ref_id
   JOIN zonas z ON v.zonaloc_ref_id = z.zonaloc_ref_id
-  WHERE p.p16 IS NOT NULL 
+  WHERE %s
     AND p.p09 IS NOT NULL
     AND p.p09 BETWEEN 0 AND 120
     AND p.p08 IN (1, 2)
     AND z.geocodigo IS NOT NULL
-  "
+  ", filtro_p16)
   
   datos_censo <- dplyr::tbl(con_censo, dbplyr::sql(query_censo_individual)) %>% 
     dplyr::collect() %>%

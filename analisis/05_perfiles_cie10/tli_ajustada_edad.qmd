@@ -1,0 +1,206 @@
+---
+title: "Tasa de Letalidad Intrahospitalaria ajustada por edad: PO vs No PO por capitulo CIE-10"
+author: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Setup estandar del proyecto
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
+}
+source(file.path(project_root, "R/cargar_funciones.R"))
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache = FALSE
+)
+
+# Librerias minimas necesarias
+library(data.table)
+library(dplyr)
+library(tidyr)
+
+# Salida de resultados
+dir_out <- file.path(project_root, "resultados_tesis", "indicadores_epidemiologicos")
+dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
+```
+
+```{r carga_bbdd}
+# Carga de la base homologada (~940 MB el .RData).
+# VERIFICAR RAM: verificar headroom de pagefile antes de ejecutar (regla global pagefile-memoria).
+load(file.path(project_root, "BBDD_homologados.RData"))
+setDT(datos_homologados)
+
+# Liberar objetos no necesarios cargados junto con la base (si los hay)
+# rm(objeto_innecesario)
+gc(verbose = FALSE)
+```
+
+```{r inspeccion_variables}
+# TODO(VERIFICAR): nombre real de la variable de condicion de egreso (fallecido vs vivo).
+# La documentacion menciona "condicion de egreso" con valores Fallecido/Vivo;
+# tambien existe "condicion_enlace" en los CSV de sesgo. Inspeccionar candidatas:
+# TODO(VERIFICAR): fijar aqui la variable elegida y sus valores de fallecido/vivo:
+var_egreso   <- "COND_EGR"   # nombre validado (R/perfiles/comparar_perfiles_po_pg.R:107)
+valor_muerte <- 2            # 2 = fallecido (validado: comparar_perfiles_po_pg.R:109; indicadores_epidemiologicos.qmd:103)
+
+# TODO(VERIFICAR): variable de edad para estandarizar: GRUPO_ETARIO
+# (0-4, 5-14, 15-24, 25-44, 45-64, 65-74, 75+) o Grupo_Edad.
+# Documentar eleccion final y justificar (los grupos de GRUPO_ETARIO son los
+# usados en los perfiles diagnosticos del proyecto; verificar niveles reales):
+var_edad <- "GRUPO_ETARIO"  # 7 grupos del estudio; columna de los qmds validados (indicadores_epidemiologicos.qmd:237)
+
+# Aserciones de contrato sobre la base (baratas, una sola pasada por columna)
+stopifnot(
+  all(c(var_egreso, var_edad, "PERTENENCIA2", "Grupo_CIE10") %in% names(datos_homologados)),
+  "COND_EGR debe contener el valor 2 (fallecido)" =
+    any(datos_homologados[[var_egreso]] == valor_muerte, na.rm = TRUE),
+  "GRUPO_ETARIO debe tener 7 grupos" =
+    data.table::uniqueN(datos_homologados[[var_edad]]) == 7
+)
+```
+
+```{r definicion_funcion}
+# tli_edad(): TLI cruda y ajustada por edad (estandarizacion indirecta).
+# Referencia = poblacion No PO. Sin paquetes de estandarizacion: solo data.table.
+#
+# Estandarizacion indirecta:
+#   - tasas especificas por grupo etario de la referencia (No PO)
+#   - aplicadas a la estructura de edad de la PO -> defunciones esperadas
+#   - TLI_ajustada_PO = def_obs_PO / def_esp_PO * TLI_ref_global
+tli_edad <- function(dt, grupo_ref = "No_PO") {
+  # dt: data.table con columnas estandarizadas internas:
+  #   .pert (2 niveles: PO / No PO), .edad (grupo etario), .muerte (0/1)
+  # Validacion de inputs en el borde
+  req <- c(".pert", ".edad", "egresos", "def")
+  faltan <- setdiff(req, names(dt))
+  if (length(faltan) > 0) {
+    rlang::abort(
+      paste0("Faltan columnas requeridas: ", paste(faltan, collapse = ", ")),
+      class = "tli_edad_missing_cols"
+    )
+  }
+
+  # Entrada ya agregada por (capitulo x pert x edad): una fila por (pert x edad)
+  agg <- dt
+
+  # Tasas especificas de la referencia (No PO)
+  ref <- agg[.pert == grupo_ref, .(.edad, tasa_ref = def / egresos, egresos_ref = egresos)]
+  if (nrow(ref) == 0 || any(!is.finite(ref$tasa_ref))) {
+    rlang::abort("Referencia sin datos o con tasas invalidas.", class = "tli_edad_ref_invalida")
+  }
+
+  # TLI global de referencia
+  def_ref  <- agg[.pert == grupo_ref, sum(def)]
+  egr_ref  <- agg[.pert == grupo_ref, sum(egresos)]
+  tli_ref  <- def_ref / egr_ref
+
+  # Unir tasas de referencia a la estructura de edad de la PO
+  po <- agg[.pert != grupo_ref]
+  po <- merge(po, ref, by = ".edad", all.x = TRUE)
+  po[, def_esp := egresos * tasa_ref]
+
+  # Salida: una fila por poblacion (PO y ref), con TLI cruda y ajustada
+  out <- rbind(
+    po[, .(
+      poblacion    = "PO",
+      egresos      = sum(egresos),
+      def_obs      = sum(def),
+      def_esp      = sum(def_esp, na.rm = TRUE)  # estratos sin tasa de referencia quedan excluidos
+    )],
+    agg[.pert == grupo_ref, .(
+      poblacion    = "No_PO",
+      egresos      = sum(egresos),
+      def_obs      = sum(def),
+      def_esp      = NA_real_
+    )]
+  )
+  out[, tli_cruda := def_obs / egresos]
+  out[poblacion == "PO", tli_ajustada := def_obs / def_esp * tli_ref]
+
+  # Proyeccion explicita de columnas (contrato de salida estable)
+  out[, .(poblacion, egresos, def_obs, def_esp, tli_cruda, tli_ajustada)]
+}
+```
+
+```{r ejecucion_por_capitulo}
+# Advertencia de costo: filtrar por capitulo sobre ~21M filas 22 veces es costoso.
+# Estrategia: UNA sola pasada de agregacion por (capitulo x pertenencia x edad),
+# y luego estandarizar por capitulo sobre el agregado pequeno.
+# PERTENCIA2 operativa: 1 = PO (imputada); verificar niveles reales antes de mapear.
+capitulos <- sort(unique(datos_homologados[["Grupo_CIE10"]]))  # 21 capitulos + Otros
+capitulos <- capitulos[!is.na(capitulos)]
+
+# TODO(VERIFICAR): reemplazar var_egreso/valor_muerte por las definiciones
+# confirmadas en el chunk de inspeccion antes de ejecutar.
+dt_agg <- datos_homologados[, .(
+  egresos = .N,
+  def     = sum(get(var_egreso) == valor_muerte, na.rm = TRUE)
+), by = .(Grupo_CIE10,
+          .pert = fifelse(PERTENENCIA2 == 1, "PO", "No_PO"),
+          .edad = get(var_edad))]
+# dt_agg queda en memoria; la base completa puede liberarse si no se usa mas adelante:
+# rm(datos_homologados); gc(verbose = FALSE)
+rm(datos_homologados)
+gc(verbose = FALSE)
+
+# Estandarizacion por capitulo sobre el agregado (barato, sin tocar los 21M)
+res <- lapply(capitulos, function(cap) {
+  d <- dt_agg[Grupo_CIE10 == cap]
+  r <- tli_edad(d)
+  r[, capitulo := cap]
+  r
+})
+res_dt <- rbindlist(res)
+gc(verbose = FALSE)
+```
+
+```{r resultados}
+# Tabla final por capitulo: TLI cruda y ajustada, razon PO/No PO.
+tabla_tli <- res_dt %>%
+  tidyr::pivot_wider(
+    id_cols = capitulo,
+    names_from = poblacion,
+    values_from = c(egresos, def_obs, def_esp, tli_cruda, tli_ajustada)
+  ) %>%
+  dplyr::transmute(
+    capitulo,
+    egresos_PO   = egresos_PO,
+    egresos_NoPO = egresos_No_PO,
+    def_obs_PO   = def_obs_PO,
+    def_esp_PO   = def_esp_PO,
+    TLI_cruda_PO_pct      = 100 * tli_cruda_PO,
+    TLI_cruda_NoPO_pct    = 100 * tli_cruda_No_PO,
+    TLI_ajustada_PO_pct   = 100 * tli_ajustada_PO,
+    TLI_ajustada_NoPO_pct = 100 * tli_cruda_No_PO,
+    razon_cruda    = tli_cruda_PO / tli_cruda_No_PO,
+    razon_ajustada = tli_ajustada_PO / tli_cruda_No_PO
+  ) %>%
+  dplyr::arrange(capitulo)
+
+print(tabla_tli)
+data.table::fwrite(tabla_tli, file.path(dir_out, "tli_ajustada_edad_capitulo_indirecto.csv"))
+
+# Interpretacion: si la razon_ajustada sigue < 1 en la mayoria de capitulos,
+# la menor letalidad PO no se explica por la estructura de edad.
+```
+
+```{r verificacion_smr}
+# Propiedad del metodo indirecto: para la poblacion de referencia (No PO),
+# las defunciones esperadas calculadas con sus propias tasas equivalen a las
+# observadas; su TLI ajustada es, por construccion, identica a la cruda (SMR = 1).
+chk <- dt_agg[, {
+  tasa_ref <- def[.pert == "No_PO"] / egresos[.pert == "No_PO"]
+  .(def_esp_ref = sum(egresos[.pert == "No_PO"] * tasa_ref),
+    def_obs_ref = sum(def[.pert == "No_PO"]))
+}, by = Grupo_CIE10]
+chk[, smr_ref := def_obs_ref / def_esp_ref]
+print(chk)
+stopifnot("SMR de la referencia debe ser 1 en todos los capitulos" =
+            all(abs(chk$smr_ref - 1) < 1e-8))
+rm(dt_agg, chk)
+gc(verbose = FALSE)
+```
