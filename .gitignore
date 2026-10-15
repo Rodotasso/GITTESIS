@@ -67,6 +67,7 @@ __pycache__/
 # IDE/Tool config
 .claude/
 CLAUDE.md
+AGENTS.md
 
 # HTML outputs (regenerables desde .qmd)
 *.html
