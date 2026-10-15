@@ -15,7 +15,9 @@
 > sensibilidad RSH/CONADI).
 >
 > Actualizado: 2026-10-11 (reorganización por temas); 2026-10-13 (incorporación
-> de `recalcular_ccc_nuble_corregido.html` a `concordancia/`).
+> de `recalcular_ccc_nuble_corregido.html` a `concordancia/`); 2026-10-14
+> (incorporación de `correlaciones_spearman.csv` a `concordancia/` y
+> `anexo_estratificado_grupo_etario_resumen.csv` a `indicadores/`).
 
 ## Tabla de artefactos
 
@@ -27,9 +29,11 @@
 | concordancia | Tabla 13 y CCC | `concordancia/Concord_nuevas_modular.html` | `analisis/03_concordancia/Concord_nuevas_modular.qmd` | 2026-10-11 | CCC global 0,7712; verificado sin valores obsoletos (0,0897/0,7647) |
 | concordancia | Figura 5 (tendencias por fuente) | `concordancia/grafico_pertenencia_modular.html` | `analisis/02_tendencias/grafico_pertenencia_modular.qmd` | 2026-10-11 | Tendencia de pertenencia según fuente (regenerado F2) |
 | concordancia | Tabla 13 (trazabilidad) | `concordancia/recalcular_ccc_nuble_corregido.html` | `analisis/03_concordancia/recalcular_ccc_nuble_corregido.qmd` | 2026-09-13 | Recálculo CCC con mapeo Ñuble corregido; CCC Ñuble 0,0766; tabla publicados vs recalculados |
+| concordancia | Discusión (correlaciones regionales) | `concordancia/correlaciones_spearman.csv` | `analisis/02_tendencias/contraste_regional_tbe_censo.qmd` | 2026-09-21 | Spearman n=16 regiones: ρ=0,33 (TBE-PI vs %PO EH); ρ=0,43 (TBE-PI vs %PO Censo); ρ=0,12 (DPP cap. XI vs %PO Censo) |
 | indicadores | Insumo Fig. 12 y TBE regional | `indicadores/tbe_regional_sexo_po.csv` | `analisis/05_perfiles_cie10/perfiles_diagnosticos_desagregados.qmd` | 2026-09-28 | TBE por región, sexo y grupo; usa censo de Ñuble corregido (2026-09-13) |
 | indicadores | TLI ajustada | `indicadores/tli_ajustada_edad_capitulo_indirecto.csv` | `analisis/05_perfiles_cie10/tli_ajustada_edad.qmd` | 2026-09-28 | TLI ajustada por edad, método indirecto, por capítulo CIE-10 |
 | indicadores | Tabla TBE regional | `indicadores/tabla_tbe_regional.csv` | `R/analisis/generar_tablas_na_y_tbe_regional.R` | 2026-10-12 | TBE anual x 1.000 hab.; Ñuble PI 32,9 / PG 71,4 (denominador PG = base respondedores INE, p16 IN (1,2)) |
+| indicadores | Tabla S6 (anexo etario) | `indicadores/anexo_estratificado_grupo_etario_resumen.csv` | `R/analisis/generar_tablas_na_y_tbe_regional.R` | 2026-10-12 | TBE por grupo etario con denominador censal PG corregido (PG 0-4: 118,5; 5-14: 40,4; 15-24: 63,7; 25-44: 92,1; 45-64: 85,0) |
 | indicadores | Tabla de NA de pertenencia | `indicadores/tabla_na_pertenencia_consolidada.csv` | `R/analisis/generar_tablas_na_y_tbe_regional.R` | 2026-09-29 | NA de pertenencia: 104.326 de 20.957.004 egresos (0,50%) |
 | indicadores | Cuadro 3 | `indicadores/cuadro_descriptivo_egresos.html` | `analisis/00_descriptivos/cuadro_descriptivo_egresos.qmd` | 2026-10-11 | Descriptivo de egresos por paciente único (regenerado F2) |
 | indicadores | Descriptiva general | `indicadores/E_descriptiva_modular.html` | `analisis/01_descriptivos/E_descriptiva_modular.qmd` | 2026-10-11 | Estadística descriptiva general (regenerado F2) |
