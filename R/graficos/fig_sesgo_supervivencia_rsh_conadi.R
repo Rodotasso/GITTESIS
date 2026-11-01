@@ -17,11 +17,11 @@
 #   Nota de exportación: el device JPEG de ggsave corrompe los colores en
 #   este equipo (fondo magenta); las figuras se guardan en PNG y se
 #   convierten a JPG vía magick (mismo patrón de
-#   temp_read/audit_rsh_conadi/sesgo_supervivencia_figuras.R).
+#   resultados_tesis/VIGENTES/auditoria_rsh_conadi/sesgo_supervivencia_figuras.R).
 #
 # ENTRADAS (ya calculadas por la auditoría; NO se recalculan desde la base):
-#   - temp_read/audit_rsh_conadi/C_match_por_condicion_egreso.csv
-#   - temp_read/audit_rsh_conadi/A_cobertura_match.csv  (validación cruzada)
+#   - resultados_tesis/VIGENTES/auditoria_rsh_conadi/C_match_por_condicion_egreso.csv
+#   - resultados_tesis/VIGENTES/auditoria_rsh_conadi/A_cobertura_match.csv  (validación cruzada)
 #
 # SALIDAS (resultados_tesis/sesgo_supervivencia/):
 #   - fig_tasa_enlace_por_condicion_egreso.jpg   (600 dpi)
@@ -66,7 +66,7 @@ suppressPackageStartupMessages({
 source(file.path(project_root, "R", "tablas", "guardar_tabla_png.R"))
 
 # --- Constantes ----------------------------------------------------------------
-AUDIT_DIR <- file.path(project_root, "temp_read", "audit_rsh_conadi")
+AUDIT_DIR <- file.path(project_root, "resultados_tesis", "VIGENTES", "auditoria_rsh_conadi")
 OUT_DIR   <- file.path(project_root, "resultados_tesis", "sesgo_supervivencia")
 
 # Paleta coherente con R/utilidades/paleta_colores.R (rojo/azul Material Design)
@@ -355,7 +355,7 @@ main <- function() {
   # Figura principal
   # Workaround device JPEG (corrompe colores en este equipo: fondo magenta):
   # ggsave a PNG y conversión a JPG vía magick (patrón de
-  # temp_read/audit_rsh_conadi/sesgo_supervivencia_figuras.R)
+  # resultados_tesis/VIGENTES/auditoria_rsh_conadi/sesgo_supervivencia_figuras.R)
   fig_main <- build_main_figure(audit$match_long)
   guardar_jpg_via_png(fig_main, "fig_tasa_enlace_por_condicion_egreso",
                       ancho = 10, alto = 6, dpi = 600, dir_salida = OUT_DIR)

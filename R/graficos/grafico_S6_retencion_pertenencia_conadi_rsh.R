@@ -19,7 +19,7 @@
 #   R/graficos/fig_sesgo_supervivencia_rsh_conadi.R).
 #
 # ENTRADAS (ya calculadas por la auditoría; NO se recalculan desde la base):
-#   - temp_read/audit_rsh_conadi/C_match_por_condicion_egreso.csv
+#   - resultados_tesis/VIGENTES/auditoria_rsh_conadi/C_match_por_condicion_egreso.csv
 #
 # SALIDAS (resultados_tesis/sesgo_supervivencia/):
 #   - fig_S6_retencion_pertenencia_conadi_rsh.png  (600 dpi)
@@ -55,7 +55,7 @@ suppressPackageStartupMessages({
 })
 
 # --- Constantes ----------------------------------------------------------------
-AUDIT_DIR <- file.path(project_root, "temp_read", "audit_rsh_conadi")
+AUDIT_DIR <- file.path(project_root, "resultados_tesis", "VIGENTES", "auditoria_rsh_conadi")
 OUT_DIR   <- file.path(project_root, "resultados_tesis", "sesgo_supervivencia")
 
 # Paleta coherente con R/graficos/fig_sesgo_supervivencia_rsh_conadi.R
@@ -146,24 +146,25 @@ load_retention_data <- function(audit_dir) {
 }
 
 # ==============================================================================
-# FUNCION: fmt_pct / fmt_int
+# FUNCION: fmt_pct
 # ==============================================================================
 # Formato local: coma decimal y punto de miles (convención chilena).
 # ==============================================================================
 fmt_pct <- function(x, digits = 1L) {
   formatC(x, format = "f", digits = digits, decimal.mark = ",")
 }
-fmt_int <- function(x) {
-  format(x, big.mark = ".", decimal.mark = ",", scientific = FALSE, trim = TRUE)
-}
 
 # ==============================================================================
 # FUNCION: build_figure_s6
 # ==============================================================================
-# Figura S6: dos paneles (condición de egreso), dos series por panel (fuente).
-# Etiquetas de valor solo en los extremos de cada serie (primer y último año).
+# Figura S6: dos paneles lado a lado (condición de egreso), dos series por
+# panel (fuente). Etiquetas de valor solo en los extremos de cada serie (primer
+# y último año). Sin título, bajada, nota ni fuente quemados: ese texto va en el
+# pie de figura del documento. Se conservan los encabezados de panel
+# ("Egresados vivos" / "Egresados fallecidos") y la leyenda de la fuente, que
+# son rótulos internos del gráfico, no título de documento.
 # ==============================================================================
-build_figure_s6 <- function(retention_long, denominators) {
+build_figure_s6 <- function(retention_long) {
   plot_data <- retention_long %>%
     mutate(
       condition_label = factor(.data$condicion,
@@ -186,21 +187,6 @@ build_figure_s6 <- function(retention_long, denominators) {
       )
     )
 
-  n_range_deceased <- denominators %>%
-    filter(.data$condicion == "Fallecido") %>%
-    summarise(n_min = min(.data$n_matched), n_max = max(.data$n_matched),
-              ano_min = .data$ano[which.min(.data$n_matched)],
-              ano_max = .data$ano[which.max(.data$n_matched)])
-
-  # Nota con saltos de línea manuales: el caption de ggplot no hace wrap
-  nota <- paste0(
-    "Nota: porcentaje de egresos enlazados que constan como \"Pertenece\" en cada fuente, sobre el total de egresos con enlace\n",
-    "no nulo de cada condición y año (fallecidos: n entre ", fmt_int(n_range_deceased$n_min), " en ", n_range_deceased$ano_min,
-    " y ", fmt_int(n_range_deceased$n_max), " en ", n_range_deceased$ano_max, ").\n",
-    "Fuente: base de egresos hospitalarios DEIS, Chile 2010-2022; condición registral RSH y CONADI al año de corte (2022/2023),\n",
-    "proyectada retrospectivamente."
-  )
-
   ggplot(plot_data, aes(x = .data$ano, y = .data$pct_retention,
                         color = .data$source, group = .data$source)) +
     geom_line(linewidth = 1.4) +
@@ -210,18 +196,16 @@ build_figure_s6 <- function(retention_long, denominators) {
               size = 3.2, fontface = "bold", show.legend = FALSE) +
     facet_wrap(~ condition_label, ncol = 2) +
     scale_color_manual(values = COLORS_SOURCE) +
-    scale_x_continuous(breaks = YEARS_EXPECTED) +
+    # Un año de holgura a cada lado: las etiquetas de valor de los extremos se
+    # centran en 2010 y 2022 y, sin holgura, el recorte del panel les corta la
+    # mitad izquierda/derecha (el "8" de 89,0% se leía como "3").
+    scale_x_continuous(breaks = YEARS_EXPECTED,
+                       expand = ggplot2::expansion(mult = 0.01, add = 1)) +
     scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20)) +
     labs(
-      title = "Retención de la pertenencia a pueblos originarios según fuente y condición de egreso",
-      subtitle = paste0(
-        "Porcentaje de egresos enlazados que constan como \"Pertenece\" en CONADI y en el RSH, por año de egreso. Chile 2010-2022.\n",
-        "En fallecidos enlazados, CONADI retiene la pertenencia (56-89%) mientras el RSH la pierde (0-17%); en vivos ambas fuentes son estables."
-      ),
       x = "Año de egreso",
       y = "Retención de pertenencia (%)",
-      color = "Fuente",
-      caption = nota
+      color = "Fuente"
     ) +
     theme_minimal() +
     theme(
@@ -229,10 +213,9 @@ build_figure_s6 <- function(retention_long, denominators) {
       panel.grid.major.x = element_blank(),
       strip.text = element_text(size = 11, face = "bold"),
       axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      axis.text.y = element_text(size = 9),
       axis.title = element_text(size = 10, face = "bold"),
-      plot.title = element_text(size = 13, face = "bold"),
-      plot.subtitle = element_text(size = 10),
-      plot.caption = element_text(hjust = 0, size = 8),
+      legend.title = element_text(size = 9, face = "bold"),
       legend.text = element_text(size = 9)
     )
 }
@@ -267,9 +250,10 @@ main <- function() {
 
   if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
-  fig_s6 <- build_figure_s6(audit$retention_long, audit$denominators)
+  fig_s6 <- build_figure_s6(audit$retention_long)
+  # Footprint final de inserción (Figura 4 del cuerpo en el docx): 7,2 x 3,7 in
   guardar_jpg_via_png(fig_s6, "fig_S6_retencion_pertenencia_conadi_rsh",
-                      ancho = 10, alto = 6, dpi = 600, dir_salida = OUT_DIR)
+                      ancho = 7.2, alto = 3.7, dpi = 600, dir_salida = OUT_DIR)
   cat("fig_S6_retencion_pertenencia_conadi_rsh.png / .jpg (600 dpi)\n")
 
   cat("\nArchivos generados en:", OUT_DIR, "\n")

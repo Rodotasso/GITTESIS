@@ -7,8 +7,8 @@
 #   RSH/CONADI (complementa las figuras de sesgo de supervivencia):
 #
 #   1. Tabla S2 (CSV tidy + PNG flextable): tasa de enlace por categoría en
-#      tres bloques (sexo, grupo etario, región de residencia).
-#   2. Figura S3 (JPG 600 dpi): barras horizontales del % de enlace por
+#      tres bloques (sexo, grupo etario, región del establecimiento).
+#   2. Figura S1 (JPG 600 dpi): barras horizontales del % de enlace por
 #      categoría en tres paneles (patchwork).
 #
 #   RSH y CONADI comparten exactamente el mismo conjunto de enlaces (enlace
@@ -17,10 +17,10 @@
 #   Nota de exportación: el device JPEG de ggsave corrompe los colores en
 #   este equipo (fondo magenta); la figura se guarda en PNG y se convierte
 #   a JPG vía magick (mismo patrón de
-#   temp_read/audit_rsh_conadi/sesgo_supervivencia_figuras.R).
+#   resultados_tesis/VIGENTES/auditoria_rsh_conadi/sesgo_supervivencia_figuras.R).
 #
 # ENTRADA (ya calculada por la auditoría; NO se recalcula desde la base):
-#   - temp_read/audit_rsh_conadi/F_nas_resumen.csv
+#   - resultados_tesis/VIGENTES/auditoria_rsh_conadi/F_nas_resumen.csv
 #
 # SALIDAS (resultados_tesis/sesgo_supervivencia/):
 #   - tabla_distribucion_enlace.csv
@@ -63,7 +63,7 @@ suppressPackageStartupMessages({
 source(file.path(project_root, "R", "tablas", "guardar_tabla_png.R"))
 
 # --- Constantes ----------------------------------------------------------------
-AUDIT_DIR <- file.path(project_root, "temp_read", "audit_rsh_conadi")
+AUDIT_DIR <- file.path(project_root, "resultados_tesis", "VIGENTES", "auditoria_rsh_conadi")
 OUT_DIR   <- file.path(project_root, "resultados_tesis", "sesgo_supervivencia")
 
 # Azul de la paleta del repo (R/utilidades/paleta_colores.R)
@@ -72,6 +72,8 @@ COLOR_LINK <- "#1565C0"
 TOTAL_EGRESOS <- 20957004L  # total de la base auditada (INFORME.md)
 
 AGE_ORDER <- c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+
+ORDEN_REGION_NS <- c(15, 1, 2, 3, 4, 5, 13, 6, 7, 16, 8, 9, 14, 10, 11, 12)
 
 REGION_NAMES <- c(
   "1" = "Tarapacá",            "2" = "Antofagasta",   "3" = "Atacama",
@@ -189,7 +191,7 @@ load_link_distribution <- function(audit_dir) {
       dimension_label = dplyr::recode(.data$dimension,
                                       GLOSA_SEXO = "Sexo",
                                       GRUPO_ETARIO = "Grupo etario",
-                                      CODIGO_REGION = "Región de residencia"),
+                                      CODIGO_REGION = "Región del establecimiento"),
       category_label = dplyr::case_when(
         .data$dimension == "GLOSA_SEXO" ~ unname(SEX_LABELS[.data$categoria]),
         .data$dimension == "GRUPO_ETARIO" ~ paste0(.data$categoria, " años"),
@@ -200,7 +202,11 @@ load_link_distribution <- function(audit_dir) {
       order_key = dplyr::case_when(
         .data$dimension == "GLOSA_SEXO" ~ match(.data$categoria, names(SEX_LABELS)),
         .data$dimension == "GRUPO_ETARIO" ~ match(.data$categoria, AGE_ORDER),
-        .data$dimension == "CODIGO_REGION" ~ match(.data$categoria, as.character(1:16))
+        # Comentario 215 de la revisora: regiones en orden geografico
+        # norte-sur (canonico del repo: R/funciones/ordenar_regiones.R).
+        # match sobre strings: evita la coercion a numerico que ensuciaria
+        # con warnings a las otras ramas del case_when
+        .data$dimension == "CODIGO_REGION" ~ match(.data$categoria, as.character(ORDEN_REGION_NS))
       ),
       block_key = match(.data$dimension, c("GLOSA_SEXO", "GRUPO_ETARIO", "CODIGO_REGION"))
     ) %>%
@@ -259,7 +265,7 @@ build_distribution_table <- function(body, footnote) {
 
   # Construir display con filas de encabezado de bloque (indices registrados).
   # El split se hace sobre body (table_long no incluye dimension_label).
-  blocks <- split(body, body$dimension_label)[c("Sexo", "Grupo etario", "Región de residencia")]
+  blocks <- split(body, body$dimension_label)[c("Sexo", "Grupo etario", "Región del establecimiento")]
   display_rows <- list()
   block_header_idx <- integer(0)
   row_cursor <- 0L
@@ -282,7 +288,7 @@ build_distribution_table <- function(body, footnote) {
 
   table_ft <- flextable(display_df) %>%
     add_header_lines(values = paste0(
-      "Tabla S2. Distribución del enlace RSH/CONADI según sexo, grupo etario y región de residencia. ",
+      "Tabla S2. Distribución del enlace RSH/CONADI según sexo, grupo etario y región del establecimiento. ",
       "Egresos hospitalarios, Chile 2010-2022."
     )) %>%
     merge_at(i = 1L, j = seq_len(ncol(display_df)), part = "header") %>%
@@ -305,7 +311,7 @@ build_distribution_table <- function(body, footnote) {
 # ==============================================================================
 # FUNCION: build_distribution_figure
 # ==============================================================================
-# Figura S3: barras horizontales del % de enlace, tres paneles (patchwork).
+# Figura S1: barras horizontales del % de enlace, tres paneles (patchwork).
 # ==============================================================================
 build_bar_panel <- function(df, panel_title, show_x_label = FALSE) {
   # factor con niveles invertidos: la primera categoria del bloque queda arriba
@@ -333,30 +339,20 @@ build_bar_panel <- function(df, panel_title, show_x_label = FALSE) {
 }
 
 build_distribution_figure <- function(body, footnote_fig) {
-  blocks <- split(body, body$dimension_label)[c("Sexo", "Grupo etario", "Región de residencia")]
+  blocks <- split(body, body$dimension_label)[c("Sexo", "Grupo etario", "Región del establecimiento")]
 
   p_sex    <- build_bar_panel(blocks[["Sexo"]], "A. Sexo")
   p_age    <- build_bar_panel(blocks[["Grupo etario"]], "B. Grupo etario")
-  p_region <- build_bar_panel(blocks[["Región de residencia"]], "C. Región de residencia",
+  p_region <- build_bar_panel(blocks[["Región del establecimiento"]], "C. Región del establecimiento",
                               show_x_label = TRUE)
 
-  caption <- paste0(
-    footnote_fig, "\n",
-    "Fuente: base de egresos hospitalarios DEIS, Chile 2010-2022; enlace a registros sociales vigentes al año de corte (2022/2023)."
-  )
-
+  # Sin título, bajada, nota ni fuente quemados en el lienzo (regla de casa del
+  # plan de figuras 2026-10-31, sección 3: la imagen lleva solo ejes con rótulo,
+  # leyenda, etiquetas de valor y tags de panel; el pie lo aporta el docx).
+  # `footnote_fig` se conserva en la firma por compatibilidad pero ya no se
+  # usa en el lienzo.
   p_sex / p_age / p_region +
-    plot_layout(heights = c(3, 7, 16)) +
-    plot_annotation(
-      title = "Distribución del enlace a registros sociales (RSH/CONADI) según características del egreso",
-      subtitle = "Porcentaje de egresos con enlace no nulo por categoría. Egresos hospitalarios, Chile 2010-2022.",
-      caption = caption,
-      theme = theme(
-        plot.title = element_text(size = 13, face = "bold"),
-        plot.subtitle = element_text(size = 10),
-        plot.caption = element_text(hjust = 0, size = 8)
-      )
-    )
+    plot_layout(heights = c(3, 7, 16))
 }
 
 # ==============================================================================
@@ -381,7 +377,7 @@ guardar_jpg_via_png <- function(grafico, nombre_base, ancho = 10, alto = 6,
 # ==============================================================================
 main <- function() {
   cat("================================================================================\n")
-  cat("DISTRIBUCIÓN DEL ENLACE RSH/CONADI — TABLA S2 Y FIGURA S3\n")
+  cat("DISTRIBUCIÓN DEL ENLACE RSH/CONADI — TABLA S2 Y FIGURA S1\n")
   cat("================================================================================\n\n")
 
   data <- load_link_distribution(AUDIT_DIR)
@@ -403,10 +399,10 @@ main <- function() {
   guardar_tabla_png(tables$table_ft, "tabla_distribucion_enlace",
                     zoom = 3, dir_salida = OUT_DIR)
 
-  # Figura S3: tres paneles con patchwork (nota compacta: el caption no hace wrap)
+  # Figura S1: tres paneles con patchwork (nota compacta: el caption no hace wrap)
   # Workaround device JPEG (corrompe colores en este equipo: fondo magenta):
   # ggsave a PNG y conversión a JPG vía magick (patrón de
-  # temp_read/audit_rsh_conadi/sesgo_supervivencia_figuras.R)
+  # resultados_tesis/VIGENTES/auditoria_rsh_conadi/sesgo_supervivencia_figuras.R)
   fig <- build_distribution_figure(data$body, build_footnote(data$excluded, compact = TRUE))
   guardar_jpg_via_png(fig, "fig_distribucion_enlace",
                       ancho = 10, alto = 11, dpi = 600, dir_salida = OUT_DIR)
