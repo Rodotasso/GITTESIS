@@ -103,3 +103,13 @@ render_log.txt
 # prevalecer sobre las reglas globales *.csv, *.docx y *.html)
 !resultados_tesis/VIGENTES/
 !resultados_tesis/VIGENTES/**
+
+# Respaldos, artefactos y documentos internos que no deben publicarse
+*.bak
+*.bak_*
+/figure/
+analisis/_log_*.txt
+analisis/_tmp_*.txt
+analisis/03_concordancia/.gitignore
+docs/incidencia_grupo_etario_2026-10-30.md
+resultados_tesis/VIGENTES/auditoria_rsh_conadi/INFORME.md

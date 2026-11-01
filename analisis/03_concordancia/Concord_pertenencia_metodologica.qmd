@@ -1,0 +1,1033 @@
+---
+title: "Diagnóstico metodológico de concordancia con PERTENENCIA"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    self-contained: true
+execute:
+  warning: true
+  message: true
+---
+
+# Objetivo y alcance
+
+Este documento diagnóstico evalúa la concordancia usando `PERTENENCIA`, conservando sus valores no informados como `NA`. No sustituye los artefactos vigentes ni modifica datos o funciones del proyecto. Su propósito es aportar evidencia para decidir análisis posteriores.
+
+Los estimandos se mantienen separados en dos unidades de análisis:
+
+- **Kappa:** todos los egresos hospitalarios. Se estima el acuerdo binario entre `PERTENENCIA` y cada fuente, con acuerdo observado e intervalo de confianza del 95 %.
+- **CCC de Lin:** pacientes únicos con `RUN` informado. Se comparan porcentajes de pertenencia por estrato entre egresos hospitalarios y Censo 2017, en los seis niveles de desagregación preespecificados.
+
+La región de egresos corresponde al establecimiento, no a la residencia del paciente. Por ello, el contraste con el Censo es agregado y no una validación individual de residencia.
+
+# Configuración
+
+El documento se renderiza desde la raíz del proyecto con el siguiente comando, de modo que el HTML y los CSV queden en el directorio diagnóstico exclusivo:
+
+```bash
+PROJECT_ROOT="$(pwd)"
+quarto render analisis/03_concordancia/Concord_pertenencia_metodologica.qmd --output-dir "${PROJECT_ROOT}/resultados_tesis/diagnostico_concordancia_pertenencia"
+```
+
+```{r setup}
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(
+    rprojroot::has_file("BBDD_homologados.RData")
+  )
+}
+
+required_packages <- c(
+  "rprojroot", "dplyr", "DescTools", "censo2017", "knitr"
+)
+missing_packages <- required_packages[
+  !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
+]
+if (length(missing_packages) > 0L) {
+  stop(
+    "Missing required packages: ",
+    paste(missing_packages, collapse = ", ")
+  )
+}
+
+library(dplyr)
+
+source(file.path(project_root, "R/cargar_funciones.R"))
+
+output_dir <- file.path(
+  project_root,
+  "resultados_tesis",
+  "diagnostico_concordancia_pertenencia"
+)
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+if (!dir.exists(output_dir)) {
+  stop("The diagnostic output directory could not be created")
+}
+
+write_diagnostic_csv <- function(data, filename) {
+  if (!is.data.frame(data) || nrow(data) == 0L) {
+    stop("CSV output must be a nonempty data frame")
+  }
+  if (!grepl("^[a-z0-9_]+[.]csv$", filename)) {
+    stop("CSV filename must use a stable ASCII name")
+  }
+  utils::write.csv(
+    data,
+    file = file.path(output_dir, filename),
+    row.names = FALSE,
+    na = "",
+    fileEncoding = "UTF-8"
+  )
+}
+
+load(file.path(project_root, "BBDD_homologados.RData"))
+if (!exists("datos_homologados") || !is.data.frame(datos_homologados)) {
+  stop("BBDD_homologados.RData must contain a data frame named datos_homologados")
+}
+
+required_columns <- c(
+  "RUN", "PERTENENCIA", "PERTENENCIA2", "PUEBLO_ORIGINARIO_BIN",
+  "RSH", "CONADI", "CODIGO_REGION", "GLOSA_SEXO", "GRUPO_ETARIO",
+  "EDAD_ANOS", "A\u00d1O"
+)
+missing_columns <- setdiff(required_columns, names(datos_homologados))
+if (length(missing_columns) > 0L) {
+  stop("Missing required columns: ", paste(missing_columns, collapse = ", "))
+}
+if (nrow(datos_homologados) == 0L) {
+  stop("The hospital discharge data frame is empty")
+}
+
+n_discharges <- nrow(datos_homologados)
+```
+
+# Kappa entre fuentes
+
+## Tratamiento de valores binarios y no informados
+
+`PERTENENCIA` es la variable metodológica de referencia analítica, no una medida de verdad independiente. En todos los contrastes se valida que los valores observados de las cuatro columnas pertenezcan al conjunto `{0, 1}`. Los `NA` no se consideran categorías adicionales.
+
+La tabla siguiente resume la completitud de las variables antes de definir cada escenario.
+
+```{r kappa-input-diagnostics}
+binary_columns <- c(
+  "PERTENENCIA", "PUEBLO_ORIGINARIO_BIN", "RSH", "CONADI"
+)
+
+validate_binary_column <- function(x, column_name) {
+  observed_values <- unique(x[!is.na(x)])
+  if (!all(observed_values %in% c(0, 1))) {
+    stop("Column must contain only 0, 1, or NA: ", column_name)
+  }
+  invisible(TRUE)
+}
+
+for (column_name in binary_columns) {
+  validate_binary_column(datos_homologados[[column_name]], column_name)
+}
+
+year_values <- datos_homologados[["A\u00d1O"]]
+allowed_years <- c(as.character(2010:2022), "No reportado")
+if (!all(is.na(year_values) | year_values %in% allowed_years)) {
+  stop("Year must contain only 2010 through 2022, No reportado, or NA")
+}
+rm(year_values, allowed_years)
+
+variable_na_diagnostics <- dplyr::bind_rows(
+  lapply(binary_columns, function(column_name) {
+    x <- datos_homologados[[column_name]]
+    n_missing <- sum(is.na(x))
+    tibble::tibble(
+      variable = column_name,
+      n_total = length(x),
+      n_observed = sum(!is.na(x)),
+      n_missing = n_missing,
+      n_zero = sum(x == 0, na.rm = TRUE),
+      n_one = sum(x == 1, na.rm = TRUE),
+      percentage_missing = 100 * n_missing / length(x)
+    )
+  })
+)
+
+if (any(
+  variable_na_diagnostics$n_observed +
+    variable_na_diagnostics$n_missing != n_discharges
+)) {
+  stop("Variable-level NA diagnostics do not add up")
+}
+
+write_diagnostic_csv(
+  variable_na_diagnostics,
+  "01_variable_na_diagnostics.csv"
+)
+
+knitr::kable(variable_na_diagnostics, digits = 4)
+```
+
+## Función diagnóstica común
+
+Las celdas se definen con `PERTENENCIA` en filas y la fuente contrastada en columnas. Los subíndices `00`, `01`, `10` y `11` identifican las cuatro combinaciones. El acuerdo observado es `(n_00 + n_11) / n_included`. El kappa no ponderado y su IC95 % se calculan directamente con `DescTools::CohenKappa()` sobre la tabla 2x2 completa.
+
+```{r kappa-function}
+calculate_kappa_diagnostic <- function(data, source_column, scenario) {
+  if (!scenario %in% c("pares_observados", "no_enlace_cero")) {
+    stop("Unknown kappa scenario")
+  }
+  if (!source_column %in% c("PUEBLO_ORIGINARIO_BIN", "RSH", "CONADI")) {
+    stop("Unknown comparison source")
+  }
+
+  reference <- data$PERTENENCIA
+  comparison <- data[[source_column]]
+  n_total <- length(reference)
+  n_excluded_reference <- sum(is.na(reference))
+  n_source_na_recoded <- 0L
+
+  # Solo el escenario operativo recupera el no enlace de RSH o CONADI.
+  if (scenario == "no_enlace_cero" &&
+      source_column %in% c("RSH", "CONADI")) {
+    recode_index <- !is.na(reference) & is.na(comparison)
+    n_source_na_recoded <- sum(recode_index)
+    comparison[recode_index] <- 0
+  }
+
+  # En ambos paneles el estimando final usa pares observados tras la regla del panel.
+  included_index <- !is.na(reference) & !is.na(comparison)
+  n_included <- sum(included_index)
+  if (n_included == 0L) {
+    stop("No complete pairs available for kappa")
+  }
+
+  n_excluded_comparison <- n_total - n_excluded_reference - n_included
+  n_excluded <- n_total - n_included
+  if (n_excluded_comparison < 0L ||
+      n_excluded != n_excluded_reference + n_excluded_comparison) {
+    stop("Kappa inclusion counts do not add up")
+  }
+
+  reference_observed <- factor(
+    reference[included_index], levels = c(0, 1)
+  )
+  comparison_observed <- factor(
+    comparison[included_index], levels = c(0, 1)
+  )
+  cells <- table(reference_observed, comparison_observed)
+  if (!identical(dim(cells), c(2L, 2L)) || sum(cells) != n_included) {
+    stop("The 2x2 table does not match the included sample")
+  }
+
+  kappa_result <- DescTools::CohenKappa(
+    x = cells,
+    weights = "Unweighted",
+    conf.level = 0.95
+  )
+  if (length(kappa_result) != 3L ||
+      !all(c("kappa", "lwr.ci", "upr.ci") %in% names(kappa_result))) {
+    stop("Unexpected CohenKappa output contract")
+  }
+
+  tibble::tibble(
+    scenario = scenario,
+    source = source_column,
+    n_total = n_total,
+    n_included = n_included,
+    n_excluded = n_excluded,
+    n_excluded_pertenencia = n_excluded_reference,
+    n_excluded_source = n_excluded_comparison,
+    n_source_na_recoded = n_source_na_recoded,
+    n_00 = as.integer(cells[1, 1]),
+    n_01 = as.integer(cells[1, 2]),
+    n_10 = as.integer(cells[2, 1]),
+    n_11 = as.integer(cells[2, 2]),
+    observed_agreement = sum(diag(cells)) / sum(cells),
+    kappa = as.numeric(kappa_result[["kappa"]]),
+    ci95_lower = as.numeric(kappa_result[["lwr.ci"]]),
+    ci95_upper = as.numeric(kappa_result[["upr.ci"]])
+  )
+}
+```
+
+## Panel A: `pares_observados`
+
+Este panel conserva los `NA` originales y selecciona, para cada contraste, los egresos con ambas columnas informadas. No convierte la ausencia de enlace a cero. Por tanto, cada fuente puede tener un universo incluido distinto.
+
+**Precaución interpretativa:** `PUEBLO_ORIGINARIO_BIN`, aunque se denomina EH bruto en este proyecto, ya incorpora una recodificación previa. Además, `PERTENENCIA` integra las fuentes evaluadas. Los tres contrastes, EH, RSH y CONADI, miden coherencia interna entre una variable enriquecida y sus componentes, no validación independiente.
+
+## Panel B: `no_enlace_cero`
+
+Este panel excluye primero los egresos con `PERTENENCIA = NA`. Solo para RSH y CONADI, los `NA` restantes se recodifican a cero para reproducir la convención operativa externa de no enlace. Es un **escenario operativo**, no una concordancia observada entre respuestas efectivamente registradas.
+
+EH bruto permanece sin recuperación de sus `NA`: si `PUEBLO_ORIGINARIO_BIN` no está informado, ese egreso queda fuera del par incluso en este panel. No se imputa ningún valor adicional.
+
+```{r kappa-calculation}
+kappa_data <- datos_homologados |>
+  dplyr::select(
+    PERTENENCIA, PUEBLO_ORIGINARIO_BIN, RSH, CONADI
+  )
+
+source_columns <- c("PUEBLO_ORIGINARIO_BIN", "RSH", "CONADI")
+scenarios <- c("pares_observados", "no_enlace_cero")
+
+kappa_results <- dplyr::bind_rows(
+  lapply(scenarios, function(scenario) {
+    dplyr::bind_rows(
+      lapply(source_columns, function(source_column) {
+        calculate_kappa_diagnostic(
+          data = kappa_data,
+          source_column = source_column,
+          scenario = scenario
+        )
+      })
+    )
+  })
+)
+
+if (nrow(kappa_results) != 6L ||
+    any(kappa_results$n_included + kappa_results$n_excluded != n_discharges) ||
+    any(
+      kappa_results$n_00 + kappa_results$n_01 +
+        kappa_results$n_10 + kappa_results$n_11 !=
+        kappa_results$n_included
+    )) {
+  stop("Kappa diagnostics failed their count contracts")
+}
+
+write_diagnostic_csv(kappa_results, "03_kappa_by_scenario.csv")
+
+rm(kappa_data)
+invisible(gc())
+
+knitr::kable(kappa_results, digits = 6)
+```
+
+# CCC de Lin frente al Censo 2017
+
+## Universo de pacientes y selección determinista
+
+Se filtran los `RUN` no informados y se conserva un registro por paciente. Como en el flujo vigente, se ordena por `RUN` y año descendente. Para el ordenamiento, `AÑO` se transforma a una clave numérica: los años 2010-2022 conservan su valor y `No reportado` o `NA` quedan como `NA`, sin interpretarse como fechas reales ni excluir egresos o pacientes. El orden descendente prioriza los egresos con año válido y ubica al final los no informados; si todos los egresos de un paciente carecen de año válido, el identificador de fila original en orden ascendente resuelve el desempate de forma determinista. Esta clave también resuelve los empates dentro del mismo `RUN` y año, sin agregar ni excluir pacientes, y determina cuál egreso aporta sexo, edad, región y pertenencia.
+
+Después se aplican los mismos filtros del extractor vigente: sexo `HOMBRE` o `MUJER`, grupo etario en las siete categorías predefinidas y región informada. No se filtra `PERTENENCIA`: sus `NA` permanecen en los denominadores de universo y se excluyen únicamente del denominador de cada porcentaje informado.
+
+```{r ccc-patient-universe}
+patient_data <- datos_homologados |>
+  dplyr::transmute(
+    RUN,
+    PERTENENCIA,
+    year = suppressWarnings(as.integer(as.character(.data[["A\u00d1O"]]))),
+    CODIGO_REGION,
+    GLOSA_SEXO,
+    GRUPO_ETARIO,
+    original_row_id = dplyr::row_number()
+  ) |>
+  dplyr::filter(!is.na(RUN))
+
+n_run_informed <- nrow(patient_data)
+n_run_missing <- n_discharges - n_run_informed
+
+patient_data <- patient_data |>
+  dplyr::arrange(
+    RUN, dplyr::desc(year), original_row_id,
+    .locale = "C"
+  ) |>
+  dplyr::distinct(RUN, .keep_all = TRUE)
+
+n_unique_patients <- nrow(patient_data)
+if (anyDuplicated(patient_data$RUN) ||
+    n_unique_patients + (n_run_informed - n_unique_patients) !=
+      n_run_informed) {
+  stop("Patient deduplication failed its count contract")
+}
+
+patient_data <- patient_data |>
+  dplyr::transmute(
+    RUN,
+    PERTENENCIA,
+    region = as.integer(as.character(CODIGO_REGION)),
+    sex = GLOSA_SEXO,
+    age_group = factor(
+      as.character(GRUPO_ETARIO),
+      levels = c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+    )
+  ) |>
+  dplyr::filter(
+    !is.na(sex),
+    sex %in% c("HOMBRE", "MUJER"),
+    !is.na(age_group),
+    !is.na(region)
+  )
+
+n_eligible_patients <- nrow(patient_data)
+n_excluded_demographics <- n_unique_patients - n_eligible_patients
+if (n_eligible_patients == 0L || n_excluded_demographics < 0L) {
+  stop("The eligible patient universe is empty or inconsistent")
+}
+if (!all(patient_data$region %in% 1:16)) {
+  stop("Eligible patient regions must use codes 1 through 16")
+}
+
+n_informed_patients <- sum(!is.na(patient_data$PERTENENCIA))
+n_not_informed_patients <- sum(is.na(patient_data$PERTENENCIA))
+n_positive_patients <- sum(
+  patient_data$PERTENENCIA == 1, na.rm = TRUE
+)
+
+ccc_universe_diagnostics <- tibble::tibble(
+  metric = c(
+    "discharges_total",
+    "discharges_run_missing",
+    "discharges_run_informed",
+    "duplicate_discharges_removed",
+    "unique_patients",
+    "patients_excluded_demographics",
+    "patients_eligible",
+    "patients_pertenencia_informed",
+    "patients_pertenencia_not_informed",
+    "patients_pertenencia_positive"
+  ),
+  n = c(
+    n_discharges,
+    n_run_missing,
+    n_run_informed,
+    n_run_informed - n_unique_patients,
+    n_unique_patients,
+    n_excluded_demographics,
+    n_eligible_patients,
+    n_informed_patients,
+    n_not_informed_patients,
+    n_positive_patients
+  )
+)
+
+if (n_informed_patients + n_not_informed_patients != n_eligible_patients ||
+    n_positive_patients > n_informed_patients) {
+  stop("Patient-level PERTENENCIA diagnostics do not add up")
+}
+
+write_diagnostic_csv(
+  ccc_universe_diagnostics,
+  "02_ccc_universe_diagnostics.csv"
+)
+
+# Proyección única para auditar las selecciones sin volver a cargar la base.
+selection_source <- datos_homologados |>
+  dplyr::transmute(
+    RUN,
+    year_reported = as.character(.data[["A\u00d1O"]]),
+    PERTENENCIA,
+    PERTENENCIA2,
+    age_years = EDAD_ANOS,
+    region = CODIGO_REGION,
+    sex = GLOSA_SEXO,
+    age_group = GRUPO_ETARIO,
+    original_row_id = dplyr::row_number()
+  ) |>
+  dplyr::filter(!is.na(RUN))
+
+if (nrow(selection_source) != n_run_informed) {
+  stop("The selection audit projection does not match the RUN universe")
+}
+
+rm(datos_homologados)
+invisible(gc())
+
+knitr::kable(ccc_universe_diagnostics)
+```
+
+## Comparación agregada de S0, S1 y S2
+
+S0 conserva el orden canónico por `RUN` y `AÑO` descendente sin desempate explícito. S1 agrega `original_row_id` a ese mismo orden. S2 utiliza el año numérico válido más reciente, deja `No reportado` y `NA` al final y resuelve los empates con `original_row_id`.
+
+```{r validation-selection-comparison}
+validate_binary_column(selection_source$PERTENENCIA2, "PERTENENCIA2")
+
+# La conversión se limita a años validados; no se ocultan advertencias de coerción.
+year_numeric <- rep(NA_integer_, nrow(selection_source))
+valid_year_index <- which(
+  selection_source$year_reported %in% as.character(2010:2022)
+)
+year_numeric[valid_year_index] <- as.integer(
+  selection_source$year_reported[valid_year_index]
+)
+selection_source$year_numeric <- year_numeric
+
+selection_s0 <- selection_source |>
+  dplyr::arrange(RUN, dplyr::desc(year_reported), .locale = "C") |>
+  dplyr::distinct(RUN, .keep_all = TRUE)
+
+selection_s1 <- selection_source |>
+  dplyr::arrange(
+    RUN, dplyr::desc(year_reported), original_row_id,
+    .locale = "C"
+  ) |>
+  dplyr::distinct(RUN, .keep_all = TRUE)
+
+validate_patient_selection <- function(data, selection_name) {
+  if (nrow(data) != n_unique_patients || anyDuplicated(data$RUN)) {
+    stop("Invalid unique-patient selection: ", selection_name)
+  }
+  invisible(TRUE)
+}
+
+validate_patient_selection(selection_s0, "S0")
+validate_patient_selection(selection_s1, "S1")
+
+values_differ <- function(x, y) {
+  if (length(x) != length(y)) {
+    stop("Vectors compared for selection differences must have equal length")
+  }
+
+  # La comparación distingue NA de un valor observado sin producir NA lógicos.
+  different <- xor(is.na(x), is.na(y))
+  observed_index <- !is.na(x) & !is.na(y)
+  different[observed_index] <- x[observed_index] != y[observed_index]
+  if (anyNA(different)) {
+    stop("NA encountered in an aggregated selection comparison")
+  }
+  different
+}
+
+compare_patient_selections <- function(
+  left, right, left_name, right_name
+) {
+  if (!identical(left$RUN, right$RUN)) {
+    stop("Selections do not contain the same patients in the same RUN order")
+  }
+
+  comparison_variables <- c(
+    record = "original_row_id",
+    year = "year_reported",
+    sex = "sex",
+    age = "age_years",
+    age_group = "age_group",
+    region = "region",
+    PERTENENCIA = "PERTENENCIA",
+    PERTENENCIA2 = "PERTENENCIA2"
+  )
+  result <- tibble::tibble(
+    comparison = paste(left_name, right_name, sep = "_vs_"),
+    selection_left = left_name,
+    selection_right = right_name,
+    metric = names(comparison_variables),
+    n_patients = nrow(left),
+    n_changed = vapply(
+      comparison_variables,
+      function(column_name) {
+        sum(values_differ(left[[column_name]], right[[column_name]]))
+      },
+      integer(1)
+    )
+  )
+
+  if (any(result$n_changed < 0L | result$n_changed > result$n_patients) ||
+      any(result$n_changed[-1L] > result$n_changed[[1L]])) {
+    stop("Selection comparison counts are inconsistent")
+  }
+  result
+}
+
+comparison_s0_s1 <- compare_patient_selections(
+  selection_s0, selection_s1, "S0", "S1"
+)
+rm(selection_s0)
+invisible(gc())
+
+selection_s2 <- selection_source |>
+  dplyr::arrange(
+    RUN, dplyr::desc(year_numeric), original_row_id,
+    .locale = "C"
+  ) |>
+  dplyr::distinct(RUN, .keep_all = TRUE)
+validate_patient_selection(selection_s2, "S2")
+
+comparison_s1_s2 <- compare_patient_selections(
+  selection_s1, selection_s2, "S1", "S2"
+)
+selection_validation <- dplyr::bind_rows(
+  comparison_s0_s1,
+  comparison_s1_s2
+)
+
+if (nrow(selection_validation) != 16L ||
+    anyDuplicated(selection_validation[c("comparison", "metric")])) {
+  stop("The selection comparison output is incomplete or duplicated")
+}
+
+write_diagnostic_csv(
+  selection_validation,
+  "validacion_seleccion_anio.csv"
+)
+
+knitr::kable(selection_validation)
+
+rm(
+  selection_source, comparison_s0_s1, comparison_s1_s2,
+  valid_year_index, year_numeric
+)
+invisible(gc())
+```
+
+## Agregación metodológica por estrato
+
+Para cada estrato se reportan cuatro cantidades: `n_total`, todos los pacientes elegibles; `n_informed`, pacientes con `PERTENENCIA` informada; `n_not_informed`, pacientes con `NA`; y `n_positive`, pacientes con valor uno. El porcentaje metodológico es `100 * n_positive / n_informed`. No se usa `PERTENENCIA2` ni se incorporan no informados al denominador.
+
+```{r ccc-methodological-aggregation}
+aggregate_pertenencia <- function(data, group_columns) {
+  data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_columns))) |>
+    dplyr::summarise(
+      n_total = dplyr::n(),
+      n_informed = sum(!is.na(PERTENENCIA)),
+      n_not_informed = sum(is.na(PERTENENCIA)),
+      n_positive = sum(PERTENENCIA == 1, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      percentage_pertenencia = 100 * n_positive / n_informed
+    ) |>
+    dplyr::arrange(
+      dplyr::across(dplyr::all_of(group_columns)),
+      .locale = "C"
+    )
+}
+
+validate_methodological_strata <- function(
+  data, group_columns, expected_n, level_name
+) {
+  if (nrow(data) != expected_n ||
+      anyDuplicated(data[group_columns]) ||
+      !all(complete.cases(data[group_columns]))) {
+    stop("Invalid stratum keys or number of rows for: ", level_name)
+  }
+  if (any(data$n_informed <= 0L) ||
+      any(data$n_total != data$n_informed + data$n_not_informed) ||
+      any(data$n_positive < 0L | data$n_positive > data$n_informed) ||
+      !all(is.finite(data$percentage_pertenencia)) ||
+      any(data$percentage_pertenencia < 0 |
+          data$percentage_pertenencia > 100)) {
+    stop("Invalid informed denominators or counts for: ", level_name)
+  }
+  invisible(TRUE)
+}
+
+level_specs <- list(
+  region = list(columns = "region", expected_n = 16L),
+  age_group = list(columns = "age_group", expected_n = 7L),
+  region_sex = list(
+    columns = c("region", "sex"), expected_n = 32L
+  ),
+  region_age_group = list(
+    columns = c("region", "age_group"), expected_n = 112L
+  ),
+  sex_age_group = list(
+    columns = c("sex", "age_group"), expected_n = 14L
+  ),
+  region_sex_age_group = list(
+    columns = c("region", "sex", "age_group"), expected_n = 224L
+  )
+)
+
+methodological_levels <- lapply(names(level_specs), function(level_name) {
+  spec <- level_specs[[level_name]]
+  result <- aggregate_pertenencia(patient_data, spec$columns)
+  validate_methodological_strata(
+    result, spec$columns, spec$expected_n, level_name
+  )
+  result
+})
+names(methodological_levels) <- names(level_specs)
+
+ccc_strata <- dplyr::bind_rows(methodological_levels, .id = "level") |>
+  dplyr::select(
+    level, region, sex, age_group,
+    n_total, n_informed, n_not_informed, n_positive,
+    percentage_pertenencia
+  )
+
+write_diagnostic_csv(ccc_strata, "05_ccc_strata_diagnostics.csv")
+
+rm(patient_data)
+invisible(gc())
+```
+
+## Extracción censal comparable
+
+Se reutiliza `extraer_datos_censo()` sin cambiar el Censo ni sus reglas de agregación. La función ya incorpora la reconstrucción retrospectiva de Ñuble mediante las 21 comunas correspondientes, por lo que no se aplica una segunda conversión. Se fija `responders_only = FALSE`, igual que el comportamiento histórico del flujo vigente, para aislar el efecto de cambiar `PERTENENCIA2` por `PERTENENCIA` sin introducir otro cambio de denominador censal.
+
+```{r ccc-census-extraction}
+census_data <- extraer_datos_censo(
+  conexion = NULL,
+  verbose = FALSE,
+  responders_only = FALSE
+)
+
+census_levels <- list(
+  region = census_data$por_region,
+  age_group = census_data$por_grupo_etario |>
+    dplyr::rename(age_group = grupo_etario),
+  region_sex = census_data$region_sexo |>
+    dplyr::rename(sex = sexo),
+  region_age_group = census_data$region_edad |>
+    dplyr::rename(age_group = grupo_etario),
+  sex_age_group = census_data$sexo_edad |>
+    dplyr::rename(sex = sexo, age_group = grupo_etario),
+  region_sex_age_group = census_data$region_sexo_edad |>
+    dplyr::rename(sex = sexo, age_group = grupo_etario)
+)
+
+validate_census_strata <- function(
+  data, group_columns, expected_n, level_name
+) {
+  required <- c(group_columns, "porcentaje_censo")
+  if (!all(required %in% names(data)) ||
+      nrow(data) != expected_n ||
+      anyDuplicated(data[group_columns]) ||
+      !all(complete.cases(data[group_columns])) ||
+      !all(is.finite(data$porcentaje_censo))) {
+    stop("Invalid census strata for: ", level_name)
+  }
+  invisible(TRUE)
+}
+
+for (level_name in names(level_specs)) {
+  spec <- level_specs[[level_name]]
+  validate_census_strata(
+    census_levels[[level_name]],
+    spec$columns,
+    spec$expected_n,
+    level_name
+  )
+}
+
+# Los microdatos censales ya no se necesitan; se conservan solo agregados.
+rm(census_data)
+invisible(gc())
+```
+
+## CCC por nivel de desagregación
+
+Cada CCC compara el vector de porcentajes del Censo con `percentage_pertenencia` en el nivel indicado. Se usa `calcular_ccc_desagregacion()` con el nombre explícito de la columna metodológica. Los valores esperados de pares son 16, 7, 32, 112, 14 y 224, y `N` se verifica desde la unión interna de ambas fuentes. No se utiliza `calcular_ccc_detallado()` ni se calculan contrastes temporales.
+
+```{r ccc-by-level}
+ccc_by_level <- dplyr::bind_rows(
+  lapply(names(level_specs), function(level_name) {
+    spec <- level_specs[[level_name]]
+    paired_levels <- dplyr::inner_join(
+      census_levels[[level_name]],
+      methodological_levels[[level_name]],
+      by = spec$columns
+    )
+    if (nrow(paired_levels) != spec$expected_n ||
+        anyDuplicated(paired_levels[spec$columns]) ||
+        !all(complete.cases(paired_levels[spec$columns])) ||
+        !all(is.finite(paired_levels$porcentaje_censo)) ||
+        !all(is.finite(paired_levels$percentage_pertenencia))) {
+      stop("Invalid paired CCC strata for: ", level_name)
+    }
+    n_pairs <- nrow(paired_levels)
+
+    result <- calcular_ccc_desagregacion(
+      datos_censo = census_levels[[level_name]],
+      datos_comparacion = methodological_levels[[level_name]],
+      columnas_join = spec$columns,
+      nombre_desagregacion = level_name,
+      col_porcentaje_comparacion = "percentage_pertenencia",
+      verbose = FALSE
+    )
+
+    ccc_columns <- c("Lin's CCC", "IC 95% Inferior", "IC 95% Superior")
+    if (!is.data.frame(result) || nrow(result) != 1L ||
+        !all(ccc_columns %in% names(result)) ||
+        !all(vapply(
+          result[ccc_columns],
+          function(value) is.numeric(value) && length(value) == 1L,
+          logical(1)
+        ))) {
+      stop("Unexpected CCC result contract for: ", level_name)
+    }
+
+    tibble::tibble(
+      level = level_name,
+      n_pairs = n_pairs,
+      ccc = as.numeric(result[["Lin's CCC"]]),
+      ci95_lower = as.numeric(result[["IC 95% Inferior"]]),
+      ci95_upper = as.numeric(result[["IC 95% Superior"]])
+    )
+  })
+)
+
+if (nrow(ccc_by_level) != length(level_specs)) {
+  stop("CCC summary does not contain all prespecified levels")
+}
+
+write_diagnostic_csv(ccc_by_level, "04_ccc_by_level.csv")
+
+knitr::kable(ccc_by_level, digits = 6)
+```
+
+# Validación de selección por año y denominadores
+
+Esta sección reproduce S0, S1 y S2 sobre la misma proyección de egresos con `RUN` informado. Las comparaciones se resumen exclusivamente mediante conteos de pacientes; no se exportan identificadores ni registros individuales. La matriz CCC reutiliza los agregados censales, los filtros demográficos y los seis niveles definidos anteriormente.
+
+## Matriz CCC por selección y definición
+
+La definición antigua calcula `100 * n_positive / n_total` con `PERTENENCIA2`. La definición nueva calcula `100 * n_positive / n_informed` con `PERTENENCIA`. Los conteos esperados de S2 se comprueban antes de estimar la matriz; una discrepancia detiene el documento en lugar de ajustar los resultados.
+
+```{r validation-ccc-matrix}
+prepare_ccc_patients <- function(data) {
+  result <- data |>
+    dplyr::transmute(
+      PERTENENCIA,
+      PERTENENCIA2,
+      region = as.integer(as.character(region)),
+      sex = sex,
+      age_group = factor(
+        as.character(age_group),
+        levels = c("0-4", "5-14", "15-24", "25-44", "45-64", "65-74", "75+")
+      )
+    ) |>
+    dplyr::filter(
+      !is.na(sex),
+      sex %in% c("HOMBRE", "MUJER"),
+      !is.na(age_group),
+      !is.na(region)
+    )
+
+  if (nrow(result) == 0L || !all(result$region %in% 1:16)) {
+    stop("Invalid eligible patient universe in the CCC validation matrix")
+  }
+  result
+}
+
+matrix_patient_data <- list(
+  S1 = prepare_ccc_patients(selection_s1),
+  S2 = prepare_ccc_patients(selection_s2)
+)
+
+observed_s2_counts <- c(
+  unique_patients = nrow(selection_s2),
+  eligible_patients = nrow(matrix_patient_data$S2),
+  informed_patients = sum(!is.na(matrix_patient_data$S2$PERTENENCIA)),
+  not_informed_patients = sum(is.na(matrix_patient_data$S2$PERTENENCIA)),
+  positive_patients = sum(
+    matrix_patient_data$S2$PERTENENCIA == 1, na.rm = TRUE
+  )
+)
+expected_s2_counts <- c(
+  unique_patients = 9646325L,
+  eligible_patients = 9565159L,
+  informed_patients = 9535519L,
+  not_informed_patients = 29640L,
+  positive_patients = 1303761L
+)
+existing_s2_counts <- c(
+  unique_patients = n_unique_patients,
+  eligible_patients = n_eligible_patients,
+  informed_patients = n_informed_patients,
+  not_informed_patients = n_not_informed_patients,
+  positive_patients = n_positive_patients
+)
+
+if (!identical(observed_s2_counts, existing_s2_counts)) {
+  stop("The S2 validation selection does not reproduce the existing CCC universe")
+}
+if (!identical(observed_s2_counts, expected_s2_counts)) {
+  stop(
+    "S2 universe counts differ from expected values; observed: ",
+    paste(
+      names(observed_s2_counts), observed_s2_counts,
+      sep = " = ", collapse = "; "
+    )
+  )
+}
+
+s2_count_validation <- tibble::tibble(
+  metric = names(observed_s2_counts),
+  expected = unname(expected_s2_counts),
+  observed = unname(observed_s2_counts)
+)
+knitr::kable(s2_count_validation)
+
+aggregate_ccc_percentage <- function(
+  data, group_columns, membership_column, denominator
+) {
+  if (!denominator %in% c("total", "informed") ||
+      !membership_column %in% c("PERTENENCIA", "PERTENENCIA2")) {
+    stop("Unknown CCC percentage definition")
+  }
+
+  # El denominador total reproduce el extractor canónico: exige pertenencia informada.
+  if (denominator == "total") {
+    data <- dplyr::filter(data, !is.na(.data[[membership_column]]))
+  }
+
+  data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_columns))) |>
+    dplyr::summarise(
+      n_total = dplyr::n(),
+      n_informed = sum(!is.na(.data[[membership_column]])),
+      n_not_informed = sum(is.na(.data[[membership_column]])),
+      n_positive = sum(.data[[membership_column]] == 1, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      n_denominator = if (denominator == "total") n_total else n_informed,
+      percentage_pertenencia = 100 * n_positive / n_denominator
+    ) |>
+    dplyr::arrange(
+      dplyr::across(dplyr::all_of(group_columns)),
+      .locale = "C"
+    )
+}
+
+validate_matrix_strata <- function(
+  data, group_columns, expected_n, level_name
+) {
+  if (nrow(data) != expected_n ||
+      anyDuplicated(data[group_columns]) ||
+      !all(complete.cases(data[group_columns])) ||
+      any(data$n_total != data$n_informed + data$n_not_informed) ||
+      any(data$n_positive < 0L | data$n_positive > data$n_informed) ||
+      any(data$n_denominator <= 0L) ||
+      !all(is.finite(data$percentage_pertenencia)) ||
+      any(data$percentage_pertenencia < 0 |
+          data$percentage_pertenencia > 100)) {
+    stop("Invalid CCC validation strata for: ", level_name)
+  }
+  invisible(TRUE)
+}
+
+definition_specs <- list(
+  PERTENENCIA2 = list(
+    column = "PERTENENCIA2", denominator = "total"
+  ),
+  PERTENENCIA = list(
+    column = "PERTENENCIA", denominator = "informed"
+  )
+)
+
+ccc_validation_matrix <- dplyr::bind_rows(
+  lapply(names(matrix_patient_data), function(selection_name) {
+    dplyr::bind_rows(
+      lapply(names(definition_specs), function(definition_name) {
+        definition_spec <- definition_specs[[definition_name]]
+        expected_denominator <- switch(
+          definition_name,
+          PERTENENCIA2 = "total",
+          PERTENENCIA = "informed",
+          stop("Unknown CCC definition: ", definition_name)
+        )
+        if (!is.list(definition_spec) ||
+            !identical(definition_spec$column, definition_name) ||
+            !identical(definition_spec$denominator, expected_denominator)) {
+          stop("Invalid CCC definition specification: ", definition_name)
+        }
+        dplyr::bind_rows(
+          lapply(names(level_specs), function(level_name) {
+            spec <- level_specs[[level_name]]
+            comparison_levels <- aggregate_ccc_percentage(
+              matrix_patient_data[[selection_name]],
+              spec$columns,
+              definition_spec$column,
+              definition_spec$denominator
+            )
+            validate_matrix_strata(
+              comparison_levels,
+              spec$columns,
+              spec$expected_n,
+              level_name
+            )
+
+            paired_levels <- dplyr::inner_join(
+              census_levels[[level_name]],
+              comparison_levels,
+              by = spec$columns
+            )
+            if (nrow(paired_levels) != spec$expected_n ||
+                anyDuplicated(paired_levels[spec$columns]) ||
+                !all(complete.cases(paired_levels[spec$columns])) ||
+                !all(is.finite(paired_levels$porcentaje_censo)) ||
+                !all(is.finite(paired_levels$percentage_pertenencia))) {
+              stop("Invalid paired CCC validation strata for: ", level_name)
+            }
+
+            result <- calcular_ccc_desagregacion(
+              datos_censo = census_levels[[level_name]],
+              datos_comparacion = comparison_levels,
+              columnas_join = spec$columns,
+              nombre_desagregacion = level_name,
+              col_porcentaje_comparacion = "percentage_pertenencia",
+              verbose = FALSE
+            )
+            ccc_columns <- c(
+              "Lin's CCC", "IC 95% Inferior", "IC 95% Superior"
+            )
+            if (!is.data.frame(result) || nrow(result) != 1L ||
+                !all(ccc_columns %in% names(result)) ||
+                !all(vapply(
+                  result[ccc_columns],
+                  function(value) {
+                    is.numeric(value) && length(value) == 1L && is.finite(value)
+                  },
+                  logical(1)
+                ))) {
+              stop("Unexpected CCC validation result for: ", level_name)
+            }
+
+            tibble::tibble(
+              selection = selection_name,
+              definition = definition_name,
+              denominator = definition_spec$denominator,
+              level = level_name,
+              n_pairs = nrow(paired_levels),
+              ccc = as.numeric(result[["Lin's CCC"]]),
+              ci95_lower = as.numeric(result[["IC 95% Inferior"]]),
+              ci95_upper = as.numeric(result[["IC 95% Superior"]])
+            )
+          })
+        )
+      })
+    )
+  })
+)
+
+expected_level_pairs <- vapply(
+  level_specs,
+  function(spec) spec$expected_n,
+  integer(1)
+)
+if (nrow(ccc_validation_matrix) != 24L ||
+    anyDuplicated(
+      ccc_validation_matrix[c("selection", "definition", "level")]
+    ) ||
+    any(
+      ccc_validation_matrix$n_pairs !=
+        unname(expected_level_pairs[ccc_validation_matrix$level])
+    )) {
+  stop("The CCC validation matrix is incomplete or has invalid pair counts")
+}
+
+write_diagnostic_csv(
+  ccc_validation_matrix,
+  "validacion_matriz_ccc.csv"
+)
+
+knitr::kable(ccc_validation_matrix, digits = 6)
+
+rm(selection_s1, selection_s2, matrix_patient_data)
+invisible(gc())
+```
+
+## Diagnóstico de denominadores por estrato
+
+La tabla completa permite auditar la contribución de los no informados en cada estrato. Los porcentajes no se calculan sobre `n_total`, sino sobre `n_informed`.
+
+```{r ccc-strata-table}
+knitr::kable(ccc_strata, digits = 6)
+```
+
+# Lectura diagnóstica
+
+Los dos paneles de kappa responden preguntas distintas y no deben mezclarse. El primero describe pares efectivamente observados; el segundo reproduce una convención operativa de enlace. En el CCC, el desempate reproduce los empates del flujo vigente, pero priorizar un año válido sobre uno no informado puede cambiar el registro seleccionado en algún paciente. Por tanto, las diferencias frente a los resultados vigentes no deben atribuirse exclusivamente al cambio de variable y denominador de pertenencia sin verificar ese subconjunto. Los filtros demográficos, la extracción censal y la reconstrucción de Ñuble se mantienen.
+
+Los CSV generados en `resultados_tesis/diagnostico_concordancia_pertenencia/` son insumos diagnósticos. No constituyen por sí mismos una decisión de reemplazo de los artefactos canónicos.
