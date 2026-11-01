@@ -1,0 +1,138 @@
+grupo_etario,capitulo_n,capitulo,n_egresos_pi,pec_pi,n_egresos_pg,pec_pg,dif_pp,et_pi,et_pg
+0-4,1,Enfermedades infecciosas y parasitarias,23594,6.87,103252,6.65,0.22,343365,1552303
+0-4,2,Neoplasias,7355,2.14,31705,2.04,0.1,343365,1552303
+0-4,3,Enfermedades de la sangre y órganos hematopoyéticos,2320,0.68,13276,0.86,-0.18,343365,1552303
+0-4,4,"Trastornos endocrinos, nutricionales y metabólicos",2505,0.73,12841,0.83,-0.1,343365,1552303
+0-4,5,Trastornos mentales y del comportamiento,310,0.09,1546,0.1,-0.01,343365,1552303
+0-4,6,Enfermedades del sistema nervioso,6713,1.96,37372,2.41,-0.45,343365,1552303
+0-4,7,Enfermedades del ojo y sus anexos,1646,0.48,6128,0.39,0.08,343365,1552303
+0-4,8,Enfermedades del oído y mastoides,1537,0.45,6585,0.42,0.02,343365,1552303
+0-4,9,Enfermedades del sistema circulatorio,1155,0.34,6033,0.39,-0.05,343365,1552303
+0-4,10,Enfermedades del sistema respiratorio,111888,32.59,455464,29.34,3.24,343365,1552303
+0-4,11,Enfermedades del sistema digestivo,14229,4.14,63200,4.07,0.07,343365,1552303
+0-4,12,Enfermedades de la piel y tejido subcutáneo,3939,1.15,16432,1.06,0.09,343365,1552303
+0-4,13,Enfermedades del sistema musculoesquelético,1920,0.56,9311,0.6,-0.04,343365,1552303
+0-4,14,Enfermedades del sistema genitourinario,17275,5.03,90207,5.81,-0.78,343365,1552303
+0-4,16,Ciertas afecciones originadas en el período perinatal,77931,22.7,387185,24.94,-2.25,343365,1552303
+0-4,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",21097,6.14,98896,6.37,-0.23,343365,1552303
+0-4,18,"Síntomas, signos y hallazgos clínicos anormales",14518,4.23,62989,4.06,0.17,343365,1552303
+0-4,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",23457,6.83,102885,6.63,0.2,343365,1552303
+0-4,21,Factores que influyen en el estado de salud,9674,2.82,44232,2.85,-0.03,343365,1552303
+0-4,22,Códigos para situaciones especiales,302,0.09,2764,0.18,-0.09,343365,1552303
+5-14,1,Enfermedades infecciosas y parasitarias,9739,4.29,39973,4.14,0.16,226915,966619
+5-14,2,Neoplasias,12166,5.36,55458,5.74,-0.38,226915,966619
+5-14,3,Enfermedades de la sangre y órganos hematopoyéticos,3307,1.46,14179,1.47,-0.01,226915,966619
+5-14,4,"Trastornos endocrinos, nutricionales y metabólicos",4647,2.05,22097,2.29,-0.24,226915,966619
+5-14,5,Trastornos mentales y del comportamiento,4963,2.19,22355,2.31,-0.13,226915,966619
+5-14,6,Enfermedades del sistema nervioso,7532,3.32,34782,3.6,-0.28,226915,966619
+5-14,7,Enfermedades del ojo y sus anexos,1693,0.75,6162,0.64,0.11,226915,966619
+5-14,8,Enfermedades del oído y mastoides,2393,1.05,10422,1.08,-0.02,226915,966619
+5-14,9,Enfermedades del sistema circulatorio,2798,1.23,12651,1.31,-0.08,226915,966619
+5-14,10,Enfermedades del sistema respiratorio,38787,17.09,170980,17.69,-0.6,226915,966619
+5-14,11,Enfermedades del sistema digestivo,42165,18.58,169061,17.49,1.09,226915,966619
+5-14,12,Enfermedades de la piel y tejido subcutáneo,5410,2.38,22263,2.3,0.08,226915,966619
+5-14,13,Enfermedades del sistema musculoesquelético,7127,3.14,34492,3.57,-0.43,226915,966619
+5-14,14,Enfermedades del sistema genitourinario,16769,7.39,85101,8.8,-1.41,226915,966619
+5-14,16,Ciertas afecciones originadas en el período perinatal,1,0,5,0,0,226915,966619
+5-14,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",11002,4.85,45982,4.76,0.09,226915,966619
+5-14,18,"Síntomas, signos y hallazgos clínicos anormales",10803,4.76,39618,4.1,0.66,226915,966619
+5-14,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",37671,16.6,148350,15.35,1.25,226915,966619
+5-14,21,Factores que influyen en el estado de salud,7780,3.43,31644,3.27,0.15,226915,966619
+5-14,22,Códigos para situaciones especiales,162,0.07,1044,0.11,-0.04,226915,966619
+15-24,1,Enfermedades infecciosas y parasitarias,5773,2.52,27272,2.61,-0.09,228778,1042927
+15-24,2,Neoplasias,9842,4.3,53154,5.1,-0.79,228778,1042927
+15-24,3,Enfermedades de la sangre y órganos hematopoyéticos,1521,0.66,7641,0.73,-0.07,228778,1042927
+15-24,4,"Trastornos endocrinos, nutricionales y metabólicos",5739,2.51,30048,2.88,-0.37,228778,1042927
+15-24,5,Trastornos mentales y del comportamiento,17551,7.67,75201,7.21,0.46,228778,1042927
+15-24,6,Enfermedades del sistema nervioso,5105,2.23,23423,2.25,-0.01,228778,1042927
+15-24,7,Enfermedades del ojo y sus anexos,1498,0.65,4804,0.46,0.19,228778,1042927
+15-24,8,Enfermedades del oído y mastoides,935,0.41,4329,0.42,-0.01,228778,1042927
+15-24,9,Enfermedades del sistema circulatorio,5040,2.2,24352,2.33,-0.13,228778,1042927
+15-24,10,Enfermedades del sistema respiratorio,15024,6.57,84112,8.06,-1.5,228778,1042927
+15-24,11,Enfermedades del sistema digestivo,50600,22.12,206507,19.8,2.32,228778,1042927
+15-24,12,Enfermedades de la piel y tejido subcutáneo,5880,2.57,29405,2.82,-0.25,228778,1042927
+15-24,13,Enfermedades del sistema musculoesquelético,10289,4.5,62955,6.04,-1.54,228778,1042927
+15-24,14,Enfermedades del sistema genitourinario,19990,8.74,95950,9.2,-0.46,228778,1042927
+15-24,16,Ciertas afecciones originadas en el período perinatal,3,0,2,0,0,228778,1042927
+15-24,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",4087,1.79,18330,1.76,0.03,228778,1042927
+15-24,18,"Síntomas, signos y hallazgos clínicos anormales",7424,3.25,28966,2.78,0.47,228778,1042927
+15-24,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",47192,20.63,209959,20.13,0.5,228778,1042927
+15-24,21,Factores que influyen en el estado de salud,14781,6.46,53590,5.14,1.32,228778,1042927
+15-24,22,Códigos para situaciones especiales,504,0.22,2927,0.28,-0.06,228778,1042927
+25-44,1,Enfermedades infecciosas y parasitarias,11371,2.13,62140,2.05,0.08,533320,3028172
+25-44,2,Neoplasias,42142,7.9,265743,8.78,-0.87,533320,3028172
+25-44,3,Enfermedades de la sangre y órganos hematopoyéticos,2885,0.54,19110,0.63,-0.09,533320,3028172
+25-44,4,"Trastornos endocrinos, nutricionales y metabólicos",22743,4.26,149912,4.95,-0.69,533320,3028172
+25-44,5,Trastornos mentales y del comportamiento,20089,3.77,105111,3.47,0.3,533320,3028172
+25-44,6,Enfermedades del sistema nervioso,11061,2.07,66838,2.21,-0.13,533320,3028172
+25-44,7,Enfermedades del ojo y sus anexos,5479,1.03,18590,0.61,0.41,533320,3028172
+25-44,8,Enfermedades del oído y mastoides,1782,0.33,10176,0.34,0,533320,3028172
+25-44,9,Enfermedades del sistema circulatorio,23194,4.35,130692,4.32,0.03,533320,3028172
+25-44,10,Enfermedades del sistema respiratorio,25953,4.87,158083,5.22,-0.35,533320,3028172
+25-44,11,Enfermedades del sistema digestivo,123889,23.23,630258,20.81,2.42,533320,3028172
+25-44,12,Enfermedades de la piel y tejido subcutáneo,9427,1.77,53436,1.76,0,533320,3028172
+25-44,13,Enfermedades del sistema musculoesquelético,31035,5.82,231216,7.64,-1.82,533320,3028172
+25-44,14,Enfermedades del sistema genitourinario,59079,11.08,357966,11.82,-0.74,533320,3028172
+25-44,16,Ciertas afecciones originadas en el período perinatal,2,0,1,0,0,533320,3028172
+25-44,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",3674,0.69,23183,0.77,-0.08,533320,3028172
+25-44,18,"Síntomas, signos y hallazgos clínicos anormales",12345,2.31,60009,1.98,0.33,533320,3028172
+25-44,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",82784,15.52,460518,15.21,0.31,533320,3028172
+25-44,21,Factores que influyen en el estado de salud,40130,7.52,197624,6.53,1,533320,3028172
+25-44,22,Códigos para situaciones especiales,4256,0.8,27566,0.91,-0.11,533320,3028172
+45-64,1,Enfermedades infecciosas y parasitarias,10504,1.79,65145,1.63,0.17,586340,4008071
+45-64,2,Neoplasias,66070,11.27,520787,12.99,-1.73,586340,4008071
+45-64,3,Enfermedades de la sangre y órganos hematopoyéticos,3635,0.62,27550,0.69,-0.07,586340,4008071
+45-64,4,"Trastornos endocrinos, nutricionales y metabólicos",24526,4.18,170841,4.26,-0.08,586340,4008071
+45-64,5,Trastornos mentales y del comportamiento,12111,2.07,76142,1.9,0.17,586340,4008071
+45-64,6,Enfermedades del sistema nervioso,12878,2.2,93092,2.32,-0.13,586340,4008071
+45-64,7,Enfermedades del ojo y sus anexos,9313,1.59,49635,1.24,0.35,586340,4008071
+45-64,8,Enfermedades del oído y mastoides,2287,0.39,16532,0.41,-0.02,586340,4008071
+45-64,9,Enfermedades del sistema circulatorio,72037,12.29,486676,12.14,0.14,586340,4008071
+45-64,10,Enfermedades del sistema respiratorio,33035,5.63,206867,5.16,0.47,586340,4008071
+45-64,11,Enfermedades del sistema digestivo,117274,20,738570,18.43,1.57,586340,4008071
+45-64,12,Enfermedades de la piel y tejido subcutáneo,10884,1.86,65599,1.64,0.22,586340,4008071
+45-64,13,Enfermedades del sistema musculoesquelético,38804,6.62,345605,8.62,-2,586340,4008071
+45-64,14,Enfermedades del sistema genitourinario,64252,10.96,446487,11.14,-0.18,586340,4008071
+45-64,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",1913,0.33,13230,0.33,0,586340,4008071
+45-64,18,"Síntomas, signos y hallazgos clínicos anormales",14489,2.47,80325,2,0.47,586340,4008071
+45-64,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",63588,10.84,411655,10.27,0.57,586340,4008071
+45-64,21,Factores que influyen en el estado de salud,22003,3.75,138633,3.46,0.29,586340,4008071
+45-64,22,Códigos para situaciones especiales,6737,1.15,54700,1.36,-0.22,586340,4008071
+65-74,1,Enfermedades infecciosas y parasitarias,4975,2.04,36864,1.9,0.14,243540,1940113
+65-74,2,Neoplasias,26875,11.04,264610,13.64,-2.6,243540,1940113
+65-74,3,Enfermedades de la sangre y órganos hematopoyéticos,1953,0.8,17060,0.88,-0.08,243540,1940113
+65-74,4,"Trastornos endocrinos, nutricionales y metabólicos",10476,4.3,78352,4.04,0.26,243540,1940113
+65-74,5,Trastornos mentales y del comportamiento,1836,0.75,15049,0.78,-0.02,243540,1940113
+65-74,6,Enfermedades del sistema nervioso,3802,1.56,33631,1.73,-0.17,243540,1940113
+65-74,7,Enfermedades del ojo y sus anexos,6320,2.6,37063,1.91,0.68,243540,1940113
+65-74,8,Enfermedades del oído y mastoides,635,0.26,5157,0.27,-0.01,243540,1940113
+65-74,9,Enfermedades del sistema circulatorio,44762,18.38,357727,18.44,-0.06,243540,1940113
+65-74,10,Enfermedades del sistema respiratorio,24563,10.09,171078,8.82,1.27,243540,1940113
+65-74,11,Enfermedades del sistema digestivo,38094,15.64,290688,14.98,0.66,243540,1940113
+65-74,12,Enfermedades de la piel y tejido subcutáneo,4214,1.73,28235,1.46,0.27,243540,1940113
+65-74,13,Enfermedades del sistema musculoesquelético,11372,4.67,118815,6.12,-1.45,243540,1940113
+65-74,14,Enfermedades del sistema genitourinario,26533,10.89,207330,10.69,0.21,243540,1940113
+65-74,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",413,0.17,3240,0.17,0,243540,1940113
+65-74,18,"Síntomas, signos y hallazgos clínicos anormales",6609,2.71,45015,2.32,0.39,243540,1940113
+65-74,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",18272,7.5,141824,7.31,0.19,243540,1940113
+65-74,21,Factores que influyen en el estado de salud,9438,3.88,60212,3.1,0.77,243540,1940113
+65-74,22,Códigos para situaciones especiales,2398,0.98,28163,1.45,-0.47,243540,1940113
+75+,1,Enfermedades infecciosas y parasitarias,6201,2.73,56850,2.72,0,227540,2087919
+75+,2,Neoplasias,17399,7.65,188517,9.03,-1.38,227540,2087919
+75+,3,Enfermedades de la sangre y órganos hematopoyéticos,2287,1.01,25079,1.2,-0.2,227540,2087919
+75+,4,"Trastornos endocrinos, nutricionales y metabólicos",8094,3.56,71186,3.41,0.15,227540,2087919
+75+,5,Trastornos mentales y del comportamiento,1502,0.66,14400,0.69,-0.03,227540,2087919
+75+,6,Enfermedades del sistema nervioso,2968,1.3,31569,1.51,-0.21,227540,2087919
+75+,7,Enfermedades del ojo y sus anexos,7154,3.14,41224,1.97,1.17,227540,2087919
+75+,8,Enfermedades del oído y mastoides,406,0.18,3554,0.17,0.01,227540,2087919
+75+,9,Enfermedades del sistema circulatorio,45568,20.03,441277,21.13,-1.11,227540,2087919
+75+,10,Enfermedades del sistema respiratorio,43309,19.03,357603,17.13,1.91,227540,2087919
+75+,11,Enfermedades del sistema digestivo,27248,11.98,241287,11.56,0.42,227540,2087919
+75+,12,Enfermedades de la piel y tejido subcutáneo,4210,1.85,33957,1.63,0.22,227540,2087919
+75+,13,Enfermedades del sistema musculoesquelético,5494,2.41,60768,2.91,-0.5,227540,2087919
+75+,14,Enfermedades del sistema genitourinario,21076,9.26,194333,9.31,-0.04,227540,2087919
+75+,17,"Malformaciones congénitas, deformidades y anomalías cromosómicas",219,0.1,2049,0.1,0,227540,2087919
+75+,18,"Síntomas, signos y hallazgos clínicos anormales",7466,3.28,63182,3.03,0.26,227540,2087919
+75+,19,"Traumatismos, envenenamientos y otras consecuencias de causas externas",19095,8.39,183102,8.77,-0.38,227540,2087919
+75+,21,Factores que influyen en el estado de salud,5928,2.61,44382,2.13,0.48,227540,2087919
+75+,22,Códigos para situaciones especiales,1916,0.84,33600,1.61,-0.77,227540,2087919
