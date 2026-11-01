@@ -114,6 +114,12 @@ cat("  Fallecidos (==2):", format(sum(datos_prep$COND_EGR == 2, na.rm = TRUE), b
 cat("  Vivos (!=2):", format(sum(datos_prep$COND_EGR != 2, na.rm = TRUE), big.mark = ","), "\n")
 ```
 
+```{r liberar-memoria}
+# Libera la base completa y la copia previa al filtro O/P: datos_prep ya es el subconjunto de trabajo
+rm(datos_homologados, datos_pre_filtro)
+invisible(gc())
+```
+
 ## 3. Denominadores (Censo 2017)
 
 ```{r denominadores_censo}

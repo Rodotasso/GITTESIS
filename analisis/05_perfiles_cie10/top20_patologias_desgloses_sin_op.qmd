@@ -90,6 +90,12 @@ datos_filtrados %>%
   print()
 ```
 
+```{r liberar-memoria}
+# Libera la base completa y la copia previa al filtro O/P: datos_filtrados ya es el subconjunto de trabajo
+rm(datos_homologados, datos_pre_filtro)
+invisible(gc())
+```
+
 ```{r}
 #| label: concatenar-ciecl
 

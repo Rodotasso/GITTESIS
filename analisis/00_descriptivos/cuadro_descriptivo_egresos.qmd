@@ -79,6 +79,12 @@ freq <- egresos_pac %>%
   )
 ```
 
+```{r liberar-memoria}
+# Libera la base completa: egresos_pac y freq ya resumen lo necesario y la base no se vuelve a usar
+rm(datos_homologados)
+invisible(gc())
+```
+
 # Cuadro 3
 
 ```{r cuadro3}

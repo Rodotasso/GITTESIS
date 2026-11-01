@@ -128,23 +128,25 @@ p_po <- ggplot(datos_po, aes(x = pct, y = categoria_label)) +
     expand = expansion(mult = c(0, 0))
   ) +
   labs(
-    title = titulo_po,
+    # str_wrap: el título (115 caracteres) se cortaba en el borde derecho del lienzo
+    title = stringr::str_wrap(titulo_po, width = 80),
     x = "Porcentaje de egresos del grupo (%)",
     y = NULL,
-    caption = caption_fig
+    # str_wrap: la fuente quedaba al filo del lienzo; wrap preventivo a 2 líneas
+    caption = stringr::str_wrap(caption_fig, width = 140)
   ) +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid.major.y = element_blank(),
     panel.grid.minor = element_blank(),
     axis.title.x = element_text(face = "bold"),
-    plot.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", lineheight = 1.05),
     plot.caption = element_text(size = 8, color = "grey40", hjust = 0),
     plot.margin = margin(15, 25, 10, 10)
   )
 
 guardar_multiformato(p_po, "fig_prevision_PO",
-                     ancho = 10, alto = 5.5, dpi = 300,
+                     ancho = 10, alto = 5.5, dpi = 600,
                      dir_salida = dir_fig)
 p_po
 ```

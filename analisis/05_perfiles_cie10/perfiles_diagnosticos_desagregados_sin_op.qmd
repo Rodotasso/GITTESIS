@@ -42,7 +42,7 @@ if (!dir.exists(dir_salida_datos)) dir.create(dir_salida_datos, recursive = TRUE
 cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional (Filtro Sin Salud Materna)")
 
 # Cargar Datos
-load("BBDD_homologados.RData")
+datos_homologados <- cargar_datos_homologados()
 censo_lista <- extraer_datos_censo(verbose = FALSE, responders_only = TRUE)
 ```
 
@@ -98,6 +98,12 @@ datos_analisis <- datos_homologados[, cols_necesarias, with = FALSE] %>%
   # EXCLUSIÓN CRÍTICA: Capítulo XV
   filter(!stringr::str_detect(Capitulo, "Embarazo, parto y puerperio")) %>%
   filter(!is.na(Capitulo), !is.na(sexo), !is.na(grupo_etario), !is.na(region))
+```
+
+```{r liberar-memoria}
+# Libera la base completa: datos_analisis ya contiene las columnas derivadas que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
 ```
 
 

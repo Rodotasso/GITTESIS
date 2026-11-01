@@ -168,31 +168,15 @@ datos[, PERTENENCIA2 := fcase(
 ```
 
 ```{r}
-#CREACION GRUPOS CIE-10 POR CAPITULOS
-clasificar_grupo <- function(codigo) {
-  if (grepl("^A|^B", codigo)) return("Enfermedades infecciosas y parasitarias")
-  if (grepl("^C|^D[0-4]", codigo)) return("Neoplasias")
-  if (grepl("^D[5-9]", codigo)) return("Enfermedades de la sangre y órganos hematopoyéticos")
-  if (grepl("^E", codigo)) return("Trastornos endocrinos, nutricionales y metabólicos")
-  if (grepl("^F", codigo)) return("Trastornos mentales y del comportamiento")
-  if (grepl("^G", codigo)) return("Enfermedades del sistema nervioso")
-  if (grepl("^H0|^H1", codigo)) return("Enfermedades del ojo y sus anexos")
-  if (grepl("^H6|^H7", codigo)) return("Enfermedades del oído y mastoides")
-  if (grepl("^I", codigo)) return("Enfermedades del sistema circulatorio")
-  if (grepl("^J", codigo)) return("Enfermedades del sistema respiratorio")
-  if (grepl("^K", codigo)) return("Enfermedades del sistema digestivo")
-  if (grepl("^L", codigo)) return("Enfermedades de la piel y tejido subcutáneo")
-  if (grepl("^M", codigo)) return("Enfermedades del sistema musculoesquelético")
-  if (grepl("^N", codigo)) return("Enfermedades del sistema genitourinario")
-  if (grepl("^O", codigo)) return("Embarazo, parto y puerperio")
-  if (grepl("^P", codigo)) return("Ciertas afecciones originadas en el período perinatal")
-  if (grepl("^Q", codigo)) return("Malformaciones congénitas, deformidades y anomalías cromosómicas")
-  if (grepl("^R", codigo)) return("Síntomas, signos y hallazgos clínicos anormales")
-  if (grepl("^S|^T", codigo)) return("Traumatismos, envenenamientos y otras consecuencias de causas externas")
-  if (grepl("^V|^W|^X|^Y", codigo)) return("Causas externas de morbilidad y mortalidad")
-  if (grepl("^Z", codigo)) return("Factores que influyen en el estado de salud")
-  return("Otros")
+# CREACION GRUPOS CIE-10 POR CAPITULOS
+# clasificar_grupo() tiene definicion unica en R/utilidades/clasificar_grupo.R.
+# No se duplica aqui: la copia inline que existia era identica a la de la
+# utilidad (misma salida sobre los 8.766 codigos DIAG1 presentes en la base y
+# sobre el universo A00-Z99), de modo que la columna Grupo_CIE10 no cambia.
+if (!exists("project_root")) {
+  project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
 }
+source(file.path(project_root, "R", "utilidades", "clasificar_grupo.R"))
 
 # Aplicar la función de clasificación a la columna DIAG1
 datos[, Grupo_CIE10 := sapply(DIAG1, clasificar_grupo)]

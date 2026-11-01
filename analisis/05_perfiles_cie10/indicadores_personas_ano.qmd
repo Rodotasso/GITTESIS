@@ -106,6 +106,12 @@ dist_ano <- datos_personas_ano %>%
 print(dist_ano, n = 20)
 ```
 
+```{r liberar-memoria}
+# Libera la base y la copia de egresos: el resto del documento trabaja sobre personas-ano
+rm(datos_homologados, datos_prep)
+invisible(gc())
+```
+
 ## 3. Denominadores (Censo 2017)
 
 ```{r denominadores_censo}

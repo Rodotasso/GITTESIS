@@ -44,7 +44,7 @@ if (!dir.exists(dir_salida_datos)) dir.create(dir_salida_datos, recursive = TRUE
 cli_h1("Iniciando Procesamiento Epidemiológico Multidimensional")
 
 # Cargar Datos
-load("BBDD_homologados.RData")
+datos_homologados <- cargar_datos_homologados()
 # Denominador censal PG sobre base oficial INE de respondedores (p16 IN (1,2));
 # decisión metodológica 2026-10-12: excluir no-respondedores (p16 = 99) en toda la tesis
 censo_lista <- extraer_datos_censo(verbose = FALSE, responders_only = TRUE)
@@ -190,6 +190,12 @@ datos_analisis <- datos_homologados[, cols_necesarias, with = FALSE] %>%
     region = as.numeric(CODIGO_REGION)
   ) %>%
   filter(!is.na(Capitulo), !is.na(sexo), !is.na(grupo_etario), !is.na(region))
+```
+
+```{r liberar-memoria}
+# Libera la base completa: datos_analisis ya contiene las columnas derivadas que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
 ```
 
 

@@ -62,6 +62,12 @@ source(file.path(project_root, "R", "concordancias", "extraer_datos_censo.R"))
 source(file.path(project_root, "R", "perfiles", "calcular_indicadores_desagregados.R"))
 source(file.path(project_root, "R", "funciones", "ordenar_regiones.R"))
 
+# Funciones de derivacion del capitulo CIE-10 corregido (cadena que necesita el
+# loader: clasificar_grupo -> asignar_capitulo_cie10 -> cargar_datos_homologados)
+source(file.path(project_root, "R", "utilidades", "clasificar_grupo.R"))
+source(file.path(project_root, "R", "utilidades", "clasificar_capitulo_cie10.R"))
+source(file.path(project_root, "R", "utilidades", "cargar_datos_homologados.R"))
+
 # graficar_heatmap_regional: copia de figuras_nuevas (caption identico a la
 # imagen insertada en el docx; ver nota en la introduccion)
 source(file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
@@ -84,7 +90,7 @@ ruta_old <- file.path(project_root, "DOCUMENTOS TESIS", "FINAL-TESIS",
 # Carga unica de la base (~2 min) y preparacion identica al chunk
 # `preparacion-datos` del qmd _sin_op (se omite la columna de ano, no usada aqui)
 t0 <- Sys.time()
-load(file.path(project_root, "BBDD_homologados.RData"))
+datos_homologados <- cargar_datos_homologados()
 setDT(datos_homologados)
 cat("Carga base:", round(difftime(Sys.time(), t0, units = "mins"), 1), "min\n")
 

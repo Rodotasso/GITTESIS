@@ -87,6 +87,12 @@ cat("  NA:", format(sum(is.na(datos_prep$DIAS_ESTADA)), big.mark = ","),
     sprintf("(%.1f%%)\n", mean(is.na(datos_prep$DIAS_ESTADA)) * 100))
 ```
 
+```{r liberar-memoria}
+# Libera la base completa: datos_prep ya contiene el subconjunto con DIAS_ESTADA que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
+```
+
 ### 2.2. Denominadores poblacionales (Censo 2017)
 
 ```{r denominadores}

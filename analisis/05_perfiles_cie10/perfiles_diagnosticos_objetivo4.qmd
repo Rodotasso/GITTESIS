@@ -52,7 +52,7 @@ setwd(project_root)
 source("R/cargar_funciones.R")
 
 # Cargar bases de datos
-load("BBDD_homologados.RData")
+datos_homologados <- cargar_datos_homologados()
 data.table::setDT(datos_homologados)
 
 # Obtener denominadores del Censo 2017 usando la función optimizada
@@ -103,6 +103,12 @@ tabla_maestra <- crear_tabla_maestra_perfiles(
 guardar_tabla_png(tabla_maestra, "tabla_1_perfiles_diagnosticos_obj4", dir_salida = "resultados_tesis/tablas")
 
 tabla_maestra
+```
+
+```{r liberar-memoria}
+# Libera la base completa: datos_base ya contiene las columnas derivadas que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
 ```
 
 ## 3. Top Causas de Hospitalización (Gráficos Convencionales)

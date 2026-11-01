@@ -76,6 +76,12 @@ cat("  PO:", format(n_po, big.mark = ","), "\n")
 cat("  PG:", format(n_pg, big.mark = ","), "\n")
 ```
 
+```{r liberar-memoria}
+# Libera la base completa: datos_prep ya contiene el subconjunto filtrado que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
+```
+
 ## 3. Denominadores censales
 
 ```{r denominadores}

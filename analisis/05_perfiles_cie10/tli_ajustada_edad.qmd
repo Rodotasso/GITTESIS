@@ -31,7 +31,7 @@ dir.create(dir_out, recursive = TRUE, showWarnings = FALSE)
 ```{r carga_bbdd}
 # Carga de la base homologada (~940 MB el .RData).
 # VERIFICAR RAM: verificar headroom de pagefile antes de ejecutar (regla global pagefile-memoria).
-load(file.path(project_root, "BBDD_homologados.RData"))
+datos_homologados <- cargar_datos_homologados()
 setDT(datos_homologados)
 
 # Liberar objetos no necesarios cargados junto con la base (si los hay)
@@ -133,7 +133,6 @@ tli_edad <- function(dt, grupo_ref = "No_PO") {
 # PERTENCIA2 operativa: 1 = PO (imputada); verificar niveles reales antes de mapear.
 capitulos <- sort(unique(datos_homologados[["Grupo_CIE10"]]))  # 21 capitulos + Otros
 capitulos <- capitulos[!is.na(capitulos)]
-
 # TODO(VERIFICAR): reemplazar var_egreso/valor_muerte por las definiciones
 # confirmadas en el chunk de inspeccion antes de ejecutar.
 dt_agg <- datos_homologados[, .(
@@ -148,13 +147,40 @@ rm(datos_homologados)
 gc(verbose = FALSE)
 
 # Estandarizacion por capitulo sobre el agregado (barato, sin tocar los 21M)
-res <- lapply(capitulos, function(cap) {
+# Solo se estandarizan los capitulos con AMBAS poblaciones: la estandarizacion
+# indirecta necesita las tasas especificas de la referencia (No PO). Los
+# capitulos que no las tienen (hoy, el unico egreso con DIAG1 vacio, que queda
+# en la etiqueta residual "Otros") se conservan como fila residual con sus
+# conteos y sin TLI, para que la suma de egresos cierre en 20.957.004.
+estratos_por_capitulo <- dt_agg[, .(n_estratos = uniqueN(.pert)), by = Grupo_CIE10]
+capitulos_tli <- estratos_por_capitulo[n_estratos == 2L][[1L]]
+capitulos_residual <- setdiff(capitulos, capitulos_tli)
+
+res <- lapply(capitulos_tli, function(cap) {
   d <- dt_agg[Grupo_CIE10 == cap]
   r <- tli_edad(d)
   r[, capitulo := cap]
   r
 })
 res_dt <- rbindlist(res)
+
+# Fila residual: conteos observados y TLI no estimable (sin referencia)
+if (length(capitulos_residual) > 0L) {
+  res_dt <- rbind(
+    res_dt,
+    dt_agg[Grupo_CIE10 %in% capitulos_residual, .(
+      poblacion = .pert,
+      egresos   = sum(egresos),
+      def_obs   = sum(def)
+    ), by = .(Grupo_CIE10, .pert)][, `:=`(
+      def_esp       = NA_real_,
+      tli_cruda     = NA_real_,
+      tli_ajustada  = NA_real_
+    )][, .(capitulo = Grupo_CIE10, poblacion, egresos, def_obs, def_esp,
+           tli_cruda, tli_ajustada)],
+    fill = TRUE
+  )
+}
 gc(verbose = FALSE)
 ```
 
@@ -181,6 +207,13 @@ tabla_tli <- res_dt %>%
   ) %>%
   dplyr::arrange(capitulo)
 
+# Estrato ausente equivale a 0 egresos, no a dato perdido. Solo puede ocurrir en
+# el capitulo residual (los capitulos con una sola poblacion quedaron fuera de la
+# estandarizacion); los conteos quedan enteros y la suma cierra en 20.957.004.
+for (col in c("egresos_PO", "egresos_NoPO", "def_obs_PO")) {
+  tabla_tli[[col]][is.na(tabla_tli[[col]])] <- 0L
+}
+
 print(tabla_tli)
 data.table::fwrite(tabla_tli, file.path(dir_out, "tli_ajustada_edad_capitulo_indirecto.csv"))
 
@@ -192,7 +225,7 @@ data.table::fwrite(tabla_tli, file.path(dir_out, "tli_ajustada_edad_capitulo_ind
 # Propiedad del metodo indirecto: para la poblacion de referencia (No PO),
 # las defunciones esperadas calculadas con sus propias tasas equivalen a las
 # observadas; su TLI ajustada es, por construccion, identica a la cruda (SMR = 1).
-chk <- dt_agg[, {
+chk <- dt_agg[Grupo_CIE10 %in% capitulos_tli, {
   tasa_ref <- def[.pert == "No_PO"] / egresos[.pert == "No_PO"]
   .(def_esp_ref = sum(egresos[.pert == "No_PO"] * tasa_ref),
     def_obs_ref = sum(def[.pert == "No_PO"]))

@@ -100,6 +100,12 @@ cat("  PO:", format(n_po, big.mark = ","), sprintf("(%.1f%%)\n", n_po / n_person
 cat("  PG:", format(n_pg, big.mark = ","), sprintf("(%.1f%%)\n", n_pg / n_personas * 100))
 ```
 
+```{r liberar-memoria}
+# Libera la base y la copia de egresos: el resto del documento trabaja sobre personas únicas
+rm(datos_homologados, datos_prep)
+invisible(gc())
+```
+
 ## 3. Denominadores (Censo 2017)
 
 ```{r denominadores_censo}

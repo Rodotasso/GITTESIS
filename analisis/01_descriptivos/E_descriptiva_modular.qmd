@@ -39,7 +39,7 @@ if (!exists("project_root")) {
   project_root <- rprojroot::find_root(rprojroot::has_file("BBDD_homologados.RData"))
 }
 source(file.path(project_root, "R/cargar_funciones.R"))
-load(file.path(project_root, "BBDD_homologados.RData"))
+datos_homologados <- cargar_datos_homologados()
 datos_preparados <- datos_homologados
 
 # Directorio de salida para JPG

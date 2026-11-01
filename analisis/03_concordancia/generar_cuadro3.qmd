@@ -52,6 +52,12 @@ datos_pert2 <- extraer_datos_variable_enriquecida(datos_sin_duplicados)
 datos_egresos <- extraer_datos_egresos_hospitalarios(datos_sin_duplicados)
 ```
 
+```{r liberar-memoria}
+# Libera la base y las copias de trabajo: los agregados censales y de egresos ya están extraídos
+rm(datos_homologados, datos_kappa, datos_sin_duplicados)
+invisible(gc())
+```
+
 ```{r calcular_ccc}
 # --- CCC GLOBAL por nivel (corregido con calcular_ccc_desagregacion) ---
 global_region_ve <- calcular_ccc_desagregacion(

@@ -503,6 +503,12 @@ guardar_multiformato(grafico_mensual_condup,
 cat("✓ Gráfico mensual CON DUPLICADOS generado y guardado\n")
 ```
 
+```{r liberar-memoria}
+# Libera la base: el gráfico con duplicados ya está construido y la base no se vuelve a usar
+rm(datos_homologados)
+invisible(gc())
+```
+
 ## 9. Análisis de Solapamiento entre Fuentes
 
 ```{r analisis_solapamiento}

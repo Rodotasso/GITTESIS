@@ -87,6 +87,10 @@ datos_filtrados <- datos_homologados %>%
 
 cat("Registros válidos:", format(nrow(datos_filtrados), big.mark = ","), "\n\n")
 
+# Libera la base completa: datos_filtrados ya es el subconjunto que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
+
 # Extraer códigos únicos para búsqueda
 codigos_unicos <- unique(datos_filtrados$DIAG1)
 cat("Códigos CIE-10 únicos:", format(length(codigos_unicos), big.mark = ","), "\n")

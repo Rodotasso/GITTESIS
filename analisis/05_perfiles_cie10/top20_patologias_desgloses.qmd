@@ -79,6 +79,12 @@ datos_filtrados %>%
   print()
 ```
 
+```{r liberar-memoria}
+# Libera la base completa: datos_filtrados ya contiene el subconjunto que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
+```
+
 ```{r}
 #| label: concatenar-ciecl
 

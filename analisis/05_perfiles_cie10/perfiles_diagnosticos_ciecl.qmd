@@ -80,6 +80,12 @@ cat("Muestra de resultados:\n")
 print(head(resultado_ciecl[, c("codigo", "descripcion")], 5))
 ```
 
+```{r liberar-memoria-base}
+# Libera la base completa: datos_filtrados ya contiene el subconjunto que usa el resto del documento
+rm(datos_homologados)
+invisible(gc())
+```
+
 ### 2.2. Unir descripciones con datos
 
 ```{r unir_datos}
@@ -127,6 +133,12 @@ datos_diag_preparados %>%
   distinct() %>%
   head(10) %>%
   print()
+```
+
+```{r liberar-memoria-copia}
+# Libera la copia intermedia: datos_diag_preparados ya tiene las descripciones CIE-10 unidas
+rm(datos_filtrados)
+invisible(gc())
 ```
 
 ## 3. Denominadores Poblacionales

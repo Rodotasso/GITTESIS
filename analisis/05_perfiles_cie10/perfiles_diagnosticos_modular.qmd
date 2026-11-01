@@ -49,6 +49,12 @@ datos_diag_preparados <- datos_homologados %>%
 cat("\n")
 ```
 
+```{r liberar-memoria}
+# Libera la base completa: datos_diag_preparados ya tiene el subconjunto con descripciones CIE-10
+rm(datos_homologados)
+invisible(gc())
+```
+
 ### 2.2. Denominadores poblacionales (Censo 2017)
 
 ```{r denominadores}

@@ -257,6 +257,12 @@ region_menor <- regiones$NOMBRE_REGION[n_regiones]
 region_menor_pct <- regiones$porcentaje[n_regiones]
 ```
 
+```{r liberar-memoria}
+# Libera la base y su alias: los chunks siguientes solo usan los escalares ya calculados
+rm(datos, datos_homologados)
+invisible(gc())
+```
+
 # 8. Resumen para Copiar al Artículo
 
 ```{r resumen_final}
